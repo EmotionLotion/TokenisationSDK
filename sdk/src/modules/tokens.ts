@@ -1,5 +1,18 @@
 import type { HttpClient } from '../utils/http.js';
 import type { Token, TokenTranche, PaginatedResponse, TokenStatus } from '../types.js';
+import {
+  validate,
+  CreateTokenInputSchema,
+  UpdateTokenInputSchema,
+  ListTokensParamsSchema,
+  DeployTokenInputSchema,
+  IssueTokensInputSchema,
+  RedeemTokensInputSchema,
+  CreateTrancheInputSchema,
+  UUIDSchema,
+  EthereumAddressSchema,
+  PaginationSchema,
+} from './validation.js';
 
 // ============================================================================
 // Tokens Module
@@ -42,7 +55,8 @@ export interface IssueTokensInput {
   walletAddress: string;
   amount: string;
   trancheId?: string;
-  idempotencyKey?: string;
+  /** Required idempotency key to prevent duplicate issuances */
+  idempotencyKey: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -51,7 +65,8 @@ export interface RedeemTokensInput {
   walletAddress: string;
   amount: string;
   trancheId?: string;
-  idempotencyKey?: string;
+  /** Required idempotency key to prevent duplicate redemptions */
+  idempotencyKey: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -94,7 +109,8 @@ export class TokensModule {
    * Creates a new token definition.
    */
   async create(input: CreateTokenInput, idempotencyKey?: string): Promise<Token> {
-    const response = await this.http.post<Token>('/api/v1/tokens', input, { idempotencyKey });
+    const validated = validate(CreateTokenInputSchema, input);
+    const response = await this.http.post<Token>('/api/v1/tokens', validated, { idempotencyKey });
     return response.data;
   }
 
@@ -102,7 +118,8 @@ export class TokensModule {
    * Retrieves a token by ID.
    */
   async get(id: string): Promise<Token> {
-    const response = await this.http.get<Token>(`/api/v1/tokens/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.get<Token>(`/api/v1/tokens/${validatedId}`);
     return response.data;
   }
 
@@ -110,14 +127,17 @@ export class TokensModule {
    * Lists tokens with optional filters.
    */
   async list(params?: ListTokensParams): Promise<PaginatedResponse<Token>> {
-    return this.http.list<Token>('/api/v1/tokens', params as Record<string, string | number | boolean | undefined>);
+    const validated = params ? validate(ListTokensParamsSchema, params) : undefined;
+    return this.http.list<Token>('/api/v1/tokens', validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Updates a token (only draft tokens).
    */
   async update(id: string, input: UpdateTokenInput): Promise<Token> {
-    const response = await this.http.patch<Token>(`/api/v1/tokens/${id}`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(UpdateTokenInputSchema, input);
+    const response = await this.http.patch<Token>(`/api/v1/tokens/${validatedId}`, validated);
     return response.data;
   }
 
@@ -125,7 +145,9 @@ export class TokensModule {
    * Deploys a token to the blockchain.
    */
   async deploy(id: string, input?: DeployTokenInput): Promise<Token> {
-    const response = await this.http.post<Token>(`/api/v1/tokens/${id}/deploy`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = input ? validate(DeployTokenInputSchema, input) : undefined;
+    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/deploy`, validated);
     return response.data;
   }
 
@@ -133,7 +155,8 @@ export class TokensModule {
    * Pauses a token (freezes all transfers).
    */
   async pause(id: string, reason?: string): Promise<Token> {
-    const response = await this.http.post<Token>(`/api/v1/tokens/${id}/pause`, { reason });
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/pause`, { reason });
     return response.data;
   }
 
@@ -141,7 +164,8 @@ export class TokensModule {
    * Unpauses a token (resumes transfers).
    */
   async unpause(id: string): Promise<Token> {
-    const response = await this.http.post<Token>(`/api/v1/tokens/${id}/unpause`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/unpause`);
     return response.data;
   }
 
@@ -149,7 +173,8 @@ export class TokensModule {
    * Freezes a token permanently.
    */
   async freeze(id: string, reason: string): Promise<Token> {
-    const response = await this.http.post<Token>(`/api/v1/tokens/${id}/freeze`, { reason });
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/freeze`, { reason });
     return response.data;
   }
 
@@ -161,8 +186,10 @@ export class TokensModule {
    * Issues tokens to an investor.
    */
   async issue(tokenId: string, input: IssueTokensInput): Promise<Issuance> {
-    const response = await this.http.post<Issuance>(`/api/v1/tokens/${tokenId}/issue`, input, {
-      idempotencyKey: input.idempotencyKey,
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = validate(IssueTokensInputSchema, input);
+    const response = await this.http.post<Issuance>(`/api/v1/tokens/${validatedTokenId}/issue`, validated, {
+      idempotencyKey: validated.idempotencyKey,
     });
     return response.data;
   }
@@ -171,8 +198,10 @@ export class TokensModule {
    * Redeems tokens from an investor.
    */
   async redeem(tokenId: string, input: RedeemTokensInput): Promise<Redemption> {
-    const response = await this.http.post<Redemption>(`/api/v1/tokens/${tokenId}/redeem`, input, {
-      idempotencyKey: input.idempotencyKey,
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = validate(RedeemTokensInputSchema, input);
+    const response = await this.http.post<Redemption>(`/api/v1/tokens/${validatedTokenId}/redeem`, validated, {
+      idempotencyKey: validated.idempotencyKey,
     });
     return response.data;
   }
@@ -181,14 +210,18 @@ export class TokensModule {
    * Lists issuances for a token.
    */
   async listIssuances(tokenId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Issuance>> {
-    return this.http.list<Issuance>(`/api/v1/tokens/${tokenId}/issuances`, params as Record<string, string | number | boolean | undefined>);
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = params ? validate(PaginationSchema, params) : undefined;
+    return this.http.list<Issuance>(`/api/v1/tokens/${validatedTokenId}/issuances`, validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Lists redemptions for a token.
    */
   async listRedemptions(tokenId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Redemption>> {
-    return this.http.list<Redemption>(`/api/v1/tokens/${tokenId}/redemptions`, params as Record<string, string | number | boolean | undefined>);
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = params ? validate(PaginationSchema, params) : undefined;
+    return this.http.list<Redemption>(`/api/v1/tokens/${validatedTokenId}/redemptions`, validated as Record<string, string | number | boolean | undefined>);
   }
 
   // ============================================================================
@@ -199,7 +232,9 @@ export class TokensModule {
    * Creates a tranche for a token.
    */
   async createTranche(tokenId: string, input: CreateTrancheInput): Promise<TokenTranche> {
-    const response = await this.http.post<TokenTranche>(`/api/v1/tokens/${tokenId}/tranches`, input);
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = validate(CreateTrancheInputSchema, input);
+    const response = await this.http.post<TokenTranche>(`/api/v1/tokens/${validatedTokenId}/tranches`, validated);
     return response.data;
   }
 
@@ -207,7 +242,8 @@ export class TokensModule {
    * Lists tranches for a token.
    */
   async listTranches(tokenId: string): Promise<TokenTranche[]> {
-    const response = await this.http.get<{ data: TokenTranche[] }>(`/api/v1/tokens/${tokenId}/tranches`);
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const response = await this.http.get<{ data: TokenTranche[] }>(`/api/v1/tokens/${validatedTokenId}/tranches`);
     return response.data.data;
   }
 
@@ -215,7 +251,9 @@ export class TokensModule {
    * Gets a specific tranche.
    */
   async getTranche(tokenId: string, trancheId: string): Promise<TokenTranche> {
-    const response = await this.http.get<TokenTranche>(`/api/v1/tokens/${tokenId}/tranches/${trancheId}`);
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validatedTrancheId = validate(UUIDSchema, trancheId);
+    const response = await this.http.get<TokenTranche>(`/api/v1/tokens/${validatedTokenId}/tranches/${validatedTrancheId}`);
     return response.data;
   }
 
@@ -236,6 +274,7 @@ export class TokensModule {
       percentage: number;
     }>;
   }> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
     const response = await this.http.get<{
       tokenId: string;
       totalSupply: string;
@@ -245,7 +284,7 @@ export class TokensModule {
         balance: string;
         percentage: number;
       }>;
-    }>(`/api/v1/tokens/${tokenId}/cap-table`);
+    }>(`/api/v1/tokens/${validatedTokenId}/cap-table`);
     return response.data;
   }
 
@@ -259,13 +298,15 @@ export class TokensModule {
     lockedBalance: string;
     availableBalance: string;
   }> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validatedAddress = validate(EthereumAddressSchema, walletAddress);
     const response = await this.http.get<{
       tokenId: string;
       walletAddress: string;
       balance: string;
       lockedBalance: string;
       availableBalance: string;
-    }>(`/api/v1/tokens/${tokenId}/balances/${walletAddress}`);
+    }>(`/api/v1/tokens/${validatedTokenId}/balances/${validatedAddress}`);
     return response.data;
   }
 }

@@ -1,5 +1,14 @@
 import type { HttpClient } from '../utils/http.js';
 import type { Transfer, PaginatedResponse, TransferStatus, Settlement } from '../types.js';
+import {
+  validate,
+  CreateTransferInputSchema,
+  ListTransfersParamsSchema,
+  CreateBatchTransferInputSchema,
+  UUIDSchema,
+  EthereumAddressSchema,
+  PaginationSchema,
+} from './validation.js';
 
 // ============================================================================
 // Transfers Module
@@ -11,7 +20,8 @@ export interface CreateTransferInput {
   toWallet: string;
   amount: string;
   chainId?: number;
-  idempotencyKey?: string;
+  /** Required idempotency key to prevent duplicate transfers */
+  idempotencyKey: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -38,8 +48,9 @@ export class TransfersModule {
    * The transfer goes through the saga: created → prechecked → approved → signing → submitted → confirmed → reconciled → settled
    */
   async create(input: CreateTransferInput): Promise<Transfer> {
-    const response = await this.http.post<Transfer>('/api/v1/transfers', input, {
-      idempotencyKey: input.idempotencyKey,
+    const validated = validate(CreateTransferInputSchema, input);
+    const response = await this.http.post<Transfer>('/api/v1/transfers', validated, {
+      idempotencyKey: validated.idempotencyKey,
     });
     return response.data;
   }
@@ -48,7 +59,8 @@ export class TransfersModule {
    * Retrieves a transfer by ID.
    */
   async get(id: string): Promise<TransferWithSettlement> {
-    const response = await this.http.get<TransferWithSettlement>(`/api/v1/transfers/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.get<TransferWithSettlement>(`/api/v1/transfers/${validatedId}`);
     return response.data;
   }
 
@@ -56,14 +68,16 @@ export class TransfersModule {
    * Lists transfers with optional filters.
    */
   async list(params?: ListTransfersParams): Promise<PaginatedResponse<Transfer>> {
-    return this.http.list<Transfer>('/api/v1/transfers', params as Record<string, string | number | boolean | undefined>);
+    const validated = params ? validate(ListTransfersParamsSchema, params) : undefined;
+    return this.http.list<Transfer>('/api/v1/transfers', validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Cancels a transfer (only before submission).
    */
   async cancel(id: string, reason?: string): Promise<Transfer> {
-    const response = await this.http.post<Transfer>(`/api/v1/transfers/${id}/cancel`, { reason });
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Transfer>(`/api/v1/transfers/${validatedId}/cancel`, { reason });
     return response.data;
   }
 
@@ -71,7 +85,8 @@ export class TransfersModule {
    * Retries a failed transfer.
    */
   async retry(id: string): Promise<Transfer> {
-    const response = await this.http.post<Transfer>(`/api/v1/transfers/${id}/retry`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Transfer>(`/api/v1/transfers/${validatedId}/retry`);
     return response.data;
   }
 
@@ -88,6 +103,7 @@ export class TransfersModule {
     settlement: Settlement | null;
     error: string | null;
   }> {
+    const validatedId = validate(UUIDSchema, id);
     const response = await this.http.get<{
       id: string;
       status: TransferStatus;
@@ -97,7 +113,7 @@ export class TransfersModule {
       txHash: string | null;
       settlement: Settlement | null;
       error: string | null;
-    }>(`/api/v1/transfers/${id}/status`);
+    }>(`/api/v1/transfers/${validatedId}/status`);
     return response.data;
   }
 
@@ -112,10 +128,11 @@ export class TransfersModule {
     successful: Transfer[];
     failed: Array<{ input: CreateTransferInput; error: string }>;
   }> {
+    const validated = validate(CreateBatchTransferInputSchema, { transfers });
     const response = await this.http.post<{
       successful: Transfer[];
       failed: Array<{ input: CreateTransferInput; error: string }>;
-    }>('/api/v1/transfers/batch', { transfers });
+    }>('/api/v1/transfers/batch', validated);
     return response.data;
   }
 
@@ -134,7 +151,9 @@ export class TransfersModule {
     limit?: number;
     offset?: number;
   }): Promise<PaginatedResponse<Transfer>> {
-    return this.http.list<Transfer>(`/api/v1/transfers/wallet/${walletAddress}`, params as Record<string, string | number | boolean | undefined>);
+    const validatedAddress = validate(EthereumAddressSchema, walletAddress);
+    const validated = params ? validate(PaginationSchema, params) : undefined;
+    return this.http.list<Transfer>(`/api/v1/transfers/wallet/${validatedAddress}`, validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
@@ -146,6 +165,8 @@ export class TransfersModule {
     limit?: number;
     offset?: number;
   }): Promise<PaginatedResponse<Transfer>> {
-    return this.http.list<Transfer>(`/api/v1/transfers/token/${tokenId}`, params as Record<string, string | number | boolean | undefined>);
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = params ? validate(PaginationSchema, params) : undefined;
+    return this.http.list<Transfer>(`/api/v1/transfers/token/${validatedTokenId}`, validated as Record<string, string | number | boolean | undefined>);
   }
 }

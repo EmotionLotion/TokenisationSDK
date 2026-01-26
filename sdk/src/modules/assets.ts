@@ -8,6 +8,14 @@
 import type { HttpClient } from '../utils/http.js';
 import type { Asset, AssetState, PaginatedResponse } from '../types.js';
 import type { RightType, Jurisdiction } from '../core/index.js';
+import {
+  validate,
+  CreateAssetInputSchema,
+  UpdateAssetInputSchema,
+  ListAssetsParamsSchema,
+  UpdateValuationInputSchema,
+  UUIDSchema,
+} from './validation.js';
 
 // ============================================================================
 // Types
@@ -76,7 +84,8 @@ export class AssetsModule {
    * ```
    */
   async create(input: CreateAssetInput, idempotencyKey?: string): Promise<Asset> {
-    const response = await this.http.post<Asset>('/api/v1/assets', input, { idempotencyKey });
+    const validated = validate(CreateAssetInputSchema, input);
+    const response = await this.http.post<Asset>('/api/v1/assets', validated, { idempotencyKey });
     return response.data;
   }
 
@@ -84,7 +93,8 @@ export class AssetsModule {
    * Retrieves an asset by ID.
    */
   async get(id: string): Promise<Asset> {
-    const response = await this.http.get<Asset>(`/api/v1/assets/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.get<Asset>(`/api/v1/assets/${validatedId}`);
     return response.data;
   }
 
@@ -92,14 +102,17 @@ export class AssetsModule {
    * Lists assets with optional filters.
    */
   async list(params?: ListAssetsParams): Promise<PaginatedResponse<Asset>> {
-    return this.http.list<Asset>('/api/v1/assets', params as Record<string, string | number | boolean | undefined>);
+    const validated = params ? validate(ListAssetsParamsSchema, params) : undefined;
+    return this.http.list<Asset>('/api/v1/assets', validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Updates an asset.
    */
   async update(id: string, input: UpdateAssetInput): Promise<Asset> {
-    const response = await this.http.patch<Asset>(`/api/v1/assets/${id}`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(UpdateAssetInputSchema, input);
+    const response = await this.http.patch<Asset>(`/api/v1/assets/${validatedId}`, validated);
     return response.data;
   }
 
@@ -107,14 +120,16 @@ export class AssetsModule {
    * Deletes an asset (only draft assets).
    */
   async delete(id: string): Promise<void> {
-    await this.http.delete(`/api/v1/assets/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    await this.http.delete(`/api/v1/assets/${validatedId}`);
   }
 
   /**
    * Activates an asset, making it ready for tokenization.
    */
   async activate(id: string): Promise<Asset> {
-    const response = await this.http.post<Asset>(`/api/v1/assets/${id}/activate`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Asset>(`/api/v1/assets/${validatedId}/activate`);
     return response.data;
   }
 
@@ -122,7 +137,8 @@ export class AssetsModule {
    * Freezes an asset, preventing new token operations.
    */
   async freeze(id: string, reason?: string): Promise<Asset> {
-    const response = await this.http.post<Asset>(`/api/v1/assets/${id}/freeze`, { reason });
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Asset>(`/api/v1/assets/${validatedId}/freeze`, { reason });
     return response.data;
   }
 
@@ -130,7 +146,8 @@ export class AssetsModule {
    * Unfreezes a frozen asset.
    */
   async unfreeze(id: string): Promise<Asset> {
-    const response = await this.http.post<Asset>(`/api/v1/assets/${id}/unfreeze`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Asset>(`/api/v1/assets/${validatedId}/unfreeze`);
     return response.data;
   }
 
@@ -141,10 +158,11 @@ export class AssetsModule {
     current: { value: string; currency: string; date: string };
     history: Array<{ value: string; currency: string; date: string; source: string }>;
   }> {
+    const validatedId = validate(UUIDSchema, id);
     const response = await this.http.get<{
       current: { value: string; currency: string; date: string };
       history: Array<{ value: string; currency: string; date: string; source: string }>;
-    }>(`/api/v1/assets/${id}/valuations`);
+    }>(`/api/v1/assets/${validatedId}/valuations`);
     return response.data;
   }
 
@@ -157,6 +175,8 @@ export class AssetsModule {
     source: string;
     attestation?: string;
   }): Promise<void> {
-    await this.http.post(`/api/v1/assets/${id}/valuations`, valuation);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(UpdateValuationInputSchema, valuation);
+    await this.http.post(`/api/v1/assets/${validatedId}/valuations`, validated);
   }
 }

@@ -1,5 +1,16 @@
 import type { HttpClient } from '../utils/http.js';
 import type { Policy, ComplianceDecision, PaginatedResponse } from '../types.js';
+import {
+  validate,
+  CreatePolicyWithRulesInputSchema,
+  UpdatePolicyWithRulesInputSchema,
+  ListPoliciesParamsSchema,
+  CheckComplianceEntityInputSchema,
+  CreatePolicyVersionInputSchema,
+  ComplianceOverrideInputSchema,
+  UUIDSchema,
+  PaginationSchema,
+} from './validation.js';
 
 // ============================================================================
 // Compliance Module
@@ -66,7 +77,8 @@ export class ComplianceModule {
    * Creates a new compliance policy.
    */
   async createPolicy(input: CreatePolicyInput): Promise<Policy> {
-    const response = await this.http.post<Policy>('/api/v1/compliance/policies', input);
+    const validated = validate(CreatePolicyWithRulesInputSchema, input);
+    const response = await this.http.post<Policy>('/api/v1/compliance/policies', validated);
     return response.data;
   }
 
@@ -74,7 +86,8 @@ export class ComplianceModule {
    * Retrieves a policy by ID.
    */
   async getPolicy(id: string): Promise<Policy> {
-    const response = await this.http.get<Policy>(`/api/v1/compliance/policies/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.get<Policy>(`/api/v1/compliance/policies/${validatedId}`);
     return response.data;
   }
 
@@ -82,14 +95,17 @@ export class ComplianceModule {
    * Lists policies with optional filters.
    */
   async listPolicies(params?: ListPoliciesParams): Promise<PaginatedResponse<Policy>> {
-    return this.http.list<Policy>('/api/v1/compliance/policies', params as Record<string, string | number | boolean | undefined>);
+    const validated = params ? validate(ListPoliciesParamsSchema, params) : undefined;
+    return this.http.list<Policy>('/api/v1/compliance/policies', validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Updates a policy.
    */
   async updatePolicy(id: string, input: UpdatePolicyInput): Promise<Policy> {
-    const response = await this.http.patch<Policy>(`/api/v1/compliance/policies/${id}`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(UpdatePolicyWithRulesInputSchema, input);
+    const response = await this.http.patch<Policy>(`/api/v1/compliance/policies/${validatedId}`, validated);
     return response.data;
   }
 
@@ -97,7 +113,8 @@ export class ComplianceModule {
    * Activates a policy.
    */
   async activatePolicy(id: string): Promise<Policy> {
-    const response = await this.http.post<Policy>(`/api/v1/compliance/policies/${id}/activate`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Policy>(`/api/v1/compliance/policies/${validatedId}/activate`);
     return response.data;
   }
 
@@ -105,7 +122,8 @@ export class ComplianceModule {
    * Archives a policy.
    */
   async archivePolicy(id: string): Promise<Policy> {
-    const response = await this.http.post<Policy>(`/api/v1/compliance/policies/${id}/archive`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.post<Policy>(`/api/v1/compliance/policies/${validatedId}/archive`);
     return response.data;
   }
 
@@ -113,7 +131,9 @@ export class ComplianceModule {
    * Creates a new version of a policy.
    */
   async createPolicyVersion(id: string, input: { rules: PolicyRuleInput[]; changelog?: string }): Promise<Policy> {
-    const response = await this.http.post<Policy>(`/api/v1/compliance/policies/${id}/versions`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(CreatePolicyVersionInputSchema, input);
+    const response = await this.http.post<Policy>(`/api/v1/compliance/policies/${validatedId}/versions`, validated);
     return response.data;
   }
 
@@ -125,7 +145,9 @@ export class ComplianceModule {
    * Checks compliance for an entity against a policy.
    */
   async check(policyId: string, input: CheckComplianceInput): Promise<ComplianceCheckResult> {
-    const response = await this.http.post<ComplianceCheckResult>(`/api/v1/compliance/policies/${policyId}/check`, input);
+    const validatedPolicyId = validate(UUIDSchema, policyId);
+    const validated = validate(CheckComplianceEntityInputSchema, input);
+    const response = await this.http.post<ComplianceCheckResult>(`/api/v1/compliance/policies/${validatedPolicyId}/check`, validated);
     return response.data;
   }
 
@@ -133,7 +155,9 @@ export class ComplianceModule {
    * Simulates a compliance check without creating a decision record.
    */
   async simulate(policyId: string, input: CheckComplianceInput): Promise<ComplianceCheckResult> {
-    const response = await this.http.post<ComplianceCheckResult>(`/api/v1/compliance/policies/${policyId}/simulate`, input);
+    const validatedPolicyId = validate(UUIDSchema, policyId);
+    const validated = validate(CheckComplianceEntityInputSchema, input);
+    const response = await this.http.post<ComplianceCheckResult>(`/api/v1/compliance/policies/${validatedPolicyId}/simulate`, validated);
     return response.data;
   }
 
@@ -145,7 +169,8 @@ export class ComplianceModule {
    * Gets a decision by ID.
    */
   async getDecision(id: string): Promise<ComplianceDecision> {
-    const response = await this.http.get<ComplianceDecision>(`/api/v1/compliance/decisions/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.get<ComplianceDecision>(`/api/v1/compliance/decisions/${validatedId}`);
     return response.data;
   }
 
@@ -161,14 +186,17 @@ export class ComplianceModule {
     limit?: number;
     offset?: number;
   }): Promise<PaginatedResponse<ComplianceDecision>> {
-    return this.http.list<ComplianceDecision>('/api/v1/compliance/decisions', params as Record<string, string | number | boolean | undefined>);
+    const validated = params ? validate(PaginationSchema, params) : undefined;
+    return this.http.list<ComplianceDecision>('/api/v1/compliance/decisions', validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Overrides a decision (admin only).
    */
   async overrideDecision(id: string, input: OverrideDecisionInput): Promise<ComplianceDecision> {
-    const response = await this.http.post<ComplianceDecision>(`/api/v1/compliance/decisions/${id}/override`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(ComplianceOverrideInputSchema, input);
+    const response = await this.http.post<ComplianceDecision>(`/api/v1/compliance/decisions/${validatedId}/override`, validated);
     return response.data;
   }
 

@@ -3,6 +3,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { randomBytes, createHash } from 'crypto';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
+import { withSerializableTransaction, withRetryableTransaction } from '../utils/transaction.js';
 
 const { tokens, tokenTranches, issuances, redemptions, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
 
@@ -443,76 +444,97 @@ export async function issueTokens(input: IssueTokensInput) {
     throw new ValidationError('Amount must be a positive integer string');
   }
 
-  // Check supply limits
-  const newIssuedSupply = BigInt(token.issuedSupply) + BigInt(input.amount);
-  if (newIssuedSupply > BigInt(token.totalSupply)) {
-    throw new ValidationError('Issuance would exceed total supply');
-  }
+  // Wrap entire issuance in a retryable transaction for atomicity
+  // This ensures supply updates, ledger positions, and records are consistent
+  const issuance = await withRetryableTransaction(async (tx) => {
+    // Re-read token within transaction for consistency
+    const currentToken = await tx.query.tokens.findFirst({
+      where: and(eq(tokens.id, input.tokenId), eq(tokens.orgId, input.orgId)),
+    });
 
-  // If tranche specified, check tranche limits
-  if (input.trancheId) {
-    const tranche = await getTranche(input.trancheId, input.orgId);
-    const newTrancheIssued = BigInt(tranche.issuedSupply) + BigInt(input.amount);
-    if (newTrancheIssued > BigInt(tranche.supply)) {
-      throw new ValidationError('Issuance would exceed tranche supply');
+    if (!currentToken) {
+      throw new NotFoundError('Token not found');
     }
-  }
 
-  // Create issuance record
-  const [issuance] = await db.insert(issuances).values({
-    orgId: input.orgId,
-    tokenId: input.tokenId,
-    trancheId: input.trancheId,
-    investorId: input.investorId,
-    walletAddress: input.walletAddress.toLowerCase(),
-    amount: input.amount,
-    status: 'pending',
-    reason: input.reason,
-    metadata: input.metadata || {},
-  }).returning();
+    // Check supply limits with fresh data
+    const newIssuedSupply = BigInt(currentToken.issuedSupply) + BigInt(input.amount);
+    if (newIssuedSupply > BigInt(currentToken.totalSupply)) {
+      throw new ValidationError('Issuance would exceed total supply');
+    }
 
-  // Update token issued supply
-  await db.update(tokens)
-    .set({
-      issuedSupply: newIssuedSupply.toString(),
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(tokens.id, input.tokenId));
+    // If tranche specified, check tranche limits
+    let tranche = null;
+    if (input.trancheId) {
+      tranche = await tx.query.tokenTranches.findFirst({
+        where: and(eq(tokenTranches.id, input.trancheId), eq(tokenTranches.orgId, input.orgId)),
+      });
+      if (!tranche) {
+        throw new NotFoundError('Tranche not found');
+      }
+      const newTrancheIssued = BigInt(tranche.issuedSupply) + BigInt(input.amount);
+      if (newTrancheIssued > BigInt(tranche.supply)) {
+        throw new ValidationError('Issuance would exceed tranche supply');
+      }
+    }
 
-  // Update tranche if applicable
-  if (input.trancheId) {
-    const tranche = await getTranche(input.trancheId, input.orgId);
-    await db.update(tokenTranches)
+    // Create issuance record
+    const [newIssuance] = await tx.insert(issuances).values({
+      orgId: input.orgId,
+      tokenId: input.tokenId,
+      trancheId: input.trancheId,
+      investorId: input.investorId,
+      walletAddress: input.walletAddress.toLowerCase(),
+      amount: input.amount,
+      status: 'pending',
+      reason: input.reason,
+      metadata: input.metadata || {},
+    }).returning();
+
+    // Update token issued supply
+    await tx.update(tokens)
       .set({
-        issuedSupply: (BigInt(tranche.issuedSupply) + BigInt(input.amount)).toString(),
+        issuedSupply: newIssuedSupply.toString(),
         updatedAt: new Date().toISOString(),
       })
-      .where(eq(tokenTranches.id, input.trancheId));
-  }
+      .where(eq(tokens.id, input.tokenId));
 
-  // Update or create ledger position
-  await updateLedgerPosition(
-    input.orgId,
-    input.tokenId,
-    input.investorId,
-    input.walletAddress,
-    input.amount,
-    'credit'
-  );
+    // Update tranche if applicable
+    if (input.trancheId && tranche) {
+      await tx.update(tokenTranches)
+        .set({
+          issuedSupply: (BigInt(tranche.issuedSupply) + BigInt(input.amount)).toString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(tokenTranches.id, input.trancheId));
+    }
 
-  // Create event
-  await db.insert(eventBusQueue).values({
-    orgId: input.orgId,
-    topic: 'token.issued',
-    payload: {
-      issuanceId: issuance.id,
-      tokenId: input.tokenId,
-      investorId: input.investorId,
-      amount: input.amount,
-    },
-  });
+    // Update or create ledger position within transaction
+    await updateLedgerPositionInTx(
+      tx,
+      input.orgId,
+      input.tokenId,
+      input.investorId,
+      input.walletAddress,
+      input.amount,
+      'credit'
+    );
 
-  // Audit log
+    // Create event within transaction
+    await tx.insert(eventBusQueue).values({
+      orgId: input.orgId,
+      topic: 'token.issued',
+      payload: {
+        issuanceId: newIssuance.id,
+        tokenId: input.tokenId,
+        investorId: input.investorId,
+        amount: input.amount,
+      },
+    });
+
+    return newIssuance;
+  }, 3, 100);
+
+  // Audit log (outside transaction - non-critical)
   await auditService.logSystemAction(
     input.orgId,
     'token_issued',
@@ -579,62 +601,77 @@ export async function redeemTokens(input: RedeemTokensInput) {
     throw new ValidationError('Amount must be a positive integer string');
   }
 
-  // Check investor has sufficient balance
-  const position = await db.query.ledgerPositions.findFirst({
-    where: and(
-      eq(ledgerPositions.tokenId, input.tokenId),
-      eq(ledgerPositions.investorId, input.investorId),
-      eq(ledgerPositions.walletAddress, input.walletAddress.toLowerCase())
-    ),
-  });
+  // Wrap entire redemption in a retryable transaction for atomicity
+  const redemption = await withRetryableTransaction(async (tx) => {
+    // Check investor has sufficient balance within transaction
+    const position = await tx.query.ledgerPositions.findFirst({
+      where: and(
+        eq(ledgerPositions.tokenId, input.tokenId),
+        eq(ledgerPositions.investorId, input.investorId),
+        eq(ledgerPositions.walletAddress, input.walletAddress.toLowerCase())
+      ),
+    });
 
-  if (!position || BigInt(position.balance) < BigInt(input.amount)) {
-    throw new ValidationError('Insufficient balance for redemption');
-  }
+    if (!position || BigInt(position.balance) < BigInt(input.amount)) {
+      throw new ValidationError('Insufficient balance for redemption');
+    }
 
-  // Create redemption record
-  const [redemption] = await db.insert(redemptions).values({
-    orgId: input.orgId,
-    tokenId: input.tokenId,
-    investorId: input.investorId,
-    walletAddress: input.walletAddress.toLowerCase(),
-    amount: input.amount,
-    status: 'pending',
-    reason: input.reason,
-    metadata: input.metadata || {},
-  }).returning();
+    // Re-read token for current supply
+    const currentToken = await tx.query.tokens.findFirst({
+      where: and(eq(tokens.id, input.tokenId), eq(tokens.orgId, input.orgId)),
+    });
 
-  // Update ledger position (debit)
-  await updateLedgerPosition(
-    input.orgId,
-    input.tokenId,
-    input.investorId,
-    input.walletAddress,
-    input.amount,
-    'debit'
-  );
+    if (!currentToken) {
+      throw new NotFoundError('Token not found');
+    }
 
-  // Update token issued supply
-  await db.update(tokens)
-    .set({
-      issuedSupply: (BigInt(token.issuedSupply) - BigInt(input.amount)).toString(),
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(tokens.id, input.tokenId));
-
-  // Create event
-  await db.insert(eventBusQueue).values({
-    orgId: input.orgId,
-    topic: 'token.redeemed',
-    payload: {
-      redemptionId: redemption.id,
+    // Create redemption record
+    const [newRedemption] = await tx.insert(redemptions).values({
+      orgId: input.orgId,
       tokenId: input.tokenId,
       investorId: input.investorId,
+      walletAddress: input.walletAddress.toLowerCase(),
       amount: input.amount,
-    },
-  });
+      status: 'pending',
+      reason: input.reason,
+      metadata: input.metadata || {},
+    }).returning();
 
-  // Audit log
+    // Update ledger position (debit) within transaction
+    await updateLedgerPositionInTx(
+      tx,
+      input.orgId,
+      input.tokenId,
+      input.investorId,
+      input.walletAddress,
+      input.amount,
+      'debit'
+    );
+
+    // Update token issued supply
+    await tx.update(tokens)
+      .set({
+        issuedSupply: (BigInt(currentToken.issuedSupply) - BigInt(input.amount)).toString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(tokens.id, input.tokenId));
+
+    // Create event within transaction
+    await tx.insert(eventBusQueue).values({
+      orgId: input.orgId,
+      topic: 'token.redeemed',
+      payload: {
+        redemptionId: newRedemption.id,
+        tokenId: input.tokenId,
+        investorId: input.investorId,
+        amount: input.amount,
+      },
+    });
+
+    return newRedemption;
+  }, 3, 100);
+
+  // Audit log (outside transaction - non-critical)
   await auditService.logSystemAction(
     input.orgId,
     'token_redeemed',
@@ -689,7 +726,12 @@ export async function confirmRedemption(id: string, orgId: string, txHash: strin
 // Ledger Position Management
 // ============================================================================
 
-async function updateLedgerPosition(
+/**
+ * Update ledger position within a transaction context.
+ * This is the core implementation that can be used within transactions.
+ */
+async function updateLedgerPositionInTx(
+  txContext: typeof db,
   orgId: string,
   tokenId: string,
   investorId: string,
@@ -699,8 +741,8 @@ async function updateLedgerPosition(
 ) {
   const normalizedWallet = walletAddress.toLowerCase();
 
-  // Find existing position
-  const existing = await db.query.ledgerPositions.findFirst({
+  // Find existing position within transaction
+  const existing = await txContext.query.ledgerPositions.findFirst({
     where: and(
       eq(ledgerPositions.tokenId, tokenId),
       eq(ledgerPositions.investorId, investorId),
@@ -719,7 +761,7 @@ async function updateLedgerPosition(
       throw new ValidationError('Operation would result in negative balance');
     }
 
-    await db.update(ledgerPositions)
+    await txContext.update(ledgerPositions)
       .set({
         balance: newBalance.toString(),
         lastMovementAt: new Date().toISOString(),
@@ -731,7 +773,7 @@ async function updateLedgerPosition(
       throw new ValidationError('Cannot debit from non-existent position');
     }
 
-    await db.insert(ledgerPositions).values({
+    await txContext.insert(ledgerPositions).values({
       orgId,
       tokenId,
       investorId,
@@ -740,6 +782,23 @@ async function updateLedgerPosition(
       lastMovementAt: new Date().toISOString(),
     });
   }
+}
+
+/**
+ * Update ledger position with automatic transaction wrapping.
+ * Use this for standalone position updates outside of other transactions.
+ */
+async function updateLedgerPosition(
+  orgId: string,
+  tokenId: string,
+  investorId: string,
+  walletAddress: string,
+  amount: string,
+  type: 'credit' | 'debit'
+) {
+  await withSerializableTransaction(async (tx) => {
+    await updateLedgerPositionInTx(tx, orgId, tokenId, investorId, walletAddress, amount, type);
+  });
 }
 
 export async function getLedgerPosition(tokenId: string, investorId: string, walletAddress: string) {

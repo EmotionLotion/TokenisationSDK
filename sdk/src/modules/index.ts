@@ -32,3 +32,13 @@ export { TokensModule } from './tokens.js';
 export { TransfersModule } from './transfers.js';
 export { ComplianceModule } from './compliance.js';
 export { AssetsModule } from './assets.js';
+
+// Validation utilities
+export {
+  validate,
+  validateSafe,
+  ValidationError,
+  generateIdempotencyKey,
+  generateDeterministicKey,
+  schemas,
+} from './validation.js';

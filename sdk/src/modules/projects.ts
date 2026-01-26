@@ -1,5 +1,14 @@
 import type { HttpClient } from '../utils/http.js';
 import type { Project, Document, PaginatedResponse } from '../types.js';
+import {
+  validate,
+  CreateProjectInputSchema,
+  UpdateProjectInputSchema,
+  ListProjectsParamsSchema,
+  CreateDocumentInputSchema,
+  UUIDSchema,
+  PaginationSchema,
+} from './validation.js';
 
 // ============================================================================
 // Projects Module
@@ -49,7 +58,8 @@ export class ProjectsModule {
    * Creates a new project.
    */
   async create(input: CreateProjectInput, idempotencyKey?: string): Promise<Project> {
-    const response = await this.http.post<Project>('/api/v1/projects', input, { idempotencyKey });
+    const validated = validate(CreateProjectInputSchema, input);
+    const response = await this.http.post<Project>('/api/v1/projects', validated, { idempotencyKey });
     return response.data;
   }
 
@@ -57,7 +67,8 @@ export class ProjectsModule {
    * Retrieves a project by ID.
    */
   async get(id: string): Promise<Project> {
-    const response = await this.http.get<Project>(`/api/v1/projects/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    const response = await this.http.get<Project>(`/api/v1/projects/${validatedId}`);
     return response.data;
   }
 
@@ -65,14 +76,17 @@ export class ProjectsModule {
    * Lists projects with optional filters.
    */
   async list(params?: ListProjectsParams): Promise<PaginatedResponse<Project>> {
-    return this.http.list<Project>('/api/v1/projects', params as Record<string, string | number | boolean | undefined>);
+    const validated = params ? validate(ListProjectsParamsSchema, params) : undefined;
+    return this.http.list<Project>('/api/v1/projects', validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Updates a project.
    */
   async update(id: string, input: UpdateProjectInput): Promise<Project> {
-    const response = await this.http.patch<Project>(`/api/v1/projects/${id}`, input);
+    const validatedId = validate(UUIDSchema, id);
+    const validated = validate(UpdateProjectInputSchema, input);
+    const response = await this.http.patch<Project>(`/api/v1/projects/${validatedId}`, validated);
     return response.data;
   }
 
@@ -80,7 +94,8 @@ export class ProjectsModule {
    * Deletes a project (only draft projects).
    */
   async delete(id: string): Promise<void> {
-    await this.http.delete(`/api/v1/projects/${id}`);
+    const validatedId = validate(UUIDSchema, id);
+    await this.http.delete(`/api/v1/projects/${validatedId}`);
   }
 
   // ============================================================================
@@ -91,7 +106,9 @@ export class ProjectsModule {
    * Uploads a document to a project.
    */
   async uploadDocument(projectId: string, input: CreateDocumentInput): Promise<Document> {
-    const response = await this.http.post<Document>(`/api/v1/projects/${projectId}/documents`, input);
+    const validatedProjectId = validate(UUIDSchema, projectId);
+    const validated = validate(CreateDocumentInputSchema, input);
+    const response = await this.http.post<Document>(`/api/v1/projects/${validatedProjectId}/documents`, validated);
     return response.data;
   }
 
@@ -99,14 +116,18 @@ export class ProjectsModule {
    * Lists documents for a project.
    */
   async listDocuments(projectId: string, params?: { type?: string; status?: string }): Promise<PaginatedResponse<Document>> {
-    return this.http.list<Document>(`/api/v1/projects/${projectId}/documents`, params as Record<string, string | number | boolean | undefined>);
+    const validatedProjectId = validate(UUIDSchema, projectId);
+    const validated = params ? validate(PaginationSchema, params) : undefined;
+    return this.http.list<Document>(`/api/v1/projects/${validatedProjectId}/documents`, validated as Record<string, string | number | boolean | undefined>);
   }
 
   /**
    * Gets a specific document.
    */
   async getDocument(projectId: string, documentId: string): Promise<Document> {
-    const response = await this.http.get<Document>(`/api/v1/projects/${projectId}/documents/${documentId}`);
+    const validatedProjectId = validate(UUIDSchema, projectId);
+    const validatedDocumentId = validate(UUIDSchema, documentId);
+    const response = await this.http.get<Document>(`/api/v1/projects/${validatedProjectId}/documents/${validatedDocumentId}`);
     return response.data;
   }
 
@@ -114,7 +135,9 @@ export class ProjectsModule {
    * Verifies a document.
    */
   async verifyDocument(projectId: string, documentId: string): Promise<Document> {
-    const response = await this.http.post<Document>(`/api/v1/projects/${projectId}/documents/${documentId}/verify`);
+    const validatedProjectId = validate(UUIDSchema, projectId);
+    const validatedDocumentId = validate(UUIDSchema, documentId);
+    const response = await this.http.post<Document>(`/api/v1/projects/${validatedProjectId}/documents/${validatedDocumentId}/verify`);
     return response.data;
   }
 
@@ -122,6 +145,8 @@ export class ProjectsModule {
    * Deletes a document.
    */
   async deleteDocument(projectId: string, documentId: string): Promise<void> {
-    await this.http.delete(`/api/v1/projects/${projectId}/documents/${documentId}`);
+    const validatedProjectId = validate(UUIDSchema, projectId);
+    const validatedDocumentId = validate(UUIDSchema, documentId);
+    await this.http.delete(`/api/v1/projects/${validatedProjectId}/documents/${validatedDocumentId}`);
   }
 }

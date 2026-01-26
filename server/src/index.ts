@@ -33,7 +33,15 @@ import { kycRouter } from './routes/kyc.routes.js';
 import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
-import { requestIdMiddleware, standardRateLimiter, authRateLimiter, securityHeaders } from './middleware/apiGateway.js';
+import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
+import {
+  standardRateLimiter,
+  authRateLimiter,
+  transferRateLimiter,
+  heavyOperationRateLimiter,
+  isRedisAvailable,
+  closeRedisConnection,
+} from './middleware/rateLimit.js';
 import { requestLogger, errorLogger, logger } from './middleware/logger.js';
 
 const app = express();
@@ -56,17 +64,23 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
-// Rate limiting
+// Rate limiting (Redis-backed when REDIS_URL is configured)
 app.use('/api/v1/auth', authRateLimiter);
+app.use('/api/v1/transfers', transferRateLimiter);
+app.use('/api/v1/tokens', heavyOperationRateLimiter);
+app.use('/api/v1/relayer', heavyOperationRateLimiter);
 app.use('/api/v1', standardRateLimiter);
 
 // Health check (no auth required)
 app.get('/health', async (_req, res) => {
   const dbConnected = await testConnection();
+  const redisConnected = isRedisAvailable();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     db: dbConnected ? 'connected' : 'disconnected',
+    redis: redisConnected ? 'connected' : 'not configured',
+    rateLimit: redisConnected ? 'distributed' : 'in-memory',
     version: '1.0.0',
   });
 });
@@ -127,6 +141,30 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
 
+// Graceful shutdown handler
+async function gracefulShutdown(signal: string) {
+  logger.info(`Received ${signal}. Shutting down gracefully...`);
+
+  try {
+    // Close Redis connection
+    await closeRedisConnection();
+    logger.info('Redis connection closed');
+
+    // Allow pending requests to complete (give 10 seconds)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    logger.info('Shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during shutdown', { error: error as Error });
+    process.exit(1);
+  }
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Start server
 async function start() {
   try {
@@ -138,12 +176,16 @@ async function start() {
       logger.info('Database connected successfully');
     }
 
+    // Check Redis connection (rate limiting will log its own status)
+    const redisOk = isRedisAvailable();
+
     app.listen(PORT, () => {
       logger.info('Server started', {
         metadata: {
           environment: process.env.NODE_ENV || 'development',
           port: PORT,
           database: `${getDbMode().toUpperCase()} (${dbOk ? 'Connected' : 'Disconnected'})`,
+          redis: redisOk ? 'Connected' : 'Not configured (using in-memory rate limiting)',
           corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
         },
       });
@@ -154,6 +196,7 @@ async function start() {
   Environment: ${process.env.NODE_ENV || 'development'}
   Port: ${PORT}
   Database: ${getDbMode().toUpperCase()} (${dbOk ? 'Connected' : 'Disconnected'})
+  Redis: ${redisOk ? 'Connected (distributed rate limiting)' : 'Not configured (in-memory rate limiting)'}
   CORS Origin: ${process.env.CORS_ORIGIN || 'http://localhost:5173'}
 ========================================
       `);

@@ -3,6 +3,7 @@ import { eq, and, desc, lt, or } from 'drizzle-orm';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
 import * as complianceService from './compliance.service.js';
 import { randomUUID } from 'crypto';
+import { withSerializableTransaction, withRetryableTransaction } from '../utils/transaction.js';
 
 const { transfers, settlements, tokens, investors, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
 
@@ -422,28 +423,51 @@ export async function submitTransfer(id: string, orgId: string, txHash: string):
     throw new ValidationError('Invalid transaction hash format');
   }
 
-  const submitted = await transitionTransfer(transfer, 'submitted', {
-    txHash,
-    submittedAt: new Date(),
-  });
+  // Wrap submission in transaction for atomicity
+  const submitted = await withSerializableTransaction(async (tx) => {
+    // Transition transfer status
+    const currentStatus = transfer.status as TransferStatus;
+    if (!STATE_TRANSITIONS[currentStatus].includes('submitted')) {
+      throw new ValidationError(
+        `Invalid state transition: ${currentStatus} -> submitted`
+      );
+    }
 
-  // Create settlement record
-  const token = await db.query.tokens.findFirst({
-    where: eq(tokens.id, transfer.tokenId),
-  });
+    const [updated] = await tx.update(transfers)
+      .set({
+        status: 'submitted',
+        txHash,
+        submittedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(transfers.id, transfer.id))
+      .returning();
 
-  await db.insert(settlements).values({
-    orgId,
-    transferId: id,
-    txHash,
-    chainId: token?.chainId || 1,
-    finalityStatus: 'pending',
-    requiredConfirmations: 12, // Configurable per chain
-  });
+    // Create settlement record within same transaction
+    const token = await tx.query.tokens.findFirst({
+      where: eq(tokens.id, transfer.tokenId),
+    });
 
-  await emitTransferEvent(id, orgId, 'transfer.submitted', {
-    transferId: id,
-    txHash,
+    await tx.insert(settlements).values({
+      orgId,
+      transferId: id,
+      txHash,
+      chainId: token?.chainId || 1,
+      finalityStatus: 'pending',
+      requiredConfirmations: 12, // Configurable per chain
+    });
+
+    // Emit event within transaction
+    await tx.insert(eventBusQueue).values({
+      orgId,
+      topic: 'transfer.submitted',
+      eventId: `evt_${randomUUID().replace(/-/g, '')}`,
+      payload: { transferId: id, txHash } as any,
+      trace: { transferId: id, timestamp: new Date().toISOString() } as any,
+      status: 'pending',
+    });
+
+    return updated;
   });
 
   return formatTransferResponse(submitted);
@@ -463,25 +487,48 @@ export async function confirmTransfer(id: string, orgId: string, blockNumber: nu
     throw new ValidationError(`Transfer cannot be confirmed from status: ${transfer.status}`);
   }
 
-  const confirmed = await transitionTransfer(transfer, 'confirmed', {
-    txBlock: blockNumber,
-    confirmedAt: new Date(),
-  });
+  // Wrap confirmation in transaction for atomicity
+  const confirmed = await withSerializableTransaction(async (tx) => {
+    // Transition transfer status
+    const currentStatus = transfer.status as TransferStatus;
+    if (!STATE_TRANSITIONS[currentStatus].includes('confirmed')) {
+      throw new ValidationError(
+        `Invalid state transition: ${currentStatus} -> confirmed`
+      );
+    }
 
-  // Update settlement
-  if (transfer.txHash) {
-    await db.update(settlements)
+    const [updated] = await tx.update(transfers)
       .set({
-        confirmedBlock: blockNumber,
-        indexedAt: new Date(),
+        status: 'confirmed',
+        txBlock: blockNumber,
+        confirmedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(settlements.txHash, transfer.txHash));
-  }
+      .where(eq(transfers.id, transfer.id))
+      .returning();
 
-  await emitTransferEvent(id, orgId, 'transfer.confirmed', {
-    transferId: id,
-    blockNumber,
+    // Update settlement within same transaction
+    if (transfer.txHash) {
+      await tx.update(settlements)
+        .set({
+          confirmedBlock: blockNumber,
+          indexedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(settlements.txHash, transfer.txHash));
+    }
+
+    // Emit event within transaction
+    await tx.insert(eventBusQueue).values({
+      orgId,
+      topic: 'transfer.confirmed',
+      eventId: `evt_${randomUUID().replace(/-/g, '')}`,
+      payload: { transferId: id, blockNumber } as any,
+      trace: { transferId: id, timestamp: new Date().toISOString() } as any,
+      status: 'pending',
+    });
+
+    return updated;
   });
 
   return formatTransferResponse(confirmed);
@@ -523,27 +570,54 @@ export async function settleTransfer(id: string, orgId: string): Promise<Transfe
     throw new ValidationError(`Transfer cannot be settled from status: ${transfer.status}`);
   }
 
-  // Update ledger positions
-  await updateLedgerPositions(transfer);
+  // Wrap entire settlement in a retryable transaction for atomicity
+  // This ensures ledger updates, transfer status, and settlement status
+  // are all updated together or rolled back on failure
+  const settled = await withRetryableTransaction(async (tx) => {
+    // Update ledger positions within this transaction
+    await updateLedgerPositionsInTx(transfer, tx);
 
-  const settled = await transitionTransfer(transfer, 'settled', {
-    settledAt: new Date(),
-  });
+    // Transition transfer to settled
+    const currentStatus = transfer.status as TransferStatus;
+    if (!STATE_TRANSITIONS[currentStatus].includes('settled')) {
+      throw new ValidationError(
+        `Invalid state transition: ${currentStatus} -> settled. ` +
+        `Allowed: ${STATE_TRANSITIONS[currentStatus].join(', ') || 'none'}`
+      );
+    }
 
-  // Finalize settlement
-  if (transfer.txHash) {
-    await db.update(settlements)
+    const [updated] = await tx.update(transfers)
       .set({
-        finalityStatus: 'finalized',
-        finalizedAt: new Date(),
+        status: 'settled',
+        settledAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(settlements.txHash, transfer.txHash));
-  }
+      .where(eq(transfers.id, transfer.id))
+      .returning();
 
-  await emitTransferEvent(id, orgId, 'transfer.settled', {
-    transferId: id,
-  });
+    // Finalize settlement record
+    if (transfer.txHash) {
+      await tx.update(settlements)
+        .set({
+          finalityStatus: 'finalized',
+          finalizedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(settlements.txHash, transfer.txHash));
+    }
+
+    // Emit event within transaction (event is queued, will be processed later)
+    await tx.insert(eventBusQueue).values({
+      orgId,
+      topic: 'transfer.settled',
+      eventId: `evt_${randomUUID().replace(/-/g, '')}`,
+      payload: { transferId: id } as any,
+      trace: { transferId: id, timestamp: new Date().toISOString() } as any,
+      status: 'pending',
+    });
+
+    return updated;
+  }, 3, 100);
 
   return formatTransferResponse(settled);
 }
@@ -587,19 +661,34 @@ export async function executeTransferSaga(
 // Ledger Updates
 // ============================================================================
 
-async function updateLedgerPositions(transfer: typeof transfers.$inferSelect) {
+/**
+ * Update ledger positions atomically within a transaction.
+ * Can be called standalone or within a parent transaction context.
+ *
+ * @param transfer - The transfer record to process
+ * @param txContext - Optional transaction context (if called from within another transaction)
+ */
+async function updateLedgerPositionsInTx(
+  transfer: typeof transfers.$inferSelect,
+  txContext: typeof db
+) {
   const { orgId, tokenId, fromWallet, toWallet, amount } = transfer;
 
   // Update sender position
-  const senderPosition = await db.query.ledgerPositions.findFirst({
+  const senderPosition = await txContext.query.ledgerPositions.findFirst({
     where: and(eq(ledgerPositions.tokenId, tokenId), eq(ledgerPositions.walletAddress, fromWallet)),
   });
 
   const senderBalanceBefore = senderPosition?.balance || '0';
   const senderBalanceAfter = (BigInt(senderBalanceBefore) - BigInt(amount)).toString();
 
+  // Validate sender has sufficient balance
+  if (BigInt(senderBalanceAfter) < 0n) {
+    throw new ValidationError(`Insufficient balance: ${senderBalanceBefore} < ${amount}`);
+  }
+
   if (senderPosition) {
-    await db.update(ledgerPositions)
+    await txContext.update(ledgerPositions)
       .set({
         balance: senderBalanceAfter,
         lastEventRef: transfer.id,
@@ -610,7 +699,7 @@ async function updateLedgerPositions(transfer: typeof transfers.$inferSelect) {
   }
 
   // Update receiver position
-  const receiverPosition = await db.query.ledgerPositions.findFirst({
+  const receiverPosition = await txContext.query.ledgerPositions.findFirst({
     where: and(eq(ledgerPositions.tokenId, tokenId), eq(ledgerPositions.walletAddress, toWallet)),
   });
 
@@ -618,7 +707,7 @@ async function updateLedgerPositions(transfer: typeof transfers.$inferSelect) {
   const receiverBalanceAfter = (BigInt(receiverBalanceBefore) + BigInt(amount)).toString();
 
   if (receiverPosition) {
-    await db.update(ledgerPositions)
+    await txContext.update(ledgerPositions)
       .set({
         balance: receiverBalanceAfter,
         lastEventRef: transfer.id,
@@ -628,7 +717,7 @@ async function updateLedgerPositions(transfer: typeof transfers.$inferSelect) {
       .where(eq(ledgerPositions.id, receiverPosition.id));
   } else {
     // Create new position for receiver
-    await db.insert(ledgerPositions).values({
+    await txContext.insert(ledgerPositions).values({
       orgId,
       tokenId,
       walletAddress: toWallet,
@@ -639,19 +728,45 @@ async function updateLedgerPositions(transfer: typeof transfers.$inferSelect) {
     });
   }
 
-  // Create ledger events
-  await db.insert(ledgerEvents).values({
-    orgId,
-    type: 'transfer',
-    tokenId,
-    fromWallet,
-    toWallet,
-    amount,
-    ref: transfer.id,
-    refType: 'transfer',
-    balanceBefore: senderBalanceBefore,
-    balanceAfter: senderBalanceAfter,
-  });
+  // Create ledger events for both parties within the same transaction
+  await txContext.insert(ledgerEvents).values([
+    {
+      orgId,
+      type: 'transfer',
+      tokenId,
+      fromWallet,
+      toWallet,
+      amount,
+      ref: transfer.id,
+      refType: 'transfer',
+      balanceBefore: senderBalanceBefore,
+      balanceAfter: senderBalanceAfter,
+    },
+    {
+      orgId,
+      type: 'transfer',
+      tokenId,
+      fromWallet,
+      toWallet,
+      amount,
+      ref: transfer.id,
+      refType: 'transfer',
+      balanceBefore: receiverBalanceBefore,
+      balanceAfter: receiverBalanceAfter,
+    },
+  ]);
+}
+
+/**
+ * Update ledger positions with automatic transaction wrapping.
+ * Use this for standalone ledger updates outside of settleTransfer.
+ */
+async function updateLedgerPositions(transfer: typeof transfers.$inferSelect) {
+  await withRetryableTransaction(
+    async (tx) => updateLedgerPositionsInTx(transfer, tx),
+    3,
+    100
+  );
 }
 
 // ============================================================================
