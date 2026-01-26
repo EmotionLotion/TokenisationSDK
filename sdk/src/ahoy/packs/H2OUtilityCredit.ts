@@ -10,6 +10,7 @@
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../../SDK.js';
 import { EvidenceType } from '../../models/index.js';
 import { UtilityType, type UtilityCredit, type IoTReading } from '../types.js';
+import { SDKError, ErrorCode } from '../../errors/index.js';
 
 /**
  * H2O Provider configuration
@@ -146,7 +147,9 @@ export class H2OUtilityCreditPack {
     carbonOffset: number;
   }> {
     if (!this.providerId) {
-      throw new Error('Provider not initialized. Call initializeProvider() first.');
+      throw new SDKError('Provider not initialized. Call initializeProvider() first.', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call initializeProvider() before mintCredit()' },
+      });
     }
 
     // Step 1: Verify IoT readings
@@ -239,7 +242,9 @@ export class H2OUtilityCreditPack {
     reason: string
   ): Promise<{ success: boolean; remaining: number }> {
     if (!this.providerId) {
-      throw new Error('Provider not initialized');
+      throw new SDKError('Provider not initialized', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call initializeProvider() first' },
+      });
     }
 
     const asset = await this.sdk.assets.get(creditAssetId);

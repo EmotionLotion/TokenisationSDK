@@ -8,6 +8,7 @@
 import { ethers, type Provider, type Signer } from 'ethers';
 import { ok, err, type Result } from '../../core/types.js';
 import { chainRegistry, type ChainConfig } from '../chain/ChainRegistry.js';
+import { ValidationError, ErrorCode } from '../../errors/index.js';
 
 // CCIP Router ABI (minimal)
 const CCIP_ROUTER_ABI = [
@@ -65,10 +66,16 @@ export class CCIPBridgePlugin {
   constructor(config: CCIPBridgeConfig) {
     const sourceChain = chainRegistry.get(config.sourceChainId);
     if (!sourceChain) {
-      throw new Error(`Source chain ${config.sourceChainId} not found in registry`);
+      throw new ValidationError(`Source chain ${config.sourceChainId} not found in registry`, {
+        field: 'sourceChainId',
+        constraints: { validChain: 'Chain must be registered in ChainRegistry' },
+      });
     }
     if (!sourceChain.ccipRouter) {
-      throw new Error(`CCIP not supported on chain ${config.sourceChainId}`);
+      throw new ValidationError(`CCIP not supported on chain ${config.sourceChainId}`, {
+        field: 'sourceChainId',
+        constraints: { ccipSupport: 'Chain must have ccipRouter configured' },
+      });
     }
 
     this.sourceChain = sourceChain;

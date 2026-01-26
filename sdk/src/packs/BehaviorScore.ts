@@ -9,6 +9,7 @@
 
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../SDK.js';
 import { EvidenceType, type BehaviorMetadata } from '../models/index.js';
+import { SDKError, ErrorCode } from '../errors/index.js';
 
 /**
  * Behavior Score Pack configuration
@@ -178,12 +179,16 @@ export class BehaviorScorePack {
     reason: string
   ): Promise<void> {
     if (!this.assetId) {
-      throw new Error('Pack not initialized. Call execute() first.');
+      throw new SDKError('Pack not initialized. Call execute() first.', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call execute() before updateScore()' },
+      });
     }
 
     const asset = await this.sdk.assets.get(this.assetId);
     if (!asset) {
-      throw new Error('Asset not found');
+      throw new SDKError('Asset not found', ErrorCode.ASSET_NOT_FOUND, {
+        details: { assetId: this.assetId },
+      });
     }
 
     // Update metadata with new score

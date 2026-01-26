@@ -7,6 +7,7 @@
 
 import { ok, err, type Result } from '../../core/types.js';
 import type { IStoragePlugin, StorageMetadata } from '../../core/interfaces.js';
+import { ValidationError } from '../../errors/index.js';
 
 export interface S3StoragePluginConfig {
   region: string;
@@ -290,7 +291,10 @@ export class S3StoragePlugin implements IStoragePlugin {
     if (!uri.includes('://')) {
       return uri;
     }
-    throw new Error(`Invalid S3 URI format: ${uri}`);
+    throw new ValidationError(`Invalid S3 URI format: ${uri}`, {
+      field: 'uri',
+      constraints: { format: 's3://bucket/key or plain key' },
+    });
   }
 }
 

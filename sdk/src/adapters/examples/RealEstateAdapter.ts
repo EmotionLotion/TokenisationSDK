@@ -18,6 +18,7 @@ import type {
   ExternalConnector,
   TokenStandard,
 } from '../types.js';
+import { ValidationError } from '../../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -320,7 +321,10 @@ export class RealEstateAdapter implements IAssetAdapter<RealEstateInput, RealEst
               // Register ownership transfer
               return { registrationId: 'DLD-' + Date.now() } as T;
             default:
-              throw new Error(`Unknown DLD operation: ${operation}`);
+              throw new ValidationError(`Unknown DLD operation: ${operation}`, {
+                field: 'operation',
+                constraints: { allowedValues: 'verifyTitle, registerTransfer' },
+              });
           }
         },
       },

@@ -9,6 +9,7 @@
 
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../SDK.js';
 import { EvidenceType, type VerificationMetadata } from '../models/index.js';
+import { SDKError, ValidationError, ErrorCode } from '../errors/index.js';
 
 /**
  * Verification Credential types
@@ -212,12 +213,17 @@ export class VerificationCredentialPack {
   ): Promise<void> {
     const asset = await this.sdk.assets.get(assetId);
     if (!asset) {
-      throw new Error('Asset not found');
+      throw new SDKError('Asset not found', ErrorCode.ASSET_NOT_FOUND, {
+        details: { assetId },
+      });
     }
 
     const metadata = asset.typedMetadata as VerificationMetadata;
     if (metadata.certificateType !== 'CARBON_CREDIT') {
-      throw new Error('Asset is not a carbon credit');
+      throw new ValidationError('Asset is not a carbon credit', {
+        field: 'certificateType',
+        constraints: { expected: 'CARBON_CREDIT', actual: metadata.certificateType },
+      });
     }
 
     const currentCarbon = metadata.carbonTonnes || 0;
@@ -225,7 +231,10 @@ export class VerificationCredentialPack {
     const available = currentCarbon - currentRetired;
 
     if (tonnes > available) {
-      throw new Error(`Cannot retire ${tonnes} tonnes. Only ${available} available.`);
+      throw new ValidationError(`Cannot retire ${tonnes} tonnes. Only ${available} available.`, {
+        field: 'tonnes',
+        constraints: { maxAvailable: String(available), requested: String(tonnes) },
+      });
     }
 
     // Update retired amount

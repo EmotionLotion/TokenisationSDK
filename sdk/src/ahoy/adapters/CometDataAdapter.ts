@@ -12,6 +12,7 @@
 import crypto from 'crypto';
 import type { ChainlinkFunctionsPlugin, SafetyScoreResult, CarbonOffsetResult } from '../../plugins/chainlink/FunctionsPlugin.js';
 import type { TelematicsReading, TelematicsEventType, DeliveryTracking } from '../plugins/TelematicsOracle.js';
+import { NetworkError, ValidationError, AuthenticationError, ErrorCode } from '../../errors/index.js';
 
 export interface CometConfig {
   apiUrl: string;
@@ -99,7 +100,9 @@ export class CometDataAdapter {
 
       if (!response.ok) {
         if (response.status === 404) return null;
-        throw new Error(`COMET API error: ${response.status}`);
+        throw new NetworkError(`COMET API error: ${response.status}`, {
+          statusCode: response.status,
+        });
       }
 
       return await response.json();
@@ -128,7 +131,9 @@ export class CometDataAdapter {
       );
 
       if (!response.ok) {
-        throw new Error(`COMET API error: ${response.status}`);
+        throw new NetworkError(`COMET API error: ${response.status}`, {
+          statusCode: response.status,
+        });
       }
 
       const data = await response.json();
@@ -157,7 +162,9 @@ export class CometDataAdapter {
       );
 
       if (!response.ok) {
-        throw new Error(`COMET API error: ${response.status}`);
+        throw new NetworkError(`COMET API error: ${response.status}`, {
+          statusCode: response.status,
+        });
       }
 
       return await response.json();
@@ -178,7 +185,9 @@ export class CometDataAdapter {
 
       if (!response.ok) {
         if (response.status === 404) return null;
-        throw new Error(`COMET API error: ${response.status}`);
+        throw new NetworkError(`COMET API error: ${response.status}`, {
+          statusCode: response.status,
+        });
       }
 
       return await response.json();
@@ -198,7 +207,9 @@ export class CometDataAdapter {
       });
 
       if (!response.ok) {
-        throw new Error(`COMET API error: ${response.status}`);
+        throw new NetworkError(`COMET API error: ${response.status}`, {
+          statusCode: response.status,
+        });
       }
 
       return await response.json();
@@ -214,7 +225,7 @@ export class CometDataAdapter {
   async handleWebhook(payload: CometWebhookPayload): Promise<WebhookEvent> {
     // Verify signature
     if (!this.verifyWebhookSignature(payload)) {
-      throw new Error('Invalid webhook signature');
+      throw new AuthenticationError('Invalid webhook signature', ErrorCode.SIGNATURE_INVALID);
     }
 
     const event: WebhookEvent = {
@@ -434,16 +445,18 @@ export function createDevCometAdapter(): CometDataAdapter {
   const webhookSecret = process.env.COMET_WEBHOOK_SECRET;
 
   if (!apiKey) {
-    throw new Error(
+    throw new ValidationError(
       'COMET_API_KEY environment variable is required. ' +
-      'Set it to your COMET API key for development.'
+      'Set it to your COMET API key for development.',
+      { field: 'COMET_API_KEY', constraints: { required: 'true' } }
     );
   }
 
   if (!webhookSecret) {
-    throw new Error(
+    throw new ValidationError(
       'COMET_WEBHOOK_SECRET environment variable is required. ' +
-      'Set it to your COMET webhook secret for development.'
+      'Set it to your COMET webhook secret for development.',
+      { field: 'COMET_WEBHOOK_SECRET', constraints: { required: 'true' } }
     );
   }
 

@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
+import { ValidationError } from '../errors/index.js';
 
 // ============================================================================
 // PARTY TYPES
@@ -279,7 +280,10 @@ export function createParty(params: CreatePartyParams): Party {
   // Validate
   const result = PartySchema.safeParse(party);
   if (!result.success) {
-    throw new Error(`Invalid party: ${result.error.message}`);
+    throw new ValidationError(`Invalid party: ${result.error.message}`, {
+      field: 'party',
+      constraints: result.error.flatten().fieldErrors as Record<string, string>,
+    });
   }
 
   return result.data;

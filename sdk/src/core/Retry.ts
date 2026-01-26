@@ -9,6 +9,7 @@
  */
 
 import { ok, err, type Result } from './types.js';
+import { SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -222,7 +223,7 @@ export async function retryWithResult<T, E = string>(
     const r = await fn();
     if (!r.success) {
       // Convert failed Result to Error for retry logic
-      throw new Error(String(r.error));
+      throw new SDKError(String(r.error), ErrorCode.INTERNAL);
     }
     return r.data;
   }, options);
@@ -419,7 +420,7 @@ export class ResilientClient {
       return result.result;
     }
 
-    throw result.error ?? new Error('Operation failed');
+    throw result.error ?? new SDKError('Operation failed', ErrorCode.INTERNAL);
   }
 
   /**

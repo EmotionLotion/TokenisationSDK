@@ -5,6 +5,8 @@
  * Provides chain-agnostic access to network parameters.
  */
 
+import { SDKError, ErrorCode } from '../../errors/index.js';
+
 export interface ChainConfig {
   chainId: number;
   name: string;
@@ -141,7 +143,9 @@ export class ChainRegistry {
 
   setDefault(chainId: number): void {
     if (!this.chains.has(chainId)) {
-      throw new Error(`Chain ${chainId} not found in registry`);
+      throw new SDKError(`Chain ${chainId} not found in registry`, ErrorCode.NOT_FOUND, {
+        details: { chainId, availableChains: Array.from(this.chains.keys()) },
+      });
     }
 
     // Update default flags

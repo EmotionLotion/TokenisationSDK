@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../../SDK.js';
 import { EvidenceType } from '../../models/index.js';
 import { AgentCapability, type ComputeCredit, type AgentWallet } from '../types.js';
+import { SDKError, ErrorCode } from '../../errors/index.js';
 
 /**
  * Compute node configuration
@@ -159,7 +160,9 @@ export class ComputeCreditPack {
     ahoyPointsEarned: number;
   }> {
     if (!this.nodeId || !this.issuerId) {
-      throw new Error('Node not registered. Call registerNode() first.');
+      throw new SDKError('Node not registered. Call registerNode() first.', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call registerNode() before contributeTraining()' },
+      });
     }
 
     // Calculate compute units (based on work done)

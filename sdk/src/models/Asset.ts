@@ -20,6 +20,7 @@ import {
   type ValidityPeriod,
   type TransferabilityRules,
 } from '../core/types.js';
+import { ValidationError } from '../errors/index.js';
 
 // ============================================================================
 // ASSET TYPE-SPECIFIC METADATA SCHEMAS
@@ -255,7 +256,10 @@ export function createAsset(params: CreateAssetParams): Asset {
   // Validate the asset
   const result = AssetSchema.safeParse(asset);
   if (!result.success) {
-    throw new Error(`Invalid asset: ${result.error.message}`);
+    throw new ValidationError(`Invalid asset: ${result.error.message}`, {
+      field: 'asset',
+      constraints: result.error.flatten().fieldErrors as Record<string, string>,
+    });
   }
 
   return result.data;

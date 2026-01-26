@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
+import { ValidationError } from '../errors/index.js';
 
 // ============================================================================
 // EVIDENCE TYPE ENUM
@@ -238,7 +239,10 @@ export function createEvidence(params: CreateEvidenceParams): Evidence {
   // Validate
   const result = EvidenceSchema.safeParse(evidence);
   if (!result.success) {
-    throw new Error(`Invalid evidence: ${result.error.message}`);
+    throw new ValidationError(`Invalid evidence: ${result.error.message}`, {
+      field: 'evidence',
+      constraints: result.error.flatten().fieldErrors as Record<string, string>,
+    });
   }
 
   return result.data;

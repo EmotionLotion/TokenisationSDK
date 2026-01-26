@@ -8,6 +8,7 @@
 import { ethers, type Provider } from 'ethers';
 import { ok, err, type Result } from '../../core/types.js';
 import type { IOraclePlugin, OracleDataPoint, OracleRequest } from '../../core/interfaces.js';
+import { ValidationError, OracleError, ErrorCode } from '../../errors/index.js';
 
 // Chainlink Aggregator V3 ABI (minimal)
 const AGGREGATOR_V3_ABI = [
@@ -123,7 +124,10 @@ export class DataFeedPlugin implements IOraclePlugin {
   ): Promise<{ unsubscribe: () => void }> {
     const pair = request.parameters?.pair as string;
     if (!pair) {
-      throw new Error('Missing required parameter: pair');
+      throw new ValidationError('Missing required parameter: pair', {
+        field: 'parameters.pair',
+        constraints: { required: 'true' },
+      });
     }
 
     let running = true;
@@ -187,7 +191,11 @@ export class DataFeedPlugin implements IOraclePlugin {
 
     const feedAddress = this.feeds[pair];
     if (!feedAddress) {
-      throw new Error(`No data feed found for ${pair} on chain ${this.chainId}`);
+      throw new OracleError(`No data feed found for ${pair} on chain ${this.chainId}`, {
+        code: ErrorCode.ORACLE_UNAVAILABLE,
+        feedId: pair,
+        details: { chainId: this.chainId, availablePairs: Object.keys(this.feeds) },
+      });
     }
 
     const contract = new ethers.Contract(feedAddress, AGGREGATOR_V3_ABI, this.provider);

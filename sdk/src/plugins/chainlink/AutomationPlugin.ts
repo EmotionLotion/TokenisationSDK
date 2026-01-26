@@ -13,6 +13,7 @@
 
 import { ethers, type Provider, type Signer, type ContractTransactionResponse } from 'ethers';
 import { ok, err, type Result } from '../../core/types.js';
+import { ValidationError } from '../../errors/index.js';
 
 // Automation Registry v2.1 ABI (minimal)
 const AUTOMATION_REGISTRY_ABI = [
@@ -144,7 +145,10 @@ export class ChainlinkAutomationPlugin {
 
     const registryAddress = AUTOMATION_REGISTRIES[config.chainId];
     if (!registryAddress) {
-      throw new Error(`Automation registry not configured for chain ${config.chainId}`);
+      throw new ValidationError(`Automation registry not configured for chain ${config.chainId}`, {
+        field: 'chainId',
+        constraints: { supportedChains: Object.keys(AUTOMATION_REGISTRIES).join(', ') },
+      });
     }
 
     this.registry = new ethers.Contract(

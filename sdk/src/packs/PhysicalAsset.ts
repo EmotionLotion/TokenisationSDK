@@ -9,6 +9,7 @@
 
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../SDK.js';
 import { EvidenceType, type PhysicalAssetMetadata } from '../models/index.js';
+import { SDKError, ErrorCode } from '../errors/index.js';
 
 /**
  * Physical Asset Pack configuration
@@ -193,7 +194,9 @@ export class PhysicalAssetPack {
   ): Promise<void> {
     const asset = await this.sdk.assets.get(assetId);
     if (!asset) {
-      throw new Error('Asset not found');
+      throw new SDKError('Asset not found', ErrorCode.ASSET_NOT_FOUND, {
+        details: { assetId },
+      });
     }
 
     const currentMetadata = asset.typedMetadata as PhysicalAssetMetadata;
@@ -217,7 +220,9 @@ export class PhysicalAssetPack {
   ): Promise<void> {
     const asset = await this.sdk.assets.get(assetId);
     if (!asset) {
-      throw new Error('Asset not found');
+      throw new SDKError('Asset not found', ErrorCode.ASSET_NOT_FOUND, {
+        details: { assetId },
+      });
     }
 
     const currentMetadata = asset.typedMetadata as PhysicalAssetMetadata;

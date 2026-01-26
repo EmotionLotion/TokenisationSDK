@@ -13,6 +13,7 @@ import type {
 } from '../../core/interfaces.js';
 import type { RightModel, TransferContext, Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import { NetworkError } from '../../errors/index.js';
 
 /**
  * KYC Provider types
@@ -127,7 +128,9 @@ export class KYCCompliancePlugin implements ICompliancePlugin {
         if (response.status === 404) {
           return null;
         }
-        throw new Error(`API error: ${response.status}`);
+        throw new NetworkError(`API error: ${response.status}`, {
+          statusCode: response.status,
+        });
       }
 
       const data = await response.json();

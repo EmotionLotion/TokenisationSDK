@@ -10,6 +10,7 @@
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../../SDK.js';
 import { EvidenceType } from '../../models/index.js';
 import { DataStreamType, type DataStreamAccess, type AlgorithmIP } from '../types.js';
+import { SDKError, ValidationError, ErrorCode } from '../../errors/index.js';
 
 /**
  * Data stream access configuration
@@ -165,14 +166,19 @@ export class DataStreamAccessPack {
   ): Promise<{ ahoyPointsBurned: number }> {
     const asset = await this.sdk.assets.get(accessAssetId);
     if (!asset) {
-      throw new Error('Access asset not found');
+      throw new SDKError('Access asset not found', ErrorCode.ASSET_NOT_FOUND, {
+        details: { accessAssetId },
+      });
     }
 
     const metadata = asset.typedMetadata as unknown as DataStreamAccess;
 
     // Check rate limit
     if (requestCount > metadata.rateLimit) {
-      throw new Error(`Rate limit exceeded: ${requestCount} > ${metadata.rateLimit}`);
+      throw new ValidationError(`Rate limit exceeded: ${requestCount} > ${metadata.rateLimit}`, {
+        field: 'requestCount',
+        constraints: { maxAllowed: String(metadata.rateLimit), requested: String(requestCount) },
+      });
     }
 
     // Calculate $AHOY cost (based on tier)

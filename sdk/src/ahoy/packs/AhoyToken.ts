@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../../SDK.js';
 import { EvidenceType } from '../../models/index.js';
 import { AhoyActionType, AhoyEcosystemConfig, type AhoyTransaction } from '../types.js';
+import { SDKError, ValidationError, ErrorCode } from '../../errors/index.js';
 
 /**
  * Token economics configuration
@@ -190,13 +191,18 @@ export class AhoyTokenPack {
     transaction: AhoyTransaction;
   }> {
     if (!this.tokenAssetId || !this.rewardsPoolId) {
-      throw new Error('Token not initialized. Call initialize() first.');
+      throw new SDKError('Token not initialized. Call initialize() first.', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call initialize() before rewardUser()' },
+      });
     }
 
     // Get points configuration for this action
     const pointsConfig = AhoyEcosystemConfig.POINTS_CONFIG[distribution.action];
     if (!pointsConfig || !pointsConfig.isEarn) {
-      throw new Error(`Invalid earn action: ${distribution.action}`);
+      throw new ValidationError(`Invalid earn action: ${distribution.action}`, {
+        field: 'action',
+        constraints: { isEarn: 'true' },
+      });
     }
 
     const amount = pointsConfig.points;
@@ -213,7 +219,9 @@ export class AhoyTokenPack {
     );
 
     if (!result.success) {
-      throw new Error(`Failed to reward user: ${result.error}`);
+      throw new SDKError(`Failed to reward user: ${result.error}`, ErrorCode.INTERNAL, {
+        details: { userId: distribution.userId, action: distribution.action },
+      });
     }
 
     // Get new balance
@@ -255,7 +263,9 @@ export class AhoyTokenPack {
     transaction?: AhoyTransaction;
   }> {
     if (!this.tokenAssetId || !this.rewardsPoolId) {
-      throw new Error('Token not initialized. Call initialize() first.');
+      throw new SDKError('Token not initialized. Call initialize() first.', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call initialize() before redeemTokens()' },
+      });
     }
 
     // Get points configuration for this action
@@ -319,7 +329,9 @@ export class AhoyTokenPack {
    */
   async getBalance(userId: string): Promise<string> {
     if (!this.tokenAssetId) {
-      throw new Error('Token not initialized');
+      throw new SDKError('Token not initialized', ErrorCode.NOT_INITIALIZED, {
+        details: { hint: 'Call initialize() before getBalance()' },
+      });
     }
     return await this.sdk.tokens.getBalance(this.tokenAssetId, userId);
   }

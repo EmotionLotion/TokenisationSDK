@@ -10,6 +10,7 @@
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType, TransferabilityMode } from '../../SDK.js';
 import { EvidenceType } from '../../models/index.js';
 import { DriverTier, AhoyEcosystemConfig, type DriverReputation } from '../types.js';
+import { SDKError, ErrorCode } from '../../errors/index.js';
 
 /**
  * Driver profile configuration
@@ -179,7 +180,9 @@ export class DriverReputationPack {
   }> {
     const asset = await this.sdk.assets.get(reputationAssetId);
     if (!asset) {
-      throw new Error('Reputation asset not found');
+      throw new SDKError('Reputation asset not found', ErrorCode.ASSET_NOT_FOUND, {
+        details: { assetId: reputationAssetId },
+      });
     }
 
     const metadata = asset.typedMetadata as unknown as DriverReputation & {

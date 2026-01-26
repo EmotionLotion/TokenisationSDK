@@ -11,6 +11,7 @@
 // Standalone plugin - does not implement core IOraclePlugin interface
 
 import type { ChainlinkFunctionsPlugin, SafetyScoreResult } from '../../plugins/chainlink/FunctionsPlugin.js';
+import { ValidationError } from '../../errors/index.js';
 
 /**
  * Telematics event types
@@ -101,7 +102,10 @@ export class TelematicsOraclePlugin {
       case 'ROUTE_EFFICIENCY':
         return this.calculateRouteEfficiency(params.deliveryId as string);
       default:
-        throw new Error(`Unknown data type: ${dataType}`);
+        throw new ValidationError(`Unknown data type: ${dataType}`, {
+          field: 'dataType',
+          constraints: { allowedValues: 'DRIVER_TELEMATICS, DELIVERY_STATUS, DRIVER_SAFETY_SCORE, ROUTE_EFFICIENCY' },
+        });
     }
   }
 

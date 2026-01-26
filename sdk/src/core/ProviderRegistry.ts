@@ -15,6 +15,7 @@ import type {
   IExchangeProvider,
   ISettlementProvider,
 } from './interfaces.providers.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 /**
  * ProviderRegistry implementation
@@ -41,12 +42,18 @@ export class ProviderRegistry implements IProviderRegistry {
   ): void {
     const typeProviders = this.providers.get(type);
     if (!typeProviders) {
-      throw new Error(`Unknown provider type: ${type}`);
+      throw new ValidationError(`Unknown provider type: ${type}`, {
+        field: 'type',
+        constraints: { allowedValues: 'custody, kyc, exchange, settlement' },
+      });
     }
 
     const providerId = (provider as any).providerId;
     if (!providerId) {
-      throw new Error('Provider must have a providerId property');
+      throw new ValidationError('Provider must have a providerId property', {
+        field: 'providerId',
+        constraints: { required: 'true' },
+      });
     }
 
     const registration: ProviderRegistration<T> = {

@@ -7,6 +7,7 @@
 
 // Standalone plugin - does not implement core IOraclePlugin interface
 import { UtilityType, type IoTReading } from '../types.js';
+import { ValidationError } from '../../errors/index.js';
 
 /**
  * IoT device configuration
@@ -84,7 +85,10 @@ export class IoTOraclePlugin {
           params.endTime as string
         );
       default:
-        throw new Error(`Unknown data type: ${dataType}`);
+        throw new ValidationError(`Unknown data type: ${dataType}`, {
+          field: 'dataType',
+          constraints: { allowedValues: 'METER_READING, DELIVERY_VERIFICATION, DEVICE_STATUS, HISTORICAL_READINGS' },
+        });
     }
   }
 

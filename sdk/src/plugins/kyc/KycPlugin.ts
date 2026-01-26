@@ -6,6 +6,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { SDKError, ValidationError, NetworkError, ErrorCode } from '../../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -272,7 +273,9 @@ export class KycPlugin {
       return session;
     }
 
-    throw new Error(`Direct provider integration not implemented. Use serverEndpoint.`);
+    throw new SDKError('Direct provider integration not implemented. Use serverEndpoint.', ErrorCode.NOT_INITIALIZED, {
+      details: { provider: this.config.provider, hint: 'Configure serverEndpoint in KycPluginConfig' },
+    });
   }
 
   /**
@@ -438,7 +441,10 @@ export class KycPlugin {
     options: { level?: VerificationLevel; country?: string; expiresInDays?: number } = {}
   ): void {
     if (this.config.provider !== 'mock') {
-      throw new Error('mockApprove only available for mock provider');
+      throw new ValidationError('mockApprove only available for mock provider', {
+        field: 'provider',
+        constraints: { allowedValue: 'mock' },
+      });
     }
 
     const expiresAt = new Date();
@@ -467,7 +473,10 @@ export class KycPlugin {
    */
   mockReject(userId: string, reason: string = 'Document verification failed'): void {
     if (this.config.provider !== 'mock') {
-      throw new Error('mockReject only available for mock provider');
+      throw new ValidationError('mockReject only available for mock provider', {
+        field: 'provider',
+        constraints: { allowedValue: 'mock' },
+      });
     }
 
     const event: KycWebhookEvent = {
@@ -506,7 +515,10 @@ export class KycPlugin {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`KYC server error: ${response.status} ${error}`);
+      throw new NetworkError(`KYC server error: ${response.status} ${error}`, {
+        statusCode: response.status,
+        url,
+      });
     }
 
     return response.json();

@@ -9,6 +9,7 @@ import { ethers, type Provider, type Signer, type TransactionResponse, type Tran
 import { ok, err, type Result } from '../../core/types.js';
 import type { IChainPlugin, ChainConfig, TransactionReceipt, TransactionLog } from '../../core/interfaces.js';
 import { ChainRegistry, chainRegistry as defaultRegistry, type ChainConfig as RegistryChainConfig } from './ChainRegistry.js';
+import { SDKError, ErrorCode } from '../../errors/index.js';
 
 export interface EVMChainPluginConfig {
   chainId: number;
@@ -32,7 +33,9 @@ export class EVMChainPlugin implements IChainPlugin {
 
     const chainConfig = this.registry.get(config.chainId);
     if (!chainConfig) {
-      throw new Error(`Chain ${config.chainId} not found in registry`);
+      throw new SDKError(`Chain ${config.chainId} not found in registry`, ErrorCode.NOT_FOUND, {
+        details: { chainId: config.chainId },
+      });
     }
 
     const rpcUrl = config.rpcUrl || chainConfig.rpcUrl;

@@ -11,6 +11,7 @@
 
 import { ethers, type Provider, type Signer } from 'ethers';
 import { ok, err, type Result } from '../../core/types.js';
+import { ValidationError } from '../../errors/index.js';
 
 // LINK Token ABI (minimal)
 const LINK_TOKEN_ABI = [
@@ -135,7 +136,10 @@ export class LinkManagerPlugin {
 
     const linkAddress = LINK_TOKENS[config.chainId];
     if (!linkAddress) {
-      throw new Error(`LINK token not configured for chain ${config.chainId}`);
+      throw new ValidationError(`LINK token not configured for chain ${config.chainId}`, {
+        field: 'chainId',
+        constraints: { supportedChains: Object.keys(LINK_TOKENS).join(', ') },
+      });
     }
 
     this.linkToken = new ethers.Contract(

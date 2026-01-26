@@ -13,6 +13,7 @@
 import { ethers, type Provider } from 'ethers';
 import { ok, err, type Result } from '../../core/types.js';
 import type { IOraclePlugin, OracleDataPoint, OracleRequest } from '../../core/interfaces.js';
+import { ValidationError, OracleError, ErrorCode } from '../../errors/index.js';
 
 // Chainlink Aggregator ABI
 const AGGREGATOR_V3_ABI = [
@@ -340,7 +341,10 @@ export class OracleAggregator implements IOraclePlugin {
         const staleness = Math.floor(Date.now() / 1000) - updatedAt;
 
         if (staleness > source.maxStaleness) {
-          throw new Error(`Data stale: ${staleness}s > ${source.maxStaleness}s`);
+          throw new OracleError(`Data stale: ${staleness}s > ${source.maxStaleness}s`, {
+            code: ErrorCode.ORACLE_STALE_DATA,
+            details: { staleness, maxStaleness: source.maxStaleness },
+          });
         }
 
         return {
@@ -357,7 +361,10 @@ export class OracleAggregator implements IOraclePlugin {
         };
       }
 
-      throw new Error('No fetch method available');
+      throw new OracleError('No fetch method available', {
+        code: ErrorCode.ORACLE_UNAVAILABLE,
+        details: { sourceId: source.id, sourceType: source.type },
+      });
     };
 
     return Promise.race([fetch(), timeout]);
@@ -595,7 +602,10 @@ export class OracleAggregator implements IOraclePlugin {
   ): Promise<{ unsubscribe: () => void }> {
     const pair = request.parameters?.pair as string;
     if (!pair) {
-      throw new Error('Missing required parameter: pair');
+      throw new ValidationError('Missing required parameter: pair', {
+        field: 'parameters.pair',
+        constraints: { required: 'true' },
+      });
     }
 
     let running = true;

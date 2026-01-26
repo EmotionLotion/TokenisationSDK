@@ -18,6 +18,7 @@ import type {
   ExternalConnector,
   TokenStandard,
 } from '../types.js';
+import { ValidationError } from '../../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -373,7 +374,10 @@ export class LoyaltyAdapter implements IAssetAdapter<LoyaltyInput, LoyaltyMetada
             case 'sendNotification':
               return { sent: true, channel: 'email' } as T;
             default:
-              throw new Error(`Unknown CRM operation: ${operation}`);
+              throw new ValidationError(`Unknown CRM operation: ${operation}`, {
+                field: 'operation',
+                constraints: { allowedValues: 'getMemberProfile, updateActivity, sendNotification' },
+              });
           }
         },
       },
@@ -401,7 +405,10 @@ export class LoyaltyAdapter implements IAssetAdapter<LoyaltyInput, LoyaltyMetada
             case 'fulfillReward':
               return { fulfillmentId: 'FUL-' + Date.now(), status: 'processing' } as T;
             default:
-              throw new Error(`Unknown Rewards operation: ${operation}`);
+              throw new ValidationError(`Unknown Rewards operation: ${operation}`, {
+                field: 'operation',
+                constraints: { allowedValues: 'getAvailableRewards, reserveReward, fulfillReward' },
+              });
           }
         },
       },

@@ -18,6 +18,7 @@ import type {
   ExternalConnector,
   TokenStandard,
 } from '../types.js';
+import { ValidationError } from '../../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -359,7 +360,10 @@ export class CarbonCreditAdapter implements IAssetAdapter<CarbonCreditInput, Car
             case 'retireCredits':
               return { retirementId: 'VCS-RET-' + Date.now() } as T;
             default:
-              throw new Error(`Unknown Verra operation: ${operation}`);
+              throw new ValidationError(`Unknown Verra operation: ${operation}`, {
+                field: 'operation',
+                constraints: { allowedValues: 'verifyProject, checkRetirementStatus, retireCredits' },
+              });
           }
         },
       },
@@ -380,7 +384,10 @@ export class CarbonCreditAdapter implements IAssetAdapter<CarbonCreditInput, Car
             case 'retireCredits':
               return { retirementId: 'GS-RET-' + Date.now() } as T;
             default:
-              throw new Error(`Unknown Gold Standard operation: ${operation}`);
+              throw new ValidationError(`Unknown Gold Standard operation: ${operation}`, {
+                field: 'operation',
+                constraints: { allowedValues: 'verifyProject, retireCredits' },
+              });
           }
         },
       },

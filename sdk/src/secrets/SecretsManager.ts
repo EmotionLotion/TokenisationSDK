@@ -10,6 +10,7 @@
  */
 
 import { ok, err, type Result } from '../core/types.js';
+import { SDKError, ErrorCode } from '../errors/index.js';
 
 // Note: @aws-sdk/client-secrets-manager is an optional peer dependency
 // It will be dynamically imported only when the AWS provider is used
@@ -145,7 +146,9 @@ export class AWSSecretsProvider implements ISecretsProvider {
       });
       return this.client;
     } catch {
-      throw new Error('AWS SDK not installed. Run: npm install @aws-sdk/client-secrets-manager');
+      throw new SDKError('AWS SDK not installed. Run: npm install @aws-sdk/client-secrets-manager', ErrorCode.NOT_INITIALIZED, {
+        details: { dependency: '@aws-sdk/client-secrets-manager' },
+      });
     }
   }
 
@@ -474,7 +477,9 @@ export class SecretsManager {
    */
   setDefaultProvider(name: string): void {
     if (!this.providers.has(name)) {
-      throw new Error(`Provider not registered: ${name}`);
+      throw new SDKError(`Provider not registered: ${name}`, ErrorCode.NOT_FOUND, {
+        details: { providerName: name, availableProviders: Array.from(this.providers.keys()) },
+      });
     }
     this.defaultProvider = name;
   }
@@ -517,7 +522,9 @@ export class SecretsManager {
   async getOrThrow(key: string, providerName?: string): Promise<string> {
     const result = await this.get(key, providerName);
     if (!result.success) {
-      throw new Error(result.error);
+      throw new SDKError(result.error, ErrorCode.NOT_FOUND, {
+        details: { key, providerName },
+      });
     }
     return result.data;
   }

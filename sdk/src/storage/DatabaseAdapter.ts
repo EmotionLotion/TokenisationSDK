@@ -10,6 +10,7 @@
  */
 
 import { ok, err, type Result } from '../core/types.js';
+import { ValidationError } from '../errors/index.js';
 
 // Note: pg and mongodb are optional peer dependencies
 // They will be dynamically imported only when the corresponding adapter is used
@@ -886,13 +887,22 @@ export function createDatabaseAdapter(
     case 'memory':
       return new InMemoryDatabaseAdapter();
     case 'postgres':
-      if (!config) throw new Error('PostgreSQL config required');
+      if (!config) throw new ValidationError('PostgreSQL config required', {
+        field: 'config',
+        constraints: { required: 'true' },
+      });
       return new PostgresDatabaseAdapter(config as PostgresConfig);
     case 'mongodb':
-      if (!config) throw new Error('MongoDB config required');
+      if (!config) throw new ValidationError('MongoDB config required', {
+        field: 'config',
+        constraints: { required: 'true' },
+      });
       return new MongoDatabaseAdapter(config as MongoConfig);
     default:
-      throw new Error(`Unknown database type: ${type}`);
+      throw new ValidationError(`Unknown database type: ${type}`, {
+        field: 'type',
+        constraints: { allowedValues: 'memory, postgres, mongodb' },
+      });
   }
 }
 

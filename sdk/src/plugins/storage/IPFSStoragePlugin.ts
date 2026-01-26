@@ -7,6 +7,7 @@
 
 import { ok, err, type Result } from '../../core/types.js';
 import type { IStoragePlugin, StorageMetadata } from '../../core/interfaces.js';
+import { ValidationError } from '../../errors/index.js';
 
 export interface IPFSStoragePluginConfig {
   pinataJwt: string;
@@ -279,7 +280,10 @@ export class IPFSStoragePlugin implements IStoragePlugin {
     if (match) {
       return match[1];
     }
-    throw new Error(`Invalid IPFS URI format: ${uri}`);
+    throw new ValidationError(`Invalid IPFS URI format: ${uri}`, {
+      field: 'uri',
+      constraints: { format: 'ipfs://CID or /ipfs/CID' },
+    });
   }
 }
 
