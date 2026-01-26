@@ -980,30 +980,29 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
 // SECTION 12: Audit Log (Enhanced)
 // ============================================================================
 
-// Audit Log - Tamper-evident audit trail
+// Audit Log - Tamper-evident audit trail with hash chain
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().defaultRandom(),
-  orgId: uuid('org_id').references(() => orgs.id, { onDelete: 'set null' }),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  actorId: varchar('actor_id', { length: 256 }),
   actorType: varchar('actor_type', { length: 32 }).notNull(), // api_key, user, system, webhook
-  actorId: varchar('actor_id', { length: 256 }).notNull(),
   action: varchar('action', { length: 128 }).notNull(),
-  entityType: varchar('entity_type', { length: 64 }).notNull(),
-  entityId: varchar('entity_id', { length: 256 }).notNull(),
-  diff: jsonb('diff'), // Before/after changes
-  context: jsonb('context').default({}), // Request context (IP, user agent, etc.)
-  requestId: varchar('request_id', { length: 64 }),
-  hash: varchar('hash', { length: 64 }).notNull(), // SHA256 hash of entry
-  prevHash: varchar('prev_hash', { length: 64 }), // Previous entry hash (chain)
-  signature: text('signature'), // Optional cryptographic signature
+  resourceType: varchar('resource_type', { length: 64 }).notNull(),
+  resourceId: varchar('resource_id', { length: 256 }).notNull(),
+  description: text('description'),
   metadata: jsonb('metadata').default({}),
+  prevHash: varchar('prev_hash', { length: 64 }).notNull(),
+  entryHash: varchar('entry_hash', { length: 64 }).notNull(),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  userAgent: text('user_agent'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   orgIdx: index('idx_audit_log_org').on(table.orgId),
   actorIdx: index('idx_audit_log_actor').on(table.actorType, table.actorId),
-  entityIdx: index('idx_audit_log_entity').on(table.entityType, table.entityId),
+  resourceIdx: index('idx_audit_log_resource').on(table.resourceType, table.resourceId),
   actionIdx: index('idx_audit_log_action').on(table.action),
   createdAtIdx: index('idx_audit_log_created').on(table.createdAt),
-  hashIdx: index('idx_audit_log_hash').on(table.hash),
+  hashIdx: index('idx_audit_log_hash').on(table.entryHash),
 }));
 
 // ============================================================================
