@@ -36,3 +36,12 @@ export * from './ChainService.js';
 export * from './PolicyHash.js';
 export * from './DecisionReceipt.js';
 export * from './ComplianceEngine.js';
+
+// Custody & Recovery
+export * from './CustodyManager.js';
+
+// Indexing & Reporting
+export * from './IndexingEngine.js';
+
+// Asset Abstraction Layer
+export * from './AssetAbstraction.js';

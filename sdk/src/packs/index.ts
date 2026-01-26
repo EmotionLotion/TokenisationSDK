@@ -5,6 +5,9 @@
  * These demonstrate how to use the SDK for specific asset types.
  */
 
+// Asset Pack Registry - Pre-built configurations with lifecycle rules
+export * from './AssetPackRegistry.js';
+
 // Pack A: UAE Real Estate - OWNERSHIP Right
 export * from './UAERealEstate.js';
 
