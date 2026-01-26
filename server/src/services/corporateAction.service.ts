@@ -2,9 +2,16 @@ import { db, schema } from '../config/database.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
+import * as domainEvents from './domainEvents.service.js';
 import { withRetryableTransaction } from '../utils/transaction.js';
+import { logger } from '../middleware/logger.js';
 
 const { corporateActions, corporateActionEntitlements, tokens, ledgerPositions, eventBusQueue } = schema;
+
+// ============================================================================
+// CRITICAL: Use Rational Numbers (numerator/denominator) for precision!
+// Never use floating point for financial calculations.
+// ============================================================================
 
 // ============================================================================
 // Types
@@ -13,12 +20,84 @@ const { corporateActions, corporateActionEntitlements, tokens, ledgerPositions, 
 export type CorporateActionType = 'split' | 'reverse_split' | 'conversion' | 'merger' | 'spinoff' | 'name_change';
 export type CorporateActionStatus = 'announced' | 'approved' | 'processing' | 'completed' | 'cancelled';
 
+/**
+ * Rational number representation for precise calculations.
+ * Example: 3:2 split = numerator=3, denominator=2 (1.5x)
+ */
+export interface RationalRatio {
+  numerator: bigint;
+  denominator: bigint;
+}
+
+/**
+ * Parse ratio string "N:D" to rational number.
+ */
+function parseRatio(ratioStr: string): RationalRatio {
+  const parts = ratioStr.split(':');
+  if (parts.length !== 2) {
+    throw new ValidationError(
+      `Invalid ratio format: "${ratioStr}". Use "N:D" format (e.g., "3:2" for 3-for-2 split)`
+    );
+  }
+
+  const [numStr, denStr] = parts;
+  const numerator = BigInt(numStr.trim());
+  const denominator = BigInt(denStr.trim());
+
+  if (denominator === 0n) {
+    throw new ValidationError('Denominator cannot be zero');
+  }
+
+  if (numerator <= 0n || denominator <= 0n) {
+    throw new ValidationError('Numerator and denominator must be positive');
+  }
+
+  return { numerator, denominator };
+}
+
+/**
+ * Apply rational ratio to a balance using integer arithmetic.
+ * Returns [newBalance, remainder] where remainder is the fractional part.
+ */
+function applyRatio(balance: bigint, ratio: RationalRatio): [bigint, bigint] {
+  // newBalance = (balance * numerator) / denominator
+  const scaled = balance * ratio.numerator;
+  const newBalance = scaled / ratio.denominator;
+  const remainder = scaled % ratio.denominator;
+  return [newBalance, remainder];
+}
+
+/**
+ * Greatest common divisor for ratio simplification.
+ */
+function gcd(a: bigint, b: bigint): bigint {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b !== 0n) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+/**
+ * Simplify a ratio to lowest terms.
+ */
+function simplifyRatio(ratio: RationalRatio): RationalRatio {
+  const divisor = gcd(ratio.numerator, ratio.denominator);
+  return {
+    numerator: ratio.numerator / divisor,
+    denominator: ratio.denominator / divisor,
+  };
+}
+
 export interface CreateSplitInput {
   orgId: string;
   tokenId: string;
   name: string;
   description?: string;
-  ratio: string; // e.g., "2:1" means 2 new for 1 old
+  ratio: string; // e.g., "3:2" means 3 new for every 2 old (1.5x)
   recordDate: Date;
   effectiveDate: Date;
   metadata?: Record<string, unknown>;
@@ -29,7 +108,7 @@ export interface CreateReverseSplitInput {
   tokenId: string;
   name: string;
   description?: string;
-  ratio: string; // e.g., "1:4" means 1 new for 4 old
+  ratio: string; // e.g., "1:4" means 1 new for every 4 old (0.25x)
   recordDate: Date;
   effectiveDate: Date;
   metadata?: Record<string, unknown>;
@@ -41,7 +120,7 @@ export interface CreateConversionInput {
   name: string;
   description?: string;
   newTokenId: string;
-  conversionRate: string; // e.g., "1.5" means 1.5 new tokens per old
+  conversionRatio: string; // e.g., "3:2" means 3 new tokens for every 2 old
   recordDate: Date;
   effectiveDate: Date;
   metadata?: Record<string, unknown>;
@@ -70,37 +149,71 @@ export async function createSplit(input: CreateSplitInput) {
   });
   if (!token) throw new NotFoundError('Token not found');
 
-  const [newShares, oldShares] = input.ratio.split(':').map(Number);
-  if (!newShares || !oldShares || oldShares <= 0) {
-    throw new ValidationError('Invalid split ratio format. Use "X:Y" format (e.g., "2:1")');
+  // Validate and parse ratio using rational number
+  const ratio = parseRatio(input.ratio);
+  const simplified = simplifyRatio(ratio);
+
+  // For a split, numerator should be >= denominator (ratio >= 1)
+  if (ratio.numerator < ratio.denominator) {
+    throw new ValidationError(
+      `Split ratio ${input.ratio} would reduce shares. ` +
+      `For splits, use format like "3:2" (3 new for 2 old). ` +
+      `For reverse splits, use createReverseSplit instead.`
+    );
   }
 
-  const multiplier = newShares / oldShares;
+  return await db.transaction(async (tx) => {
+    const [action] = await tx.insert(corporateActions).values({
+      orgId: input.orgId,
+      tokenId: input.tokenId,
+      type: 'split',
+      name: input.name,
+      description: input.description,
+      // Store rational number components - NO floating point
+      parameters: {
+        ratio: input.ratio,
+        numerator: simplified.numerator.toString(),
+        denominator: simplified.denominator.toString(),
+        // Store simplified ratio string for display
+        simplifiedRatio: `${simplified.numerator}:${simplified.denominator}`,
+      },
+      announcementDate: new Date().toISOString(),
+      recordDate: input.recordDate.toISOString(),
+      effectiveDate: input.effectiveDate.toISOString(),
+      status: 'announced',
+      metadata: input.metadata || {},
+    }).returning();
 
-  const [action] = await db.insert(corporateActions).values({
-    orgId: input.orgId,
-    tokenId: input.tokenId,
-    type: 'split',
-    name: input.name,
-    description: input.description,
-    parameters: { ratio: input.ratio, multiplier, newShares, oldShares },
-    announcementDate: new Date().toISOString(),
-    recordDate: input.recordDate.toISOString(),
-    effectiveDate: input.effectiveDate.toISOString(),
-    status: 'announced',
-    metadata: input.metadata || {},
-  }).returning();
+    // Emit domain event
+    await domainEvents.emitEvent(tx, {
+      eventType: domainEvents.EVENT_TYPES.CORPORATE_ACTION_ANNOUNCED,
+      aggregateType: 'corporate_action',
+      aggregateId: action.id,
+      orgId: input.orgId,
+      payload: {
+        actionId: action.id,
+        type: 'split',
+        ratio: input.ratio,
+        numerator: simplified.numerator.toString(),
+        denominator: simplified.denominator.toString(),
+        tokenId: input.tokenId,
+        recordDate: input.recordDate.toISOString(),
+        effectiveDate: input.effectiveDate.toISOString(),
+      },
+    });
 
-  await db.insert(eventBusQueue).values({
-    orgId: input.orgId,
-    topic: 'corporate_action.announced',
-    payload: { actionId: action.id, type: 'split', ratio: input.ratio },
+    await auditService.log({
+      orgId: input.orgId,
+      actorType: 'system',
+      action: 'corporate_action_created',
+      resourceType: 'corporate_action',
+      resourceId: action.id,
+      description: `Stock split ${input.ratio} announced`,
+      metadata: { type: 'split', ratio: input.ratio },
+    });
+
+    return action;
   });
-
-  await auditService.logSystemAction(input.orgId, 'corporate_action_created', 'corporate_action', action.id,
-    `Stock split ${input.ratio} announced`, { type: 'split', ratio: input.ratio });
-
-  return action;
 }
 
 export async function createReverseSplit(input: CreateReverseSplitInput) {
@@ -219,6 +332,10 @@ export async function listCorporateActions(orgId: string, params: {
 // Approval & Calculation
 // ============================================================================
 
+/**
+ * Calculate entitlements using precise rational arithmetic.
+ * NO floating point operations - uses BigInt throughout.
+ */
 export async function calculateEntitlements(actionId: string, orgId: string): Promise<EntitlementSummary> {
   const action = await getCorporateAction(actionId, orgId);
   const params = action.parameters as Record<string, unknown>;
@@ -228,35 +345,51 @@ export async function calculateEntitlements(actionId: string, orgId: string): Pr
 
   const holders = positions.filter(p => BigInt(p.balance) > 0n);
 
+  // Parse the ratio once for all calculations
+  let ratio: RationalRatio;
+
+  switch (action.type) {
+    case 'split':
+    case 'reverse_split':
+    case 'conversion': {
+      const ratioStr = (params.ratio || params.conversionRatio) as string;
+      if (!ratioStr) {
+        throw new ValidationError('Missing ratio in corporate action parameters');
+      }
+      ratio = parseRatio(ratioStr);
+
+      // Log the ratio for audit
+      logger.info(`Calculating entitlements with ratio ${ratio.numerator}:${ratio.denominator}`, {
+        metadata: { actionId, type: action.type },
+      });
+      break;
+    }
+    default:
+      // For other types, use 1:1 ratio (no change)
+      ratio = { numerator: 1n, denominator: 1n };
+  }
+
+  // Track totals for verification
+  let totalOriginal = 0n;
+  let totalNew = 0n;
+  let totalRemainder = 0n;
+
   const entitlements = holders.map(holder => {
     const originalBalance = BigInt(holder.balance);
-    let newBalance: bigint;
-    let fractionalAmount: bigint | undefined;
+    totalOriginal += originalBalance;
 
-    switch (action.type) {
-      case 'split':
-      case 'reverse_split': {
-        const multiplier = params.multiplier as number;
-        const rawNewBalance = Number(originalBalance) * multiplier;
-        newBalance = BigInt(Math.floor(rawNewBalance));
-        const fractional = rawNewBalance - Math.floor(rawNewBalance);
-        if (fractional > 0) {
-          fractionalAmount = BigInt(Math.floor(fractional * 1e18));
-        }
-        break;
-      }
-      case 'conversion': {
-        const rate = parseFloat(params.conversionRate as string);
-        const rawNewBalance = Number(originalBalance) * rate;
-        newBalance = BigInt(Math.floor(rawNewBalance));
-        const fractional = rawNewBalance - Math.floor(rawNewBalance);
-        if (fractional > 0) {
-          fractionalAmount = BigInt(Math.floor(fractional * 1e18));
-        }
-        break;
-      }
-      default:
-        newBalance = originalBalance;
+    // Apply rational ratio using pure integer arithmetic
+    const [newBalance, remainder] = applyRatio(originalBalance, ratio);
+    totalNew += newBalance;
+    totalRemainder += remainder;
+
+    // Convert remainder to a standardized representation (18 decimals)
+    // This allows tracking fractional shares for cash-in-lieu calculations
+    let fractionalAmount: string | undefined;
+    if (remainder > 0n) {
+      // Scale remainder to 18 decimal places for precision
+      // fractional = (remainder * 10^18) / denominator
+      fractionalAmount = ((remainder * (10n ** 18n)) / ratio.denominator).toString();
     }
 
     return {
@@ -264,9 +397,23 @@ export async function calculateEntitlements(actionId: string, orgId: string): Pr
       walletAddress: holder.walletAddress,
       originalBalance: originalBalance.toString(),
       newBalance: newBalance.toString(),
-      fractionalAmount: fractionalAmount?.toString(),
+      fractionalAmount,
     };
   });
+
+  // Verify calculation integrity
+  const expectedTotal = (totalOriginal * ratio.numerator) / ratio.denominator;
+  if (totalNew !== expectedTotal) {
+    logger.warn('Rounding accumulated in entitlement calculation', {
+      metadata: {
+        actionId,
+        totalOriginal: totalOriginal.toString(),
+        totalNew: totalNew.toString(),
+        expectedTotal: expectedTotal.toString(),
+        difference: (expectedTotal - totalNew).toString(),
+      },
+    });
+  }
 
   return {
     corporateActionId: actionId,

@@ -57,6 +57,12 @@ export const {
   sessions, chainDeployments, tokenBalances,
   // Idempotency & Event Bus
   idempotencyKeys, eventBusQueue,
+  // Outbox & Workflows
+  domainEventsOutbox, complianceApprovals,
+  // Issuance
+  offerings, allocations, buybackRequests,
+  // Clawbacks (re-export for updated schema)
+  clawbacks,
 } = activeSchema;
 
 // Get schema based on mode

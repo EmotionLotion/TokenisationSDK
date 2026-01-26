@@ -473,7 +473,8 @@ export const redemptions = pgTable('redemptions', {
   idempotencyUnique: uniqueIndex('idx_redemptions_idempotency').on(table.orgId, table.idempotencyKey),
 }));
 
-// Clawbacks - Administrative token recovery
+// Clawbacks - Administrative token recovery with full state machine
+// States: requested → pending_approval → approved → executing → confirmed → failed
 export const clawbacks = pgTable('clawbacks', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
@@ -484,18 +485,40 @@ export const clawbacks = pgTable('clawbacks', {
   toInvestorId: uuid('to_investor_id').references(() => investors.id),
   amount: varchar('amount', { length: 78 }).notNull(),
   reason: text('reason').notNull(), // Regulatory requirement - reason must be documented
-  status: varchar('status', { length: 32 }).notNull().default('pending'),
-  decisionId: uuid('decision_id').references(() => decisions.id), // Compliance approval
-  approvedBy: uuid('approved_by'), // User/API key that approved
-  executedBy: uuid('executed_by'), // User/API key that executed
+  reasonCode: varchar('reason_code', { length: 64 }), // COURT_ORDER, REGULATORY, FRAUD, AML, SANCTIONS, OTHER
+  legalReference: text('legal_reference'), // Court order number, regulation citation, etc.
+
+  // State machine
+  status: varchar('status', { length: 32 }).notNull().default('requested'),
+  // States: requested, pending_approval, approved, rejected, executing, confirmed, failed, cancelled
+
+  // Compliance approval
+  complianceApprovalId: uuid('compliance_approval_id'),
+  decisionId: uuid('decision_id').references(() => decisions.id),
+
+  // Approval chain
+  requestedBy: uuid('requested_by'),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).defaultNow(),
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectedBy: uuid('rejected_by'),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+
+  // Execution
+  executedBy: uuid('executed_by'),
+  executedAt: timestamp('executed_at', { withTimezone: true }),
   txHash: varchar('tx_hash', { length: 66 }),
   txBlock: integer('tx_block'),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+
+  // Evidence
+  evidencePackId: varchar('evidence_pack_id', { length: 64 }),
+
   idempotencyKey: varchar('idempotency_key', { length: 64 }),
   error: text('error'),
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  approvedAt: timestamp('approved_at', { withTimezone: true }),
-  executedAt: timestamp('executed_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   orgIdx: index('idx_clawbacks_org').on(table.orgId),
@@ -503,6 +526,192 @@ export const clawbacks = pgTable('clawbacks', {
   statusIdx: index('idx_clawbacks_status').on(table.status),
   fromWalletIdx: index('idx_clawbacks_from_wallet').on(table.fromWallet),
   idempotencyUnique: uniqueIndex('idx_clawbacks_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
+// Compliance Approvals - Workflow for sensitive operations requiring approval
+export const complianceApprovals = pgTable('compliance_approvals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+
+  // What needs approval
+  operationType: varchar('operation_type', { length: 64 }).notNull(), // clawback, force_transfer, freeze, large_transfer, manual_override
+  operationRef: varchar('operation_ref', { length: 256 }).notNull(), // Reference to the operation (e.g., clawback ID)
+  operationRefType: varchar('operation_ref_type', { length: 32 }).notNull(), // clawback, transfer, etc.
+
+  // Request details
+  requestedBy: uuid('requested_by').notNull(),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).defaultNow(),
+  reason: text('reason').notNull(),
+  supportingDocs: jsonb('supporting_docs').default([]), // Array of document references
+
+  // Approval requirements
+  requiredApprovers: integer('required_approvers').notNull().default(1),
+  requiredRoles: text('required_roles').array().default([]), // compliance_officer, admin, etc.
+  expiresAt: timestamp('expires_at', { withTimezone: true }), // Approval request expiration
+
+  // Approval chain
+  approvals: jsonb('approvals').default([]), // Array of { userId, role, timestamp, comment }
+  rejections: jsonb('rejections').default([]), // Array of { userId, role, timestamp, reason }
+
+  // Status
+  status: varchar('status', { length: 32 }).notNull().default('pending'),
+  // States: pending, approved, rejected, expired, cancelled
+
+  // Decision reference
+  policyVersionId: uuid('policy_version_id').references(() => policyVersions.id),
+  decisionId: uuid('decision_id').references(() => decisions.id),
+
+  // Final decision
+  finalizedBy: uuid('finalized_by'),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+  finalDecision: varchar('final_decision', { length: 32 }), // approved, rejected
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_compliance_approvals_org').on(table.orgId),
+  statusIdx: index('idx_compliance_approvals_status').on(table.status),
+  operationIdx: index('idx_compliance_approvals_operation').on(table.operationType, table.operationRef),
+  requestedByIdx: index('idx_compliance_approvals_requester').on(table.requestedBy),
+}));
+
+// Offerings - Token offering/sale workflow
+export const offerings = pgTable('offerings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+
+  name: varchar('name', { length: 256 }).notNull(),
+  description: text('description'),
+  offeringType: varchar('offering_type', { length: 32 }).notNull(), // primary, secondary, private_placement
+
+  // Pricing (in smallest units)
+  pricePerToken: varchar('price_per_token', { length: 78 }).notNull(),
+  priceCurrency: varchar('price_currency', { length: 10 }).notNull().default('USDC'),
+  decimals: integer('decimals').notNull().default(6), // Currency decimals
+
+  // Supply
+  totalSupply: varchar('total_supply', { length: 78 }).notNull(),
+  minInvestment: varchar('min_investment', { length: 78 }),
+  maxInvestment: varchar('max_investment', { length: 78 }),
+
+  // Timeline
+  startDate: timestamp('start_date', { withTimezone: true }),
+  endDate: timestamp('end_date', { withTimezone: true }),
+
+  // Allocation tracking
+  allocatedAmount: varchar('allocated_amount', { length: 78 }).notNull().default('0'),
+  mintedAmount: varchar('minted_amount', { length: 78 }).notNull().default('0'),
+
+  // Status
+  status: varchar('status', { length: 32 }).notNull().default('draft'),
+  // States: draft, pending_approval, open, paused, closed, cancelled
+
+  // Compliance
+  policyId: uuid('policy_id').references(() => policies.id),
+  jurisdictionRestrictions: text('jurisdiction_restrictions').array().default([]),
+  investorRestrictions: jsonb('investor_restrictions').default({}),
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_offerings_org').on(table.orgId),
+  tokenIdx: index('idx_offerings_token').on(table.tokenId),
+  statusIdx: index('idx_offerings_status').on(table.status),
+}));
+
+// Allocations - Investment allocations in an offering
+export const allocations = pgTable('allocations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  offeringId: uuid('offering_id').notNull().references(() => offerings.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').notNull().references(() => investors.id),
+  walletAddress: varchar('wallet_address', { length: 42 }).notNull(),
+
+  // Allocation details (in smallest units)
+  tokenAmount: varchar('token_amount', { length: 78 }).notNull(),
+  paymentAmount: varchar('payment_amount', { length: 78 }).notNull(),
+  paymentCurrency: varchar('payment_currency', { length: 10 }).notNull(),
+
+  // Status
+  status: varchar('status', { length: 32 }).notNull().default('pending'),
+  // States: pending, payment_pending, payment_received, minting, minted, failed, cancelled
+
+  // Payment tracking
+  paymentRef: varchar('payment_ref', { length: 256 }),
+  paymentMethod: varchar('payment_method', { length: 32 }), // bank_transfer, crypto, card
+  paymentReceivedAt: timestamp('payment_received_at', { withTimezone: true }),
+
+  // Minting tracking
+  issuanceId: uuid('issuance_id').references(() => issuances.id),
+  mintedAt: timestamp('minted_at', { withTimezone: true }),
+
+  // Compliance
+  decisionId: uuid('decision_id').references(() => decisions.id),
+
+  idempotencyKey: varchar('idempotency_key', { length: 64 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_allocations_org').on(table.orgId),
+  offeringIdx: index('idx_allocations_offering').on(table.offeringId),
+  investorIdx: index('idx_allocations_investor').on(table.investorId),
+  statusIdx: index('idx_allocations_status').on(table.status),
+  idempotencyUnique: uniqueIndex('idx_allocations_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
+// Buyback Requests - Token buyback workflow
+export const buybackRequests = pgTable('buyback_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').notNull().references(() => investors.id),
+  walletAddress: varchar('wallet_address', { length: 42 }).notNull(),
+
+  // Request details (in smallest units)
+  tokenAmount: varchar('token_amount', { length: 78 }).notNull(),
+  pricePerToken: varchar('price_per_token', { length: 78 }).notNull(),
+  totalPayment: varchar('total_payment', { length: 78 }).notNull(),
+  paymentCurrency: varchar('payment_currency', { length: 10 }).notNull(),
+
+  // Status
+  status: varchar('status', { length: 32 }).notNull().default('requested'),
+  // States: requested, approved, rejected, tokens_locked, payment_pending, payment_sent, completed, failed, cancelled
+
+  // Approval
+  complianceApprovalId: uuid('compliance_approval_id'),
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+
+  // Token handling
+  tokensLockedAt: timestamp('tokens_locked_at', { withTimezone: true }),
+  burnTxHash: varchar('burn_tx_hash', { length: 66 }),
+  burnedAt: timestamp('burned_at', { withTimezone: true }),
+
+  // Payment
+  paymentRef: varchar('payment_ref', { length: 256 }),
+  paymentMethod: varchar('payment_method', { length: 32 }),
+  paymentSentAt: timestamp('payment_sent_at', { withTimezone: true }),
+  paymentConfirmedAt: timestamp('payment_confirmed_at', { withTimezone: true }),
+
+  // Settlement proof
+  settlementProofUri: text('settlement_proof_uri'),
+  settlementProofHash: varchar('settlement_proof_hash', { length: 64 }),
+
+  idempotencyKey: varchar('idempotency_key', { length: 64 }),
+  error: text('error'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_buyback_requests_org').on(table.orgId),
+  tokenIdx: index('idx_buyback_requests_token').on(table.tokenId),
+  investorIdx: index('idx_buyback_requests_investor').on(table.investorId),
+  statusIdx: index('idx_buyback_requests_status').on(table.status),
+  idempotencyUnique: uniqueIndex('idx_buyback_requests_idempotency').on(table.orgId, table.idempotencyKey),
 }));
 
 // ============================================================================
@@ -1367,3 +1576,25 @@ export type CorporateAction = typeof corporateActions.$inferSelect;
 export type NewCorporateAction = typeof corporateActions.$inferInsert;
 export type CorporateActionEntitlement = typeof corporateActionEntitlements.$inferSelect;
 export type NewCorporateActionEntitlement = typeof corporateActionEntitlements.$inferInsert;
+
+// Domain Events Outbox Types
+export type DomainEventOutbox = typeof domainEventsOutbox.$inferSelect;
+export type NewDomainEventOutbox = typeof domainEventsOutbox.$inferInsert;
+
+// Compliance Approval Types
+export type ComplianceApproval = typeof complianceApprovals.$inferSelect;
+export type NewComplianceApproval = typeof complianceApprovals.$inferInsert;
+
+// Offering Types
+export type Offering = typeof offerings.$inferSelect;
+export type NewOffering = typeof offerings.$inferInsert;
+export type Allocation = typeof allocations.$inferSelect;
+export type NewAllocation = typeof allocations.$inferInsert;
+
+// Buyback Types
+export type BuybackRequest = typeof buybackRequests.$inferSelect;
+export type NewBuybackRequest = typeof buybackRequests.$inferInsert;
+
+// Clawback Type (enhanced)
+export type Clawback = typeof clawbacks.$inferSelect;
+export type NewClawback = typeof clawbacks.$inferInsert;

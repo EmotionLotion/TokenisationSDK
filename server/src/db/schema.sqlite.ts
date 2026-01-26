@@ -542,19 +542,33 @@ export const clawbacks = sqliteTable('clawbacks', {
   id: text('id').primaryKey().$defaultFn(() => randomUUID()),
   orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
   tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
-  investorId: text('investor_id').notNull().references(() => investors.id),
-  walletAddress: text('wallet_address').notNull(),
+  fromInvestorId: text('from_investor_id').references(() => investors.id),
+  toInvestorId: text('to_investor_id').references(() => investors.id),
+  fromWallet: text('from_wallet').notNull(),
+  toWallet: text('to_wallet').notNull(),
   amount: text('amount').notNull(),
   reason: text('reason').notNull(),
-  reasonCategory: text('reason_category').notNull().default('regulatory'),
+  reasonCode: text('reason_code').notNull().default('regulatory'),
   legalReference: text('legal_reference'),
-  evidenceId: text('evidence_id'),
+  complianceApprovalId: text('compliance_approval_id'),
+  evidencePackId: text('evidence_pack_id'),
   txHash: text('tx_hash'),
-  status: text('status').notNull().default('pending'),
-  initiatedBy: text('initiated_by').notNull(),
+  txBlock: integer('tx_block'),
+  status: text('status').notNull().default('requested'),
+  requestedBy: text('requested_by').notNull(),
+  requestedAt: text('requested_at').$defaultFn(() => new Date().toISOString()),
   approvedBy: text('approved_by'),
   approvedAt: text('approved_at'),
+  rejectedBy: text('rejected_by'),
+  rejectedAt: text('rejected_at'),
+  rejectionReason: text('rejection_reason'),
+  executedBy: text('executed_by'),
   executedAt: text('executed_at'),
+  confirmedAt: text('confirmed_at'),
+  cancelledAt: text('cancelled_at'),
+  cancelledBy: text('cancelled_by'),
+  cancellationReason: text('cancellation_reason'),
+  error: text('error'),
   metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
   createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
@@ -712,6 +726,115 @@ export const corporateActionEntitlements = sqliteTable('corporate_action_entitle
   createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// Domain Events Outbox - For transactional event publishing
+export const domainEventsOutbox = sqliteTable('domain_events_outbox', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull(),
+  eventId: text('event_id').notNull(),
+  eventType: text('event_type').notNull(),
+  aggregateType: text('aggregate_type').notNull(),
+  aggregateId: text('aggregate_id').notNull(),
+  payload: text('payload', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  sequence: integer('sequence').notNull(),
+  globalSequence: integer('global_sequence'),
+  status: text('status').notNull().default('pending'),
+  publishedAt: text('published_at'),
+  retryCount: integer('retry_count').notNull().default(0),
+  lastError: text('last_error'),
+  requestId: text('request_id'),
+  actorId: text('actor_id'),
+  actorType: text('actor_type'),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Compliance Approvals - Multi-party approval workflow
+export const complianceApprovals = sqliteTable('compliance_approvals', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull(),
+  operationType: text('operation_type').notNull(),
+  operationId: text('operation_id').notNull(),
+  status: text('status').notNull().default('pending'),
+  requiredApprovers: integer('required_approvers').notNull().default(1),
+  approvals: text('approvals', { mode: 'json' }).$type<Array<{approverId: string; approvedAt: string; comment?: string}>>().default([]),
+  rejections: text('rejections', { mode: 'json' }).$type<Array<{approverId: string; rejectedAt: string; reason: string}>>().default([]),
+  finalDecision: text('final_decision'),
+  finalizedAt: text('finalized_at'),
+  expiresAt: text('expires_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  requestedAt: text('requested_at').$defaultFn(() => new Date().toISOString()),
+  requestedBy: text('requested_by'),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Offerings - Token offering/sale workflow
+export const offerings = sqliteTable('offerings', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull(),
+  tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  hardCap: text('hard_cap').notNull(),
+  softCap: text('soft_cap'),
+  minInvestment: text('min_investment').notNull(),
+  maxInvestment: text('max_investment'),
+  pricePerToken: text('price_per_token').notNull(),
+  currency: text('currency').notNull(),
+  startDate: text('start_date'),
+  endDate: text('end_date'),
+  status: text('status').notNull().default('draft'),
+  totalRaised: text('total_raised').default('0'),
+  totalAllocations: integer('total_allocations').default(0),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Allocations - Investment allocations in an offering
+export const allocations = sqliteTable('allocations', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull(),
+  offeringId: text('offering_id').notNull().references(() => offerings.id, { onDelete: 'cascade' }),
+  investorId: text('investor_id').notNull().references(() => investors.id),
+  walletAddress: text('wallet_address').notNull(),
+  amount: text('amount').notNull(),
+  investmentAmount: text('investment_amount').notNull(),
+  currency: text('currency').notNull(),
+  status: text('status').notNull().default('pending_kyc'),
+  idempotencyKey: text('idempotency_key'),
+  txHash: text('tx_hash'),
+  txBlock: integer('tx_block'),
+  rejectionReason: text('rejection_reason'),
+  approvedAt: text('approved_at'),
+  confirmedAt: text('confirmed_at'),
+  rejectedAt: text('rejected_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Buyback Requests - Token buyback workflow
+export const buybackRequests = sqliteTable('buyback_requests', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull(),
+  tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: text('investor_id').notNull().references(() => investors.id),
+  walletAddress: text('wallet_address').notNull(),
+  amount: text('amount').notNull(),
+  pricePerToken: text('price_per_token').notNull(),
+  totalValue: text('total_value').notNull(),
+  currency: text('currency').notNull(),
+  status: text('status').notNull().default('pending'),
+  paymentRef: text('payment_ref'),
+  txHash: text('tx_hash'),
+  txBlock: integer('tx_block'),
+  processedAt: text('processed_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
 // Type exports
 export type Party = typeof parties.$inferSelect;
 export type NewParty = typeof parties.$inferInsert;
@@ -751,3 +874,15 @@ export type CorporateAction = typeof corporateActions.$inferSelect;
 export type NewCorporateAction = typeof corporateActions.$inferInsert;
 export type CorporateActionEntitlement = typeof corporateActionEntitlements.$inferSelect;
 export type NewCorporateActionEntitlement = typeof corporateActionEntitlements.$inferInsert;
+
+// Outbox and Workflow Types
+export type DomainEventOutbox = typeof domainEventsOutbox.$inferSelect;
+export type NewDomainEventOutbox = typeof domainEventsOutbox.$inferInsert;
+export type ComplianceApproval = typeof complianceApprovals.$inferSelect;
+export type NewComplianceApproval = typeof complianceApprovals.$inferInsert;
+export type Offering = typeof offerings.$inferSelect;
+export type NewOffering = typeof offerings.$inferInsert;
+export type Allocation = typeof allocations.$inferSelect;
+export type NewAllocation = typeof allocations.$inferInsert;
+export type BuybackRequest = typeof buybackRequests.$inferSelect;
+export type NewBuybackRequest = typeof buybackRequests.$inferInsert;

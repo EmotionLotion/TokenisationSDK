@@ -198,6 +198,178 @@ complianceRouter.get('/policies/:id/versions/:version', apiKeyMiddleware, async 
 });
 
 // ============================================================================
+// Simulation Routes (Dry-run, no persistence)
+// ============================================================================
+
+const simulateTransferSchema = z.object({
+  tokenId: z.string().uuid(),
+  fromWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  toWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  amount: z.string().min(1),
+  policyId: z.string().uuid().optional(),
+  fromInvestorId: z.string().uuid().optional(),
+  toInvestorId: z.string().uuid().optional(),
+});
+
+/**
+ * Simulate a transfer decision WITHOUT persisting it.
+ * Use this to check if a transfer would be allowed before executing.
+ * Returns the same decision structure but does not create a DB record.
+ */
+complianceRouter.post('/policies/simulate/transfer', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const input = simulateTransferSchema.parse(req.body);
+
+    // Use the evaluateRuleset function directly without persisting
+    const result = await simulateTransferDecision({
+      ...input,
+      orgId: req.apiKey.orgId,
+    });
+
+    res.json({
+      simulation: true,
+      persisted: false,
+      ...result,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+    } else {
+      next(error);
+    }
+  }
+});
+
+/**
+ * Helper function to simulate a transfer without persistence.
+ */
+async function simulateTransferDecision(input: {
+  orgId: string;
+  tokenId: string;
+  fromWallet: string;
+  toWallet: string;
+  amount: string;
+  policyId?: string;
+  fromInvestorId?: string;
+  toInvestorId?: string;
+}) {
+  // Import dynamically to avoid circular dependency issues
+  const { db, schema } = await import('../config/database.js');
+  const { eq, and } = await import('drizzle-orm');
+  const { tokens, investors, dldTitles, policies, policyVersions } = schema;
+  const { createHash } = await import('crypto');
+
+  const { orgId, tokenId, fromWallet, toWallet, amount, policyId, fromInvestorId, toInvestorId } = input;
+
+  // Get token and its policy
+  const token = await db.query.tokens.findFirst({
+    where: and(eq(tokens.id, tokenId), eq(tokens.orgId, orgId)),
+  });
+
+  if (!token) {
+    return {
+      result: 'deny' as const,
+      reasons: [{ code: 'TOKEN_NOT_FOUND', message: 'Token not found' }],
+      requiredActions: [],
+    };
+  }
+
+  // Determine which policy to use
+  const effectivePolicyId = policyId || token.policyId;
+
+  let policy = null;
+  let policyVersion = null;
+  let ruleset = complianceService.getDefaultRuleset();
+
+  if (effectivePolicyId) {
+    try {
+      const policyResult = await complianceService.getPolicy(effectivePolicyId, orgId);
+      policy = policyResult;
+      if (policyResult.currentVersion) {
+        policyVersion = policyResult.currentVersion;
+        ruleset = policyVersion.ruleset as unknown as complianceService.Ruleset;
+      }
+    } catch {
+      // Use default ruleset if policy not found
+    }
+  }
+
+  // Build decision input
+  const decisionInput: complianceService.DecisionInput = {
+    tokenId,
+    fromWallet,
+    toWallet,
+    amount,
+    fromInvestorId,
+    toInvestorId,
+    token: {
+      status: token.status,
+      chainId: token.chainId,
+    },
+  };
+
+  // Get investor data if available
+  if (fromInvestorId) {
+    const fromInvestor = await db.query.investors.findFirst({
+      where: eq(investors.id, fromInvestorId),
+    });
+    if (fromInvestor) {
+      decisionInput.investor = {
+        kycStatus: fromInvestor.status === 'active' ? 'approved' : 'pending',
+        classification: fromInvestor.classification,
+        jurisdiction: fromInvestor.jurisdiction,
+        accreditedStatus: fromInvestor.accreditedStatus || 'unknown',
+        sanctions: 'clear',
+      };
+    }
+  }
+
+  // Get DLD data if available
+  if (token.assetId) {
+    const dldTitle = await db.query.dldTitles.findFirst({
+      where: eq(dldTitles.assetId, token.assetId),
+    });
+    if (dldTitle) {
+      decisionInput.asset = {
+        dld: {
+          flags: dldTitle.flags || [],
+          status: dldTitle.status,
+        },
+      };
+    }
+  }
+
+  // Evaluate ruleset WITHOUT persisting
+  const evaluationResult = complianceService.evaluateRuleset(ruleset, decisionInput);
+
+  // Create inputs hash for determinism verification
+  const inputsHash = createHash('sha256')
+    .update(JSON.stringify(decisionInput, Object.keys(decisionInput).sort()))
+    .digest('hex');
+
+  return {
+    result: evaluationResult.result,
+    reasons: evaluationResult.reasons,
+    requiredActions: evaluationResult.requiredActions,
+    inputsHash,
+    policyVersionId: policyVersion?.id,
+    policyVersion: policyVersion?.version,
+    inputs: decisionInput,
+    deterministicHash: createHash('sha256')
+      .update(JSON.stringify({
+        inputsHash,
+        result: evaluationResult.result,
+        reasons: evaluationResult.reasons.map(r => r.code),
+      }))
+      .digest('hex'),
+  };
+}
+
+// ============================================================================
 // Decision Routes
 // ============================================================================
 

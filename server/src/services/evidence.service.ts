@@ -57,7 +57,8 @@ export type EvidencePackType =
   | 'transfer_evidence_pack'
   | 'token_evidence_pack'
   | 'issuance_evidence_pack'
-  | 'kyc_evidence_pack';
+  | 'kyc_evidence_pack'
+  | 'clawback_evidence_pack';
 
 export interface EvidenceAttestation {
   /** Hash of the entire evidence pack data */
@@ -155,7 +156,7 @@ export async function generateInvestorPack(
 
 /**
  * Generates a comprehensive evidence pack for a transfer.
- * Includes compliance decisions, both parties' KYC status, and audit trail.
+ * Includes compliance decisions, both parties' KYC status, policy decision trace, and audit trail.
  */
 export async function generateTransferPack(
   transferId: string,
@@ -206,11 +207,39 @@ export async function generateTransferPack(
     }),
   ]);
 
-  // Build evidence pack
+  // Fetch policy versions for each decision (decision trace requirement)
+  const { policyVersions } = await import('../db/schema.js').then(m => m.default || m) as typeof schema;
+  const policyDecisionTrace = await Promise.all(
+    complianceDecisions
+      .filter(d => d.policyVersionId)
+      .map(async (decision) => {
+        const policyVersion = await db.query.policyVersions?.findFirst({
+          where: eq(policyVersions.id, decision.policyVersionId!),
+        });
+        return {
+          decisionId: decision.id,
+          decisionResult: decision.result,
+          decisionReasons: decision.reasons,
+          decisionCreatedAt: decision.createdAt,
+          inputsHash: decision.inputsHash,
+          policyVersion: policyVersion ? {
+            id: policyVersion.id,
+            policyId: policyVersion.policyId,
+            version: policyVersion.version,
+            ruleset: policyVersion.ruleset,
+            activatedAt: policyVersion.activatedAt,
+          } : null,
+        };
+      })
+  );
+
+  // Build evidence pack with full decision trace
   const data = {
     transfer: sanitizeForExport(transfer),
     token: token ? sanitizeForExport(token) : null,
     complianceDecisions: complianceDecisions.map(sanitizeForExport),
+    // Decision trace includes policy version and ruleset for each decision
+    policyDecisionTrace: policyDecisionTrace.length > 0 ? policyDecisionTrace : null,
     parties: {
       from: fromInvestor ? {
         investor: sanitizeForExport(fromInvestor),
@@ -544,6 +573,238 @@ function buildKycTimeline(
         details: session.status === 'rejected'
           ? JSON.stringify(session.failureReasons)
           : undefined,
+      });
+    }
+  }
+
+  // Sort by timestamp
+  timeline.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  return timeline;
+}
+
+// ============================================================================
+// Clawback Evidence Pack
+// ============================================================================
+
+/**
+ * Generates a comprehensive evidence pack for a clawback operation.
+ * Includes compliance approval, both parties' data, and complete audit trail.
+ */
+export async function generateClawbackPack(
+  clawbackId: string,
+  orgId: string
+): Promise<EvidencePack> {
+  const { clawbacks, complianceApprovals, policyVersions } = await import('../db/schema.js').then(m => m.default || m) as typeof schema;
+
+  const clawback = await db.query.clawbacks.findFirst({
+    where: and(eq(clawbacks.id, clawbackId), eq(clawbacks.orgId, orgId)),
+  });
+
+  if (!clawback) {
+    throw new NotFoundError('Clawback not found');
+  }
+
+  // Fetch related data
+  const [
+    token,
+    complianceApproval,
+    fromInvestor,
+    toInvestor,
+    complianceDecisions,
+    auditHistory,
+  ] = await Promise.all([
+    db.query.tokens.findFirst({
+      where: eq(tokens.id, clawback.tokenId),
+    }),
+    clawback.complianceApprovalId
+      ? db.query.complianceApprovals?.findFirst({
+          where: eq(complianceApprovals.id, clawback.complianceApprovalId),
+        })
+      : Promise.resolve(null),
+    clawback.fromInvestorId
+      ? db.query.investors.findFirst({ where: eq(investors.id, clawback.fromInvestorId) })
+      : Promise.resolve(null),
+    clawback.toInvestorId
+      ? db.query.investors.findFirst({ where: eq(investors.id, clawback.toInvestorId) })
+      : Promise.resolve(null),
+    db.select()
+      .from(decisions)
+      .where(and(
+        eq(decisions.subjectRef, clawbackId),
+        eq(decisions.subjectType, 'clawback'),
+        eq(decisions.orgId, orgId)
+      ))
+      .orderBy(desc(decisions.createdAt)),
+    auditService.getAuditLog(orgId, {
+      resourceType: 'clawback',
+      resourceId: clawbackId,
+      limit: 500,
+    }),
+  ]);
+
+  // Get policy version if available from compliance decision
+  let policyVersion = null;
+  if (complianceDecisions.length > 0 && complianceDecisions[0].policyVersionId) {
+    policyVersion = await db.query.policyVersions?.findFirst({
+      where: eq(policyVersions.id, complianceDecisions[0].policyVersionId),
+    });
+  }
+
+  const data = {
+    clawback: {
+      id: clawback.id,
+      tokenId: clawback.tokenId,
+      fromWallet: clawback.fromWallet,
+      toWallet: clawback.toWallet,
+      amount: clawback.amount,
+      reason: clawback.reason,
+      reasonCode: clawback.reasonCode,
+      legalReference: clawback.legalReference,
+      status: clawback.status,
+      txHash: clawback.txHash,
+      txBlock: clawback.txBlock,
+      requestedAt: clawback.requestedAt,
+      approvedAt: clawback.approvedAt,
+      executedAt: clawback.executedAt,
+      confirmedAt: clawback.confirmedAt,
+    },
+    token: token ? {
+      id: token.id,
+      name: token.name,
+      symbol: token.symbol,
+      address: token.address,
+      chainId: token.chainId,
+    } : null,
+    complianceApproval: complianceApproval ? {
+      id: complianceApproval.id,
+      operationType: complianceApproval.operationType,
+      status: complianceApproval.status,
+      requestedAt: complianceApproval.requestedAt,
+      approvals: complianceApproval.approvals,
+      rejections: complianceApproval.rejections,
+      finalDecision: complianceApproval.finalDecision,
+      finalizedAt: complianceApproval.finalizedAt,
+    } : null,
+    policyDecision: policyVersion ? {
+      policyVersionId: policyVersion.id,
+      policyId: policyVersion.policyId,
+      version: policyVersion.version,
+      ruleset: policyVersion.ruleset,
+    } : null,
+    complianceDecisions: complianceDecisions.map(d => ({
+      id: d.id,
+      type: d.type,
+      result: d.result,
+      reasons: d.reasons,
+      inputsHash: d.inputsHash,
+      signature: d.signature,
+      createdAt: d.createdAt,
+    })),
+    parties: {
+      from: fromInvestor ? {
+        id: fromInvestor.id,
+        type: fromInvestor.type,
+        jurisdiction: fromInvestor.jurisdiction,
+        status: fromInvestor.status,
+        wallet: clawback.fromWallet,
+      } : { wallet: clawback.fromWallet },
+      to: toInvestor ? {
+        id: toInvestor.id,
+        type: toInvestor.type,
+        jurisdiction: toInvestor.jurisdiction,
+        status: toInvestor.status,
+        wallet: clawback.toWallet,
+      } : { wallet: clawback.toWallet },
+    },
+    approvalChain: {
+      requestedBy: clawback.requestedBy,
+      requestedAt: clawback.requestedAt,
+      approvedBy: clawback.approvedBy,
+      approvedAt: clawback.approvedAt,
+      rejectedBy: clawback.rejectedBy,
+      rejectedAt: clawback.rejectedAt,
+      rejectionReason: clawback.rejectionReason,
+      executedBy: clawback.executedBy,
+      executedAt: clawback.executedAt,
+    },
+    timeline: buildClawbackTimeline(clawback as any, complianceApproval as any, auditHistory),
+  };
+
+  return createEvidencePack({
+    type: 'clawback_evidence_pack' as EvidencePackType,
+    subject: {
+      type: 'clawback',
+      id: clawbackId,
+    },
+    orgId,
+    data,
+    auditTrail: auditHistory,
+  });
+}
+
+function buildClawbackTimeline(
+  clawback: Record<string, unknown>,
+  approval: Record<string, unknown> | null,
+  auditLogs: auditService.AuditLogEntry[]
+): Array<{ timestamp: string; event: string; details?: string }> {
+  const timeline: Array<{ timestamp: string; event: string; details?: string }> = [];
+
+  // Add clawback lifecycle events
+  if (clawback.requestedAt) {
+    timeline.push({
+      timestamp: String(clawback.requestedAt),
+      event: 'Clawback requested',
+      details: `Reason: ${clawback.reasonCode} - ${String(clawback.reason).substring(0, 100)}`,
+    });
+  }
+
+  if (approval?.requestedAt) {
+    timeline.push({
+      timestamp: String(approval.requestedAt),
+      event: 'Compliance approval requested',
+    });
+  }
+
+  if (clawback.approvedAt) {
+    timeline.push({
+      timestamp: String(clawback.approvedAt),
+      event: 'Clawback approved',
+      details: `Approved by: ${clawback.approvedBy}`,
+    });
+  }
+
+  if (clawback.rejectedAt) {
+    timeline.push({
+      timestamp: String(clawback.rejectedAt),
+      event: 'Clawback rejected',
+      details: String(clawback.rejectionReason),
+    });
+  }
+
+  if (clawback.executedAt) {
+    timeline.push({
+      timestamp: String(clawback.executedAt),
+      event: 'Clawback execution started',
+      details: `Executed by: ${clawback.executedBy}`,
+    });
+  }
+
+  if (clawback.confirmedAt) {
+    timeline.push({
+      timestamp: String(clawback.confirmedAt),
+      event: 'Clawback confirmed on-chain',
+      details: `TX: ${clawback.txHash}`,
+    });
+  }
+
+  // Add relevant audit events
+  for (const log of auditLogs) {
+    if (!timeline.some(t => t.event.includes(log.action))) {
+      timeline.push({
+        timestamp: String(log.createdAt),
+        event: log.action,
+        details: log.description || undefined,
       });
     }
   }
