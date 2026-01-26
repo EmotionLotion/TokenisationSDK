@@ -578,33 +578,7 @@ TokenisationSDK/
 ├── packages/
 │   └── conformance-suite/        # Integration tests
 │
-└── docs/                         # Documentation
-    ├── CONCEPTS.md               # What is tokenization, domain model
-    ├── GLOSSARY.md               # Term definitions (80+ terms)
-    ├── API_REFERENCE.md          # Complete SDK API documentation
-    ├── ARCHITECTURE.md           # System design, security, production
-    ├── README.md                 # Documentation hub
-    ├── getting-started/          # Onboarding guides
-    │   ├── QUICKSTART.md
-    │   ├── INSTALLATION.md
-    │   └── FIRST_PROJECT.md
-    ├── guides/                   # How-to guides
-    │   ├── SDK_USAGE.md
-    │   ├── COMPLIANCE_SETUP.md
-    │   ├── SERVER_SETUP.md
-    │   └── CHAINLINK_INTEGRATION.md
-    ├── architecture/             # Technical deep-dives
-    │   ├── OVERVIEW.md
-    │   ├── LIFECYCLE.md
-    │   ├── PLUGINS.md
-    │   └── SECURITY.md
-    ├── api/                      # API references
-    │   ├── SDK_API.md
-    │   ├── REST_API.md
-    │   └── CONTRACTS.md
-    └── deployment/               # Operations
-        ├── DEPLOYMENT_RUNBOOK.md
-        └── OPERATIONS_MANUAL.md
+└── docs/                         # Documentation (see Documentation section below)
 ```
 
 ---
@@ -661,49 +635,48 @@ npm test --workspace=@tokenisation/conformance-suite
 
 ## Documentation
 
-Full documentation is in the [`docs/`](docs/) folder.
+### I want to...
 
-### Start Here
+| Goal | Start Here |
+|------|------------|
+| **Understand what this is** | [Core Concepts](docs/CONCEPTS.md) — What is tokenization, why it matters, how it works |
+| **Look up a term** | [Glossary](docs/GLOSSARY.md) — KYC, AML, UUPS, ERC-3643, idempotency, and 80+ more |
+| **Build something quickly** | [Quick Start](docs/getting-started/QUICKSTART.md) — Tokenize your first asset in minutes |
+| **See all SDK methods** | [API Reference](docs/API_REFERENCE.md) — Every method, parameter, and example |
+| **Understand the architecture** | [Architecture](docs/ARCHITECTURE.md) — System design, security, production features |
+| **Set up compliance rules** | [Compliance Setup](docs/guides/COMPLIANCE_SETUP.md) — KYC, transfer restrictions, policies |
+| **Deploy to production** | [Deployment Runbook](docs/deployment/DEPLOYMENT_RUNBOOK.md) — Step-by-step guide |
+| **Configure the server** | [Server Config](server/.env.example) — All environment variables explained |
 
-| Document | Description |
-|----------|-------------|
-| [Core Concepts](docs/CONCEPTS.md) | What is tokenization? Business case, domain model, end-to-end flow |
-| [Glossary](docs/GLOSSARY.md) | 80+ terms defined (KYC, AML, UUPS, ERC-3643, idempotency, etc.) |
-| [Quick Start](docs/getting-started/QUICKSTART.md) | Tokenize your first asset in minutes |
+### Learning Path
 
-### Developer Guides
+```
+New User                        Developer                       Production
+────────                        ─────────                       ──────────
+    │                               │                               │
+    ▼                               ▼                               ▼
+┌─────────────┐              ┌─────────────┐              ┌─────────────────┐
+│  CONCEPTS   │─────────────▶│ QUICK START │─────────────▶│ DEPLOYMENT      │
+│  What & Why │              │ Build First │              │ RUNBOOK         │
+└─────────────┘              │ Asset       │              └─────────────────┘
+       │                     └─────────────┘                      │
+       ▼                            │                             ▼
+┌─────────────┐                     ▼                     ┌─────────────────┐
+│  GLOSSARY   │              ┌─────────────┐              │ OPERATIONS      │
+│  Terms      │              │ API         │              │ MANUAL          │
+└─────────────┘              │ REFERENCE   │              └─────────────────┘
+                             └─────────────┘
+                                    │
+                                    ▼
+                             ┌─────────────┐
+                             │ COMPLIANCE  │
+                             │ SETUP       │
+                             └─────────────┘
+```
 
-| Document | Description |
-|----------|-------------|
-| [API Reference](docs/API_REFERENCE.md) | Complete SDK documentation - all methods, parameters, examples |
-| [SDK Usage Guide](docs/guides/SDK_USAGE.md) | In-depth SDK patterns and examples |
-| [Compliance Setup](docs/guides/COMPLIANCE_SETUP.md) | Configure KYC, AML, and transfer restrictions |
-| [Server Setup](docs/guides/SERVER_SETUP.md) | Deploy and configure the API server |
+### Full Documentation Index
 
-### Architecture
-
-| Document | Description |
-|----------|-------------|
-| [Architecture Overview](docs/ARCHITECTURE.md) | System design, security features, production requirements |
-| [Lifecycle Engine](docs/architecture/LIFECYCLE.md) | Asset state machine and transitions |
-| [Plugin System](docs/architecture/PLUGINS.md) | Extensibility via plugins |
-| [Security](docs/architecture/SECURITY.md) | Security considerations and best practices |
-
-### API Reference
-
-| Document | Description |
-|----------|-------------|
-| [SDK API](docs/api/SDK_API.md) | TypeScript SDK reference |
-| [REST API](docs/api/REST_API.md) | HTTP endpoints reference |
-| [Smart Contracts](docs/api/CONTRACTS.md) | Solidity contract reference |
-
-### Deployment & Operations
-
-| Document | Description |
-|----------|-------------|
-| [Deployment Runbook](docs/deployment/DEPLOYMENT_RUNBOOK.md) | Step-by-step production deployment |
-| [Operations Manual](docs/deployment/OPERATIONS_MANUAL.md) | Day-to-day operations guide |
-| [Server Config](server/.env.example) | Environment variables reference |
+📚 **[docs/README.md](docs/README.md)** — Complete documentation hub with all guides and references
 
 ---
 
