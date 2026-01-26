@@ -1,0 +1,130 @@
+# Promtail Configuration for Tokenization Platform
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Application logs
+  - job_name: tokenisation-api
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: tokenisation-api
+          __path__: /app/logs/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            timestamp: timestamp
+            requestId: requestId
+            userId: userId
+            error: error
+      - labels:
+          level:
+          requestId:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # System logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<host>\w+) (?P<app>\w+)(?:\[(?P<pid>\d+)\])?: (?P<message>.*)$'
+      - labels:
+          app:
+          host:
+
+  # Docker container logs (if running in Docker)
+  - job_name: containers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: containers
+          __path__: /var/lib/docker/containers/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            timestamp: time
+      - labels:
+          stream:
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+  # Blockchain transaction logs
+  - job_name: blockchain
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: blockchain
+          __path__: /app/logs/blockchain/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            chain: chain
+            txHash: txHash
+            type: type
+            status: status
+            gasUsed: gasUsed
+      - labels:
+          chain:
+          type:
+          status:
+
+  # KYC verification logs
+  - job_name: kyc
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: kyc
+          __path__: /app/logs/kyc/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            provider: provider
+            level: level
+            applicantId: applicantId
+            status: status
+      - labels:
+          provider:
+          level:
+          status:
+
+  # Compliance/Sanctions logs
+  - job_name: compliance
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: compliance
+          __path__: /app/logs/compliance/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            type: type
+            result: result
+            address: address
+      - labels:
+          type:
+          result:

@@ -1,0 +1,229 @@
+# Prometheus Alert Rules for Tokenization Platform
+
+groups:
+  # ==================== API HEALTH ====================
+  - name: api_health
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High API latency"
+          description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+
+      - alert: APIDown
+        expr: up{job="tokenisation-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API server is down"
+          description: "Tokenization API server has been unreachable for over 1 minute"
+
+  # ==================== BLOCKCHAIN ====================
+  - name: blockchain_health
+    rules:
+      - alert: HighGasPrice
+        expr: blockchain_gas_price_gwei > 100
+        for: 10m
+        labels:
+          severity: warning
+          team: blockchain
+        annotations:
+          summary: "High gas price on {{ $labels.chain }}"
+          description: "Gas price is {{ $value }} gwei (threshold: 100 gwei)"
+
+      - alert: RPCErrors
+        expr: rate(blockchain_rpc_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+        annotations:
+          summary: "High RPC error rate on {{ $labels.chain }}"
+          description: "RPC errors: {{ $value | humanize }} per second"
+
+      - alert: TransactionFailures
+        expr: |
+          (
+            sum(rate(blockchain_transactions_total{status="failed"}[15m])) by (chain)
+            /
+            sum(rate(blockchain_transactions_total[15m])) by (chain)
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: critical
+          team: blockchain
+        annotations:
+          summary: "High transaction failure rate on {{ $labels.chain }}"
+          description: "{{ $value | humanizePercentage }} of transactions are failing"
+
+      - alert: LowLINKBalance
+        expr: link_balance < 5
+        for: 0m
+        labels:
+          severity: warning
+          team: blockchain
+        annotations:
+          summary: "Low LINK balance"
+          description: "LINK balance is {{ $value }} (threshold: 5 LINK)"
+
+      - alert: CriticalLINKBalance
+        expr: link_balance < 1
+        for: 0m
+        labels:
+          severity: critical
+          team: blockchain
+        annotations:
+          summary: "Critical LINK balance"
+          description: "LINK balance is {{ $value }}, automation may stop!"
+
+  # ==================== ORACLE ====================
+  - name: oracle_health
+    rules:
+      - alert: StaleOracleData
+        expr: (time() - oracle_last_update_timestamp) > 3600
+        for: 5m
+        labels:
+          severity: critical
+          team: blockchain
+        annotations:
+          summary: "Stale oracle data for {{ $labels.pair }}"
+          description: "Oracle data is {{ $value | humanizeDuration }} old"
+
+      - alert: OracleRequestErrors
+        expr: rate(oracle_requests_total{status="error"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+        annotations:
+          summary: "Oracle request errors"
+          description: "{{ $value | humanize }} errors per second"
+
+  # ==================== KYC & COMPLIANCE ====================
+  - name: compliance_health
+    rules:
+      - alert: KYCVerificationFailures
+        expr: |
+          (
+            sum(rate(kyc_verifications_total{status="failed"}[1h]))
+            /
+            sum(rate(kyc_verifications_total[1h]))
+          ) > 0.2
+        for: 30m
+        labels:
+          severity: warning
+          team: compliance
+        annotations:
+          summary: "High KYC failure rate"
+          description: "{{ $value | humanizePercentage }} of KYC verifications are failing"
+
+      - alert: HighPendingKYC
+        expr: kyc_pending_count > 100
+        for: 1h
+        labels:
+          severity: warning
+          team: compliance
+        annotations:
+          summary: "High pending KYC count"
+          description: "{{ $value }} KYC verifications pending"
+
+      - alert: SanctionsMatch
+        expr: increase(sanctions_screenings_total{result="match"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: compliance
+        annotations:
+          summary: "Sanctions match detected"
+          description: "A sanctions match was detected, requiring immediate review"
+
+  # ==================== DIVIDENDS ====================
+  - name: dividend_health
+    rules:
+      - alert: DividendDistributionStalled
+        expr: dividends_pending_amount > 0 and changes(dividends_claimed_total[1h]) == 0
+        for: 24h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Dividend distribution stalled"
+          description: "Pending dividends of {{ $value }} haven't been claimed in 24h"
+
+  # ==================== INFRASTRUCTURE ====================
+  - name: infrastructure
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 15m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | humanize }}%"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 15m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value | humanize }}%"
+
+      - alert: HighDiskUsage
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 80
+        for: 30m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value | humanize }}%"
+
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "Database has been unreachable for over 1 minute"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for over 1 minute"

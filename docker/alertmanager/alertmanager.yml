@@ -1,0 +1,125 @@
+# Alertmanager Configuration for Tokenization Platform
+
+global:
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alerts@tokenisation.example.com'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+# Route tree
+route:
+  group_by: ['alertname', 'severity', 'team']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+
+  routes:
+    # Critical alerts go to all channels immediately
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+
+    # Blockchain team alerts
+    - match:
+        team: blockchain
+      receiver: 'blockchain-team'
+      continue: true
+
+    # Compliance team alerts
+    - match:
+        team: compliance
+      receiver: 'compliance-team'
+      continue: true
+
+    # Platform team alerts
+    - match:
+        team: platform
+      receiver: 'platform-team'
+      continue: true
+
+    # Infrastructure alerts
+    - match:
+        team: infrastructure
+      receiver: 'infrastructure-team'
+
+# Inhibition rules
+inhibit_rules:
+  # If API is down, suppress high latency/error alerts
+  - source_match:
+      alertname: 'APIDown'
+    target_match_re:
+      alertname: 'High(Error|Latency).*'
+    equal: ['instance']
+
+  # If database is down, suppress application alerts
+  - source_match:
+      alertname: 'DatabaseDown'
+    target_match_re:
+      alertname: '(KYC|Dividend|Transaction).*'
+    equal: []
+
+# Receivers
+receivers:
+  - name: 'default-receiver'
+    slack_configs:
+      - channel: '#tokenisation-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+
+  - name: 'critical-receiver'
+    slack_configs:
+      - channel: '#tokenisation-critical'
+        title: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        severity: critical
+    email_configs:
+      - to: 'oncall@tokenisation.example.com'
+        send_resolved: true
+
+  - name: 'blockchain-team'
+    slack_configs:
+      - channel: '#blockchain-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    email_configs:
+      - to: 'blockchain-team@tokenisation.example.com'
+
+  - name: 'compliance-team'
+    slack_configs:
+      - channel: '#compliance-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    email_configs:
+      - to: 'compliance@tokenisation.example.com'
+
+  - name: 'platform-team'
+    slack_configs:
+      - channel: '#platform-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+
+  - name: 'infrastructure-team'
+    slack_configs:
+      - channel: '#infrastructure-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    email_configs:
+      - to: 'devops@tokenisation.example.com'
+
+# Templates
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

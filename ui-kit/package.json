@@ -1,0 +1,49 @@
+{
+    "name": "@tokenisation/ui-kit",
+    "version": "0.1.0",
+    "description": "Stripe Elements style drop-in React components for tokenization UIs",
+    "main": "dist/index.js",
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "require": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        },
+        "./styles": "./dist/styles/base.css"
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "lint": "eslint src/",
+        "clean": "rm -rf dist"
+    },
+    "peerDependencies": {
+        "react": "^18.0.0 || ^19.0.0",
+        "react-dom": "^18.0.0 || ^19.0.0"
+    },
+    "dependencies": {
+        "@tokenisation/sdk": "file:../sdk"
+    },
+    "devDependencies": {
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "typescript": "^5.3.0",
+        "lucide-react": "^0.263.1"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "keywords": [
+        "tokenization",
+        "rwa",
+        "react",
+        "components",
+        "kyc",
+        "wallet",
+        "blockchain"
+    ],
+    "license": "MIT"
+}

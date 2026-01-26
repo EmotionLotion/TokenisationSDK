@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* AHOY Institutional Color Palette */
+  --ahoy-gold-primary: #F8B032;
+  --ahoy-gold-secondary: #E8A633;
+  --ahoy-gold-dark: #D69A31;
+  --ahoy-navy: #0F172A;
+  --ahoy-navy-light: #1E293B;
+
+  /* Semantic Colors */
+  --color-background: #0B0E14;
+  --color-surface: #111827;
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-accent: var(--ahoy-gold-primary);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Institutional Typography */
+.font-display {
+  font-family: 'Lexend Deca', 'Inter', sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+}
+
+/* Gold Gradient Text */
+.text-gold-gradient {
+  background: linear-gradient(135deg, var(--ahoy-gold-primary), var(--ahoy-gold-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gold Glow Effect */
+.glow-gold {
+  box-shadow: 0 0 20px rgba(248, 176, 50, 0.3), 0 0 40px rgba(248, 176, 50, 0.1);
+}
+
+.glow-gold-sm {
+  box-shadow: 0 0 10px rgba(248, 176, 50, 0.2);
+}
+
+#root {
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+/* Glassmorphism Utilities */
+.glass {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}

@@ -1,0 +1,497 @@
+import swaggerJsdoc from 'swagger-jsdoc';
+
+const options: swaggerJsdoc.Options = {
+  definition: {
+    openapi: '3.0.3',
+    info: {
+      title: 'AHOY Tokenisation Platform API',
+      version: '1.0.0',
+      description: `
+# AHOY Tokenisation SDK API
+
+A programmable factory that turns real-world rights, assets, or actions into verifiable, rule-based digital tokens.
+
+## Overview
+
+This API enables developers to:
+- **Create and manage tokenized assets** (real estate, carbon credits, tickets, etc.)
+- **Onboard investors** with KYC verification
+- **Execute compliant transfers** with policy evaluation
+- **Integrate with Dubai Land Department (DLD)** for title verification
+- **Track cap tables and audit logs**
+
+## Authentication
+
+All API endpoints require authentication via API key:
+
+\`\`\`
+X-API-Key: your_api_key_here
+\`\`\`
+
+API keys are scoped to organizations and can be created via the IAM endpoints.
+
+## Idempotency
+
+For POST requests, you can include an \`Idempotency-Key\` header to ensure the operation is only performed once:
+
+\`\`\`
+Idempotency-Key: unique-request-id
+\`\`\`
+
+Keys are valid for 24 hours.
+
+## Rate Limits
+
+- Standard endpoints: 100 requests/minute
+- Auth endpoints: 10 requests/minute
+
+## Error Handling
+
+All errors follow a consistent format:
+
+\`\`\`json
+{
+  "error": "Error message",
+  "code": "ERROR_CODE",
+  "details": {}
+}
+\`\`\`
+
+Common HTTP status codes:
+- \`400\` - Bad Request (validation error)
+- \`401\` - Unauthorized (missing/invalid API key)
+- \`403\` - Forbidden (insufficient permissions)
+- \`404\` - Not Found
+- \`409\` - Conflict (idempotency key reused)
+- \`429\` - Too Many Requests
+- \`500\` - Internal Server Error
+      `,
+      contact: {
+        name: 'AHOY Engineering',
+        email: 'engineering@ahoy.fund',
+      },
+      license: {
+        name: 'Proprietary',
+      },
+    },
+    servers: [
+      {
+        url: 'http://localhost:3001/api/v1',
+        description: 'Local Development',
+      },
+      {
+        url: 'https://sandbox.api.ahoy.fund/v1',
+        description: 'Sandbox Environment',
+      },
+      {
+        url: 'https://api.ahoy.fund/v1',
+        description: 'Production',
+      },
+    ],
+    tags: [
+      { name: 'Auth', description: 'Authentication endpoints' },
+      { name: 'IAM', description: 'Identity and Access Management (Organizations, Users, Roles, API Keys)' },
+      { name: 'Projects', description: 'Project and document management' },
+      { name: 'Assets', description: 'Asset lifecycle management' },
+      { name: 'Tokens', description: 'Token deployment and operations' },
+      { name: 'Investors', description: 'Investor onboarding and KYC' },
+      { name: 'Transfers', description: 'Compliant transfer orchestration' },
+      { name: 'Compliance', description: 'Policy engine and decision evaluation' },
+      { name: 'DLD', description: 'Dubai Land Department integration' },
+      { name: 'Webhooks', description: 'Webhook endpoint management' },
+      { name: 'Ledger', description: 'Position tracking and cap table' },
+      { name: 'Audit', description: 'Audit log and compliance evidence' },
+      { name: 'Settlements', description: 'Settlement finality tracking' },
+      { name: 'Distributions', description: 'Yield/dividend distribution management' },
+    ],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+          description: 'API key for authentication',
+        },
+        BearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT token for user authentication',
+        },
+      },
+      schemas: {
+        // Common schemas
+        Error: {
+          type: 'object',
+          properties: {
+            error: { type: 'string', description: 'Error message' },
+            code: { type: 'string', description: 'Error code' },
+            details: { type: 'object', description: 'Additional error details' },
+          },
+          required: ['error'],
+        },
+        PaginatedResponse: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: {} },
+            count: { type: 'integer', description: 'Number of items returned' },
+            total: { type: 'integer', description: 'Total number of items' },
+            limit: { type: 'integer', description: 'Items per page' },
+            offset: { type: 'integer', description: 'Offset from start' },
+          },
+        },
+        UUID: {
+          type: 'string',
+          format: 'uuid',
+          example: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        EthereumAddress: {
+          type: 'string',
+          pattern: '^0x[a-fA-F0-9]{40}$',
+          example: '0x742d35Cc6634C0532925a3b844Bc9e7595f8fE23',
+        },
+        TransactionHash: {
+          type: 'string',
+          pattern: '^0x[a-fA-F0-9]{64}$',
+          example: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        },
+        // Project schemas
+        Project: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            name: { type: 'string', maxLength: 256 },
+            description: { type: 'string' },
+            jurisdiction: { type: 'string', maxLength: 32 },
+            assetType: { type: 'string', maxLength: 32 },
+            status: { type: 'string', enum: ['draft', 'active', 'frozen', 'closed'] },
+            settings: { type: 'object' },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        CreateProjectInput: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 256 },
+            description: { type: 'string' },
+            jurisdiction: { type: 'string', maxLength: 32 },
+            assetType: { type: 'string', maxLength: 32 },
+            settings: { type: 'object' },
+            metadata: { type: 'object' },
+          },
+        },
+        // Investor schemas
+        Investor: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            externalId: { type: 'string', maxLength: 100 },
+            email: { type: 'string', format: 'email' },
+            phone: { type: 'string' },
+            type: { type: 'string', enum: ['individual', 'institutional', 'qualified', 'accredited'] },
+            status: { type: 'string', enum: ['pending', 'active', 'suspended', 'blocked'] },
+            kycStatus: { type: 'string', enum: ['none', 'pending', 'approved', 'rejected', 'expired'] },
+            kycLevel: { type: 'string' },
+            countryCode: { type: 'string', minLength: 2, maxLength: 2 },
+            taxResidency: { type: 'string', minLength: 2, maxLength: 2 },
+            profile: { type: 'object' },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        CreateInvestorInput: {
+          type: 'object',
+          required: ['email', 'type', 'countryCode'],
+          properties: {
+            externalId: { type: 'string', maxLength: 100 },
+            email: { type: 'string', format: 'email' },
+            phone: { type: 'string' },
+            type: { type: 'string', enum: ['individual', 'institutional', 'qualified', 'accredited'] },
+            countryCode: { type: 'string', minLength: 2, maxLength: 2 },
+            taxResidency: { type: 'string', minLength: 2, maxLength: 2 },
+            profile: { type: 'object' },
+            metadata: { type: 'object' },
+          },
+        },
+        InvestorWallet: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            investorId: { $ref: '#/components/schemas/UUID' },
+            address: { $ref: '#/components/schemas/EthereumAddress' },
+            chainId: { type: 'integer' },
+            label: { type: 'string' },
+            status: { type: 'string', enum: ['pending', 'verified', 'blocked'] },
+            verifiedAt: { type: 'string', format: 'date-time' },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        KycSession: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            investorId: { $ref: '#/components/schemas/UUID' },
+            provider: { type: 'string', enum: ['sumsub', 'onfido', 'jumio', 'manual'] },
+            externalId: { type: 'string' },
+            status: { type: 'string', enum: ['pending', 'in_progress', 'approved', 'rejected', 'expired'] },
+            levelRequested: { type: 'string' },
+            levelGranted: { type: 'string' },
+            verificationUrl: { type: 'string', format: 'uri' },
+            result: { type: 'object' },
+            completedAt: { type: 'string', format: 'date-time' },
+            expiresAt: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        // Transfer schemas
+        Transfer: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            tokenId: { $ref: '#/components/schemas/UUID' },
+            fromWallet: { $ref: '#/components/schemas/EthereumAddress' },
+            toWallet: { $ref: '#/components/schemas/EthereumAddress' },
+            fromInvestorId: { $ref: '#/components/schemas/UUID' },
+            toInvestorId: { $ref: '#/components/schemas/UUID' },
+            amount: { type: 'string', description: 'Amount in smallest unit (wei)' },
+            status: {
+              type: 'string',
+              enum: ['pending', 'prechecked', 'approved', 'signed', 'submitted', 'confirmed', 'reconciled', 'settled', 'failed', 'cancelled'],
+            },
+            decisionId: { $ref: '#/components/schemas/UUID' },
+            txHash: { $ref: '#/components/schemas/TransactionHash' },
+            blockNumber: { type: 'integer' },
+            idempotencyKey: { type: 'string' },
+            expiresAt: { type: 'string', format: 'date-time' },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        CreateTransferInput: {
+          type: 'object',
+          required: ['tokenId', 'fromWallet', 'toWallet', 'amount'],
+          properties: {
+            tokenId: { $ref: '#/components/schemas/UUID' },
+            fromWallet: { $ref: '#/components/schemas/EthereumAddress' },
+            toWallet: { $ref: '#/components/schemas/EthereumAddress' },
+            amount: { type: 'string', pattern: '^\\d+$', description: 'Amount in smallest unit' },
+            fromInvestorId: { $ref: '#/components/schemas/UUID' },
+            toInvestorId: { $ref: '#/components/schemas/UUID' },
+            idempotencyKey: { type: 'string', maxLength: 64 },
+            expiresAt: { type: 'string', format: 'date-time' },
+            metadata: { type: 'object' },
+          },
+        },
+        // DLD schemas
+        DldTitle: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            projectId: { $ref: '#/components/schemas/UUID' },
+            dldTitleNumber: { type: 'string' },
+            propertyType: { type: 'string', enum: ['land', 'building', 'unit'] },
+            emirate: { type: 'string' },
+            area: { type: 'string' },
+            plotNumber: { type: 'string' },
+            buildingName: { type: 'string' },
+            unitNumber: { type: 'string' },
+            status: { type: 'string', enum: ['pending', 'verified', 'disputed', 'expired'] },
+            verifiedAt: { type: 'string', format: 'date-time' },
+            propertyDetails: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        // Compliance schemas
+        Policy: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            name: { type: 'string' },
+            description: { type: 'string' },
+            type: { type: 'string', enum: ['transfer', 'issuance', 'redemption', 'freeze', 'force_transfer'] },
+            status: { type: 'string', enum: ['active', 'archived'] },
+            currentVersion: { type: 'integer' },
+            ruleset: { $ref: '#/components/schemas/Ruleset' },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        Ruleset: {
+          type: 'object',
+          required: ['version', 'rules'],
+          properties: {
+            version: { type: 'integer', minimum: 1 },
+            rules: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Rule' },
+            },
+            actions: {
+              type: 'object',
+              properties: {
+                onDeny: { type: 'array', items: { type: 'string' } },
+                onAllow: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          },
+        },
+        Rule: {
+          type: 'object',
+          required: ['id', 'type', 'field', 'op', 'value'],
+          properties: {
+            id: { type: 'string' },
+            type: { type: 'string', enum: ['require', 'limit', 'block', 'allow'] },
+            field: { type: 'string' },
+            op: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'not_in', 'contains', 'not_contains', 'regex'] },
+            value: {},
+            message: { type: 'string' },
+            code: { type: 'string' },
+          },
+        },
+        ComplianceDecision: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            type: { type: 'string', enum: ['transfer', 'issuance'] },
+            result: { type: 'string', enum: ['allow', 'deny'] },
+            reasons: { type: 'array', items: { type: 'string' } },
+            policyId: { $ref: '#/components/schemas/UUID' },
+            policyVersion: { type: 'integer' },
+            inputsHash: { type: 'string' },
+            signature: { type: 'string' },
+            subjectRef: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        // Webhook schemas
+        WebhookEndpoint: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            url: { type: 'string', format: 'uri' },
+            description: { type: 'string' },
+            events: { type: 'array', items: { type: 'string' } },
+            status: { type: 'string', enum: ['active', 'disabled'] },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        // Ledger schemas
+        LedgerPosition: {
+          type: 'object',
+          properties: {
+            tokenId: { $ref: '#/components/schemas/UUID' },
+            investorId: { $ref: '#/components/schemas/UUID' },
+            walletAddress: { $ref: '#/components/schemas/EthereumAddress' },
+            balance: { type: 'string' },
+            lockedBalance: { type: 'string' },
+            lastUpdated: { type: 'string', format: 'date-time' },
+          },
+        },
+        CapTableSnapshot: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            tokenId: { $ref: '#/components/schemas/UUID' },
+            snapshotDate: { type: 'string', format: 'date-time' },
+            totalSupply: { type: 'string' },
+            holderCount: { type: 'integer' },
+            positions: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/LedgerPosition' },
+            },
+            hash: { type: 'string' },
+            metadata: { type: 'object' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        // Audit schemas
+        AuditLogEntry: {
+          type: 'object',
+          properties: {
+            id: { $ref: '#/components/schemas/UUID' },
+            orgId: { $ref: '#/components/schemas/UUID' },
+            actorId: { type: 'string' },
+            actorType: { type: 'string', enum: ['user', 'api_key', 'system', 'webhook'] },
+            action: { type: 'string' },
+            resourceType: { type: 'string' },
+            resourceId: { type: 'string' },
+            details: { type: 'object' },
+            previousHash: { type: 'string' },
+            hash: { type: 'string' },
+            timestamp: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+      responses: {
+        BadRequest: {
+          description: 'Bad Request - Validation error',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+            },
+          },
+        },
+        Unauthorized: {
+          description: 'Unauthorized - Missing or invalid API key',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+            },
+          },
+        },
+        NotFound: {
+          description: 'Not Found - Resource does not exist',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+            },
+          },
+        },
+        TooManyRequests: {
+          description: 'Too Many Requests - Rate limit exceeded',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+            },
+          },
+        },
+      },
+      parameters: {
+        limitParam: {
+          name: 'limit',
+          in: 'query',
+          description: 'Maximum number of items to return',
+          schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+        offsetParam: {
+          name: 'offset',
+          in: 'query',
+          description: 'Number of items to skip',
+          schema: { type: 'integer', minimum: 0, default: 0 },
+        },
+      },
+    },
+    security: [{ ApiKeyAuth: [] }],
+  },
+  apis: ['./src/routes/*.ts'],
+};
+
+export const swaggerSpec = swaggerJsdoc(options);
+
+export default swaggerSpec;

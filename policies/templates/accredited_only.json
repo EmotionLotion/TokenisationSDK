@@ -1,0 +1,25 @@
+{
+  "name": "Accredited Investors Only Template",
+  "version": 1,
+  "description": "Restricts transfers to accredited/qualified investors only. Use for securities-like tokens.",
+  "rules": [
+    {
+      "id": "accredited_status",
+      "type": "require",
+      "field": "investor.type",
+      "op": "in",
+      "value": ["accredited", "qualified", "institutional"],
+      "message": "This token is restricted to accredited/qualified investors",
+      "code": "NOT_ACCREDITED"
+    },
+    {
+      "id": "accreditation_verified",
+      "type": "require",
+      "field": "investor.accreditationVerified",
+      "op": "eq",
+      "value": true,
+      "message": "Accreditation status must be verified",
+      "code": "ACCREDITATION_NOT_VERIFIED"
+    }
+  ]
+}

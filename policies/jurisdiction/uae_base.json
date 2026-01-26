@@ -1,0 +1,80 @@
+{
+  "name": "UAE Base Policy",
+  "version": 1,
+  "jurisdiction": "AE",
+  "description": "Base compliance rules for UAE-domiciled assets. Applies to all asset types in UAE jurisdiction.",
+  "rules": [
+    {
+      "id": "kyc_required",
+      "type": "require",
+      "field": "investor.kycStatus",
+      "op": "eq",
+      "value": "approved",
+      "message": "KYC verification required for UAE investments",
+      "code": "KYC_REQUIRED"
+    },
+    {
+      "id": "kyc_not_expired",
+      "type": "require",
+      "field": "investor.kycStatus",
+      "op": "neq",
+      "value": "expired",
+      "message": "KYC verification has expired",
+      "code": "KYC_EXPIRED"
+    },
+    {
+      "id": "sanctioned_countries",
+      "type": "block",
+      "field": "investor.countryCode",
+      "op": "in",
+      "value": ["KP", "IR", "SY", "CU", "RU", "BY"],
+      "message": "Investments from sanctioned countries are prohibited",
+      "code": "SANCTIONED_COUNTRY"
+    },
+    {
+      "id": "account_not_blocked",
+      "type": "require",
+      "field": "investor.status",
+      "op": "neq",
+      "value": "blocked",
+      "message": "Investor account is blocked",
+      "code": "ACCOUNT_BLOCKED"
+    },
+    {
+      "id": "account_not_suspended",
+      "type": "require",
+      "field": "investor.status",
+      "op": "neq",
+      "value": "suspended",
+      "message": "Investor account is suspended",
+      "code": "ACCOUNT_SUSPENDED"
+    },
+    {
+      "id": "token_not_paused",
+      "type": "require",
+      "field": "token.status",
+      "op": "neq",
+      "value": "paused",
+      "message": "Token transfers are currently paused",
+      "code": "TOKEN_PAUSED"
+    },
+    {
+      "id": "token_not_frozen",
+      "type": "require",
+      "field": "token.status",
+      "op": "neq",
+      "value": "frozen",
+      "message": "Token is frozen by compliance action",
+      "code": "TOKEN_FROZEN"
+    }
+  ],
+  "actions": {
+    "onDeny": ["log_decision", "notify_compliance", "emit_event"],
+    "onAllow": ["log_decision"]
+  },
+  "metadata": {
+    "author": "AHOY Compliance",
+    "lastUpdated": "2024-01-01",
+    "regulatoryBasis": ["UAE Federal Law No. 4 of 2022", "SCA Regulations"]
+  }
+}

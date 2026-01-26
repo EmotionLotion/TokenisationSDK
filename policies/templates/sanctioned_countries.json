@@ -1,0 +1,38 @@
+{
+  "name": "Sanctioned Countries Block Template",
+  "version": 1,
+  "description": "Blocks transfers involving sanctioned countries. Based on OFAC, EU, and UN sanctions lists.",
+  "rules": [
+    {
+      "id": "ofac_sanctions",
+      "type": "block",
+      "field": "investor.countryCode",
+      "op": "in",
+      "value": ["KP", "IR", "SY", "CU"],
+      "message": "Transfers prohibited for OFAC-sanctioned countries",
+      "code": "OFAC_SANCTIONED"
+    },
+    {
+      "id": "eu_sanctions",
+      "type": "block",
+      "field": "investor.countryCode",
+      "op": "in",
+      "value": ["RU", "BY"],
+      "message": "Transfers prohibited under EU sanctions",
+      "code": "EU_SANCTIONED"
+    },
+    {
+      "id": "high_risk_jurisdictions",
+      "type": "block",
+      "field": "investor.countryCode",
+      "op": "in",
+      "value": ["AF", "MM", "VE", "YE", "LY", "SO", "SD", "SS"],
+      "message": "High-risk jurisdiction - manual review required",
+      "code": "HIGH_RISK_JURISDICTION"
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "2024-01-01",
+    "sources": ["OFAC SDN", "EU Consolidated List", "UN Security Council"]
+  }
+}

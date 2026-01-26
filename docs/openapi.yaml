@@ -1,0 +1,1020 @@
+openapi: 3.1.0
+info:
+  title: Tokenisation Platform API
+  description: |
+    API for managing security token issuance, compliance, and distribution.
+
+    ## Authentication
+    All endpoints require authentication via Bearer token in the Authorization header.
+
+    ## Rate Limits
+    - Standard tier: 100 requests per minute
+    - Premium tier: 1000 requests per minute
+
+    ## Webhooks
+    Configure webhooks in the dashboard to receive real-time notifications for:
+    - Token transfers
+    - KYC status changes
+    - Dividend distributions
+    - Compliance events
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@tokenisation.example.com
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: https://api.tokenisation.example.com/v1
+    description: Production
+  - url: https://api-staging.tokenisation.example.com/v1
+    description: Staging
+  - url: http://localhost:3000/v1
+    description: Local Development
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Tokens
+    description: Security token management
+  - name: Identity
+    description: Investor identity and KYC management
+  - name: Compliance
+    description: Compliance rules and verification
+  - name: Dividends
+    description: Dividend distribution management
+  - name: Documents
+    description: Document storage and verification
+  - name: Oracle
+    description: Price feeds and oracle data
+  - name: Health
+    description: System health and monitoring
+
+paths:
+  # ==================== AUTHENTICATION ====================
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  refreshToken:
+                    type: string
+                  expiresIn:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  expiresIn:
+                    type: integer
+
+  # ==================== TOKENS ====================
+  /tokens:
+    get:
+      tags: [Tokens]
+      summary: List all tokens
+      operationId: listTokens
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/chainId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: List of tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Token'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags: [Tokens]
+      summary: Deploy a new security token
+      operationId: createToken
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTokenRequest'
+      responses:
+        '201':
+          description: Token deployment initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenDeployment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /tokens/{tokenId}:
+    get:
+      tags: [Tokens]
+      summary: Get token details
+      operationId: getToken
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tokens/{tokenId}/mint:
+    post:
+      tags: [Tokens]
+      summary: Mint tokens to an address
+      operationId: mintTokens
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, amount]
+              properties:
+                to:
+                  type: string
+                  description: Recipient address
+                amount:
+                  type: string
+                  description: Amount to mint (in wei)
+      responses:
+        '200':
+          description: Mint transaction initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+
+  /tokens/{tokenId}/transfer:
+    post:
+      tags: [Tokens]
+      summary: Transfer tokens
+      operationId: transferTokens
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to, amount]
+              properties:
+                from:
+                  type: string
+                to:
+                  type: string
+                amount:
+                  type: string
+      responses:
+        '200':
+          description: Transfer transaction initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+
+  /tokens/{tokenId}/holders:
+    get:
+      tags: [Tokens]
+      summary: List token holders
+      operationId: listHolders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: List of holders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TokenHolder'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ==================== IDENTITY ====================
+  /identity/register:
+    post:
+      tags: [Identity]
+      summary: Register investor identity
+      operationId: registerIdentity
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterIdentityRequest'
+      responses:
+        '201':
+          description: Identity registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+
+  /identity/{address}:
+    get:
+      tags: [Identity]
+      summary: Get identity by address
+      operationId: getIdentity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Identity details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /identity/{address}/verify:
+    get:
+      tags: [Identity]
+      summary: Check if identity is verified
+      operationId: verifyIdentity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verification status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
+                  kycLevel:
+                    type: integer
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+  # ==================== KYC ====================
+  /kyc/session:
+    post:
+      tags: [Identity]
+      summary: Create KYC verification session
+      operationId: createKycSession
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [applicantId, level]
+              properties:
+                applicantId:
+                  type: string
+                level:
+                  type: string
+                  enum: [basic, standard, enhanced]
+                redirectUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: KYC session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  sessionUrl:
+                    type: string
+                    format: uri
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+  /kyc/webhook:
+    post:
+      tags: [Identity]
+      summary: KYC provider webhook
+      operationId: kycWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  # ==================== COMPLIANCE ====================
+  /compliance/check:
+    post:
+      tags: [Compliance]
+      summary: Check transfer compliance
+      operationId: checkCompliance
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to, amount, tokenId]
+              properties:
+                from:
+                  type: string
+                to:
+                  type: string
+                amount:
+                  type: string
+                tokenId:
+                  type: string
+      responses:
+        '200':
+          description: Compliance check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  compliant:
+                    type: boolean
+                  violations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rule:
+                          type: string
+                        message:
+                          type: string
+
+  /compliance/sanctions/screen:
+    post:
+      tags: [Compliance]
+      summary: Screen address for sanctions
+      operationId: screenSanctions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address:
+                  type: string
+                name:
+                  type: string
+                country:
+                  type: string
+      responses:
+        '200':
+          description: Screening result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  screened:
+                    type: boolean
+                  matches:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source:
+                          type: string
+                        name:
+                          type: string
+                        matchScore:
+                          type: number
+
+  # ==================== DIVIDENDS ====================
+  /dividends:
+    get:
+      tags: [Dividends]
+      summary: List dividends
+      operationId: listDividends
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tokenId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: List of dividends
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dividend'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags: [Dividends]
+      summary: Declare a dividend
+      operationId: declareDividend
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclareDividendRequest'
+      responses:
+        '201':
+          description: Dividend declared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dividend'
+
+  /dividends/{dividendId}/claim:
+    post:
+      tags: [Dividends]
+      summary: Claim dividend
+      operationId: claimDividend
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dividendId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Claim transaction initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+
+  # ==================== DOCUMENTS ====================
+  /documents/upload-url:
+    post:
+      tags: [Documents]
+      summary: Generate presigned upload URL
+      operationId: generateUploadUrl
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType]
+              properties:
+                fileName:
+                  type: string
+                contentType:
+                  type: string
+                storageProvider:
+                  type: string
+                  enum: [s3, ipfs]
+                  default: s3
+      responses:
+        '200':
+          description: Upload URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadUrl:
+                    type: string
+                    format: uri
+                  documentUri:
+                    type: string
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+  /documents/{documentId}/download-url:
+    get:
+      tags: [Documents]
+      summary: Generate download URL
+      operationId: generateDownloadUrl
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Download URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downloadUrl:
+                    type: string
+                    format: uri
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+  # ==================== ORACLE ====================
+  /oracle/prices/{pair}:
+    get:
+      tags: [Oracle]
+      summary: Get price for trading pair
+      operationId: getPrice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pair
+          in: path
+          required: true
+          schema:
+            type: string
+          example: ETH/USD
+      responses:
+        '200':
+          description: Price data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pair:
+                    type: string
+                  price:
+                    type: string
+                  decimals:
+                    type: integer
+                  updatedAt:
+                    type: string
+                    format: date-time
+
+  # ==================== HEALTH ====================
+  /health:
+    get:
+      tags: [Health]
+      summary: System health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: liveness
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [live]
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      operationId: readiness
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ready]
+        '503':
+          description: Service is not ready
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      operationId: metrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    chainId:
+      name: chainId
+      in: query
+      description: Blockchain chain ID
+      schema:
+        type: integer
+        example: 1
+    page:
+      name: page
+      in: query
+      description: Page number
+      schema:
+        type: integer
+        default: 1
+    limit:
+      name: limit
+      in: query
+      description: Items per page
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        symbol:
+          type: string
+        decimals:
+          type: integer
+        address:
+          type: string
+        chainId:
+          type: integer
+        totalSupply:
+          type: string
+        holderCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateTokenRequest:
+      type: object
+      required: [name, symbol, chainId]
+      properties:
+        name:
+          type: string
+        symbol:
+          type: string
+        decimals:
+          type: integer
+          default: 18
+        chainId:
+          type: integer
+        initialSupply:
+          type: string
+        compliance:
+          type: object
+          properties:
+            maxHolders:
+              type: integer
+            countryRestrictions:
+              type: array
+              items:
+                type: string
+            minKycLevel:
+              type: integer
+
+    TokenDeployment:
+      type: object
+      properties:
+        deploymentId:
+          type: string
+        status:
+          type: string
+          enum: [pending, deploying, deployed, failed]
+        transactionHash:
+          type: string
+        tokenAddress:
+          type: string
+
+    TokenHolder:
+      type: object
+      properties:
+        address:
+          type: string
+        balance:
+          type: string
+        percentage:
+          type: number
+        verified:
+          type: boolean
+
+    Transaction:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        transactionHash:
+          type: string
+        chainId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+        blockNumber:
+          type: integer
+        gasUsed:
+          type: string
+
+    Identity:
+      type: object
+      properties:
+        address:
+          type: string
+        countryCode:
+          type: string
+        kycLevel:
+          type: integer
+        verified:
+          type: boolean
+        accredited:
+          type: boolean
+        frozen:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    RegisterIdentityRequest:
+      type: object
+      required: [address, countryCode]
+      properties:
+        address:
+          type: string
+        countryCode:
+          type: string
+        identityAddress:
+          type: string
+
+    Dividend:
+      type: object
+      properties:
+        id:
+          type: string
+        tokenId:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        recordDate:
+          type: string
+          format: date-time
+        paymentDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [declared, distributing, completed]
+        totalClaimed:
+          type: string
+        claimsCount:
+          type: integer
+
+    DeclareDividendRequest:
+      type: object
+      required: [tokenId, amount, paymentCurrency, recordDate, paymentDate]
+      properties:
+        tokenId:
+          type: string
+        amount:
+          type: string
+        paymentCurrency:
+          type: string
+        recordDate:
+          type: string
+          format: date-time
+        paymentDate:
+          type: string
+          format: date-time
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+              latencyMs:
+                type: number
+              message:
+                type: string
+
+security:
+  - bearerAuth: []

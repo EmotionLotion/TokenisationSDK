@@ -1,0 +1,398 @@
+/**
+ * API Client for AHOY Platform
+ *
+ * HTTP client with JWT authentication for communicating with the backend API server.
+ */
+
+export interface ApiClientConfig {
+  baseUrl: string;
+  getToken?: () => string | null;
+  onTokenExpired?: () => void;
+}
+
+export interface ApiResponse<T = unknown> {
+  data: T;
+  status: number;
+}
+
+export interface ApiError {
+  message: string;
+  code: string;
+  status: number;
+}
+
+export class ApiClient {
+  private baseUrl: string;
+  private getToken: () => string | null;
+  private onTokenExpired: () => void;
+
+  constructor(config: ApiClientConfig) {
+    this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
+    this.getToken = config.getToken || (() => null);
+    this.onTokenExpired = config.onTokenExpired || (() => {});
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: RequestInit
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const token = this.getToken();
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...((options?.headers as Record<string, string>) || {}),
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      ...options,
+    });
+
+    // Handle token expiration
+    if (response.status === 401) {
+      const error = await response.json().catch(() => ({}));
+      if (error.code === 'TOKEN_EXPIRED' || error.message?.includes('expired')) {
+        this.onTokenExpired();
+      }
+      throw new Error(error.message || 'Unauthorized');
+    }
+
+    // Handle other errors
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Request failed' }));
+      throw new Error(error.error?.message || error.message || `Request failed with status ${response.status}`);
+    }
+
+    // Return empty object for 204 No Content
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    return response.json();
+  }
+
+  // HTTP methods
+  async get<T>(path: string, params?: Record<string, string>): Promise<T> {
+    const queryString = params
+      ? '?' + new URLSearchParams(params).toString()
+      : '';
+    return this.request<T>('GET', path + queryString);
+  }
+
+  async post<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('POST', path, body);
+  }
+
+  async patch<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PATCH', path, body);
+  }
+
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PUT', path, body);
+  }
+
+  async delete<T>(path: string): Promise<T> {
+    return this.request<T>('DELETE', path);
+  }
+
+  // Auth-specific methods
+  async getNonce(address: string): Promise<{ nonce: string; expiresAt: string }> {
+    return this.post('/api/v1/auth/siwe/nonce', { address });
+  }
+
+  async verifySiwe(message: string, signature: string): Promise<{
+    token: string;
+    refreshToken: string;
+    party: {
+      id: string;
+      name: string;
+      type: string;
+      roles: string[];
+      jurisdiction: string;
+      verificationLevel: string;
+      kycVerified: boolean;
+    };
+  }> {
+    return this.post('/api/v1/auth/siwe/verify', { message, signature });
+  }
+
+  async refreshToken(refreshToken: string): Promise<{
+    token: string;
+    refreshToken: string;
+  }> {
+    return this.post('/api/v1/auth/refresh', { refreshToken });
+  }
+
+  async logout(): Promise<{ success: boolean }> {
+    return this.post('/api/v1/auth/logout');
+  }
+
+  async getMe(): Promise<{
+    party: {
+      id: string;
+      name: string;
+      type: string;
+      roles: string[];
+      jurisdiction: string;
+      verificationLevel: string;
+      kycVerified: boolean;
+      accreditedInvestor: boolean;
+      isFrozen: boolean;
+    };
+    wallets: Array<{
+      address: string;
+      chainId: number;
+      isPrimary: boolean;
+      verified: boolean;
+    }>;
+  }> {
+    return this.get('/api/v1/auth/me');
+  }
+
+  // Party methods
+  async getParties(params?: {
+    page?: number;
+    limit?: number;
+    type?: string;
+    jurisdiction?: string;
+    search?: string;
+  }): Promise<{
+    parties: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.get('/api/v1/parties', params as any);
+  }
+
+  async getParty(id: string): Promise<any> {
+    return this.get(`/api/v1/parties/${id}`);
+  }
+
+  async createParty(data: {
+    name: string;
+    type: string;
+    roles?: string[];
+    jurisdiction: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<any> {
+    return this.post('/api/v1/parties', data);
+  }
+
+  async updateParty(id: string, data: Partial<{
+    name: string;
+    roles: string[];
+    jurisdiction: string;
+    metadata: Record<string, unknown>;
+  }>): Promise<any> {
+    return this.patch(`/api/v1/parties/${id}`, data);
+  }
+
+  async updateKyc(partyId: string, data: {
+    verified: boolean;
+    expiryDate?: string;
+    verificationLevel?: string;
+    accreditedInvestor?: boolean;
+  }): Promise<any> {
+    return this.post(`/api/v1/parties/${partyId}/kyc`, data);
+  }
+
+  async freezeParty(partyId: string, reason?: string): Promise<any> {
+    return this.post(`/api/v1/parties/${partyId}/freeze`, { reason });
+  }
+
+  async unfreezeParty(partyId: string): Promise<any> {
+    return this.post(`/api/v1/parties/${partyId}/unfreeze`);
+  }
+
+  // Asset methods
+  async getAssets(params?: {
+    page?: number;
+    limit?: number;
+    state?: string;
+    rightType?: string;
+    issuerId?: string;
+    search?: string;
+  }): Promise<{
+    assets: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.get('/api/v1/assets', params as any);
+  }
+
+  async getAsset(id: string): Promise<any> {
+    return this.get(`/api/v1/assets/${id}`);
+  }
+
+  async createAsset(data: any): Promise<any> {
+    return this.post('/api/v1/assets', data);
+  }
+
+  async updateAsset(id: string, data: any): Promise<any> {
+    return this.patch(`/api/v1/assets/${id}`, data);
+  }
+
+  async transitionAsset(id: string, toState: string, reason?: string): Promise<{
+    asset: any;
+    event: any;
+  }> {
+    return this.post(`/api/v1/assets/${id}/transition`, { toState, reason });
+  }
+
+  async deleteAsset(id: string): Promise<{ success: boolean }> {
+    return this.delete(`/api/v1/assets/${id}`);
+  }
+
+  // Token methods
+  async getBalances(assetId: string): Promise<{
+    assetId: string;
+    balances: Record<string, { balance: string; holderName: string; holderType: string }>;
+    totalSupply: string;
+  }> {
+    return this.get(`/api/v1/tokens/${assetId}/balances`);
+  }
+
+  async getBalance(assetId: string, holderId: string): Promise<{
+    assetId: string;
+    holderId: string;
+    balance: string;
+  }> {
+    return this.get(`/api/v1/tokens/${assetId}/balance/${holderId}`);
+  }
+
+  async mint(assetId: string, to: string, amount: string): Promise<{
+    success: boolean;
+    txHash: string;
+    event: any;
+    newBalance: string;
+  }> {
+    return this.post(`/api/v1/tokens/${assetId}/mint`, { to, amount });
+  }
+
+  async transfer(assetId: string, from: string, to: string, amount: string): Promise<{
+    success: boolean;
+    txHash: string;
+    event: any;
+    fromBalance: string;
+    toBalance: string;
+  }> {
+    return this.post(`/api/v1/tokens/${assetId}/transfer`, { from, to, amount });
+  }
+
+  async burn(assetId: string, from: string, amount: string): Promise<{
+    success: boolean;
+    txHash: string;
+    event: any;
+    newBalance: string;
+  }> {
+    return this.post(`/api/v1/tokens/${assetId}/burn`, { from, amount });
+  }
+
+  // Event methods
+  async getEvents(params?: {
+    page?: number;
+    limit?: number;
+    assetId?: string;
+    types?: string;
+    from?: string;
+    to?: string;
+    actorId?: string;
+  }): Promise<{
+    events: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.get('/api/v1/events', params as any);
+  }
+
+  async getEvent(id: string): Promise<any> {
+    return this.get(`/api/v1/events/${id}`);
+  }
+
+  async getAssetEvents(assetId: string, params?: {
+    page?: number;
+    limit?: number;
+    types?: string;
+  }): Promise<{
+    events: any[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.get(`/api/v1/events/asset/${assetId}`, params as any);
+  }
+
+  async createEvent(event: {
+    type: string;
+    assetId: string;
+    payload?: Record<string, unknown>;
+  }): Promise<any> {
+    return this.post('/api/v1/events', event);
+  }
+
+  // Chain methods
+  async getChains(): Promise<{
+    chains: Array<{
+      chainId: number;
+      name: string;
+      rpcUrl: string;
+      explorerUrl: string;
+      nativeCurrency: {
+        name: string;
+        symbol: string;
+        decimals: number;
+      };
+      isDefault: boolean;
+      isTestnet: boolean;
+    }>;
+  }> {
+    return this.get('/api/v1/chains');
+  }
+
+  async getChain(chainId: number): Promise<any> {
+    return this.get(`/api/v1/chains/${chainId}`);
+  }
+
+  async getChainDeployments(chainId: number): Promise<{ deployments: any[] }> {
+    return this.get(`/api/v1/chains/${chainId}/deployments`);
+  }
+
+  async getAssetDeployments(assetId: string): Promise<{ deployments: any[] }> {
+    return this.get(`/api/v1/chains/asset/${assetId}`);
+  }
+
+  async createDeployment(chainId: number, data: {
+    assetId: string;
+    contractType: string;
+    contractAddress: string;
+    deployTxHash?: string;
+    deployerAddress?: string;
+    abi?: any[];
+  }): Promise<any> {
+    return this.post(`/api/v1/chains/${chainId}/deployments`, data);
+  }
+
+  async getCCIPLanes(): Promise<{
+    lanes: Array<{
+      source: number;
+      dest: number;
+      name: string;
+    }>;
+  }> {
+    return this.get('/api/v1/chains/ccip/lanes');
+  }
+}
+
+export default ApiClient;

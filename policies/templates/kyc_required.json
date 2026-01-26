@@ -1,0 +1,25 @@
+{
+  "name": "KYC Required Template",
+  "version": 1,
+  "description": "Reusable template requiring KYC verification. Include in any policy that needs identity verification.",
+  "rules": [
+    {
+      "id": "kyc_approved",
+      "type": "require",
+      "field": "investor.kycStatus",
+      "op": "eq",
+      "value": "approved",
+      "message": "KYC verification is required",
+      "code": "KYC_REQUIRED"
+    },
+    {
+      "id": "kyc_not_expired",
+      "type": "require",
+      "field": "investor.kycStatus",
+      "op": "neq",
+      "value": "expired",
+      "message": "KYC verification has expired, please re-verify",
+      "code": "KYC_EXPIRED"
+    }
+  ]
+}

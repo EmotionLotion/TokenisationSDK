@@ -1,0 +1,12 @@
+{
+    "name": "tokenisation-platform",
+    "private": true,
+    "workspaces": [
+        "sdk",
+        "server",
+        "packages/*"
+    ],
+    "scripts": {
+        "test:conformance": "npm run test --workspace=@tokenisation/conformance-suite"
+    }
+}

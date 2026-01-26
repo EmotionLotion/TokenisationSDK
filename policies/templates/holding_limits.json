@@ -1,0 +1,43 @@
+{
+  "name": "Holding Limits Template",
+  "version": 1,
+  "description": "Configurable holding limits. Override 'value' fields when composing policies.",
+  "rules": [
+    {
+      "id": "max_holding_percent",
+      "type": "limit",
+      "field": "transfer.resultingBalancePercent",
+      "op": "lte",
+      "value": 10,
+      "message": "Maximum holding is 10% of total supply",
+      "code": "EXCEEDS_MAX_PERCENT"
+    },
+    {
+      "id": "max_holding_absolute",
+      "type": "limit",
+      "field": "transfer.resultingBalance",
+      "op": "lte",
+      "value": "100000000000000000000000",
+      "message": "Maximum holding is 100,000 tokens",
+      "code": "EXCEEDS_MAX_HOLDING"
+    },
+    {
+      "id": "min_holding",
+      "type": "limit",
+      "field": "transfer.resultingBalance",
+      "op": "gte",
+      "value": "1000000000000000000",
+      "message": "Minimum holding is 1 token",
+      "code": "BELOW_MINIMUM"
+    },
+    {
+      "id": "max_investor_count",
+      "type": "limit",
+      "field": "token.holderCount",
+      "op": "lte",
+      "value": 500,
+      "message": "Maximum number of investors reached",
+      "code": "MAX_INVESTORS_REACHED"
+    }
+  ]
+}

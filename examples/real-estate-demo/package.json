@@ -1,0 +1,19 @@
+{
+  "name": "real-estate-tokenization-demo",
+  "version": "1.0.0",
+  "description": "Demo app showing how to tokenize real estate using the Tokenisation SDK",
+  "type": "module",
+  "scripts": {
+    "demo": "npx tsx src/index.ts",
+    "demo:realestate": "npx tsx src/real-estate.ts",
+    "demo:carbon": "npx tsx src/carbon-credits.ts",
+    "demo:loyalty": "npx tsx src/loyalty-points.ts"
+  },
+  "dependencies": {
+    "@tokenisation/sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

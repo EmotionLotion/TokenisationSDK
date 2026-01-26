@@ -1,0 +1,19 @@
+{
+  "name": "@ahoy/conformance-tests",
+  "version": "1.0.0",
+  "description": "AHOY Tokenisation SDK Conformance Test Suite",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:conformance": "vitest run --reporter=verbose conformance/",
+    "test:golden": "vitest run --reporter=verbose golden-flows/",
+    "test:all": "vitest run --reporter=verbose",
+    "report": "vitest run --reporter=json --outputFile=results/report.json"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "ethers": "^6.9.0",
+    "zod": "^3.22.0"
+  }
+}

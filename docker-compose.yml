@@ -1,0 +1,224 @@
+version: "3.8"
+
+# =============================================================================
+# AHOY Tokenisation SDK - Docker Sandbox
+# =============================================================================
+# Usage:
+#   docker-compose up -d          # Start all services
+#   docker-compose logs -f api    # Follow API logs
+#   docker-compose down -v        # Stop and remove volumes
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Local Ethereum Node (Anvil/Hardhat)
+  # ---------------------------------------------------------------------------
+  chain:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: ahoy-chain
+    command: >
+      anvil
+      --host 0.0.0.0
+      --port 8545
+      --chain-id 31337
+      --accounts 10
+      --balance 10000
+      --block-time 1
+      --gas-limit 30000000
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ahoy-network
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: ahoy-postgres
+    environment:
+      POSTGRES_USER: ahoy
+      POSTGRES_PASSWORD: ahoy_dev_password
+      POSTGRES_DB: ahoy_tokenisation
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ahoy -d ahoy_tokenisation"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ahoy-network
+
+  # ---------------------------------------------------------------------------
+  # Redis (Event Bus + Caching)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ahoy-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ahoy-network
+
+  # ---------------------------------------------------------------------------
+  # AHOY API Server
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: ahoy-api
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+
+      # Database
+      DATABASE_URL: postgresql://ahoy:ahoy_dev_password@postgres:5432/ahoy_tokenisation
+      DB_MODE: postgres
+
+      # Redis
+      REDIS_URL: redis://redis:6379
+
+      # Chain
+      RPC_URL: http://chain:8545
+      CHAIN_ID: 31337
+
+      # Auth
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      API_KEY_PREFIX: ak_test_
+
+      # Features
+      ENABLE_MOCK_KYC: "true"
+      ENABLE_SANDBOX: "true"
+      LOG_LEVEL: debug
+      LOG_REQUEST_BODY: "true"
+
+      # CORS
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chain:
+        condition: service_healthy
+    volumes:
+      - ./server/src:/app/src:ro
+      - ./policies:/app/policies:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ahoy-network
+
+  # ---------------------------------------------------------------------------
+  # Contract Deployer (runs once on startup)
+  # ---------------------------------------------------------------------------
+  deployer:
+    build:
+      context: ./contracts
+      dockerfile: Dockerfile
+    container_name: ahoy-deployer
+    environment:
+      RPC_URL: http://chain:8545
+      CHAIN_ID: 31337
+      DEPLOYER_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      DEPLOY_OUTPUT: /deployments/addresses.json
+    volumes:
+      - deployments:/deployments
+      - ./contracts:/app:ro
+    depends_on:
+      chain:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for chain...' &&
+        sleep 5 &&
+        forge script script/Deploy.s.sol --rpc-url $$RPC_URL --broadcast --private-key $$DEPLOYER_PRIVATE_KEY &&
+        echo 'Contracts deployed!' &&
+        cp -r broadcast/Deploy.s.sol/31337/run-latest.json /deployments/addresses.json 2>/dev/null || true
+      "
+    networks:
+      - ahoy-network
+
+  # ---------------------------------------------------------------------------
+  # Test Runner (conformance suite)
+  # ---------------------------------------------------------------------------
+  tests:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile
+    container_name: ahoy-tests
+    environment:
+      API_URL: http://api:3001
+      RPC_URL: http://chain:8545
+      CHAIN_ID: 31337
+      TEST_API_KEY: ak_test_sandbox_key_12345
+    volumes:
+      - ./tests:/app:ro
+      - test_results:/app/results
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - test
+    command: ["npm", "run", "test:conformance"]
+    networks:
+      - ahoy-network
+
+  # ---------------------------------------------------------------------------
+  # UI Dashboard (optional)
+  # ---------------------------------------------------------------------------
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: ahoy-ui
+    environment:
+      VITE_API_URL: http://localhost:3001
+      VITE_CHAIN_ID: 31337
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    profiles:
+      - ui
+    networks:
+      - ahoy-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  ahoy-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+  redis_data:
+  deployments:
+  test_results:

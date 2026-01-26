@@ -1,0 +1,186 @@
+{
+  "name": "Tax Withholding Template",
+  "version": 1,
+  "description": "Reusable template for calculating and applying tax withholding on distributions. Supports multiple jurisdictions with configurable rates.",
+  "withholdingRules": [
+    {
+      "id": "uae_no_withholding",
+      "jurisdictions": ["AE", "BH", "QA", "KW", "OM"],
+      "description": "GCC countries - No withholding tax on dividends",
+      "rates": {
+        "DIVIDEND": 0,
+        "INTEREST": 0,
+        "ROYALTY": 0,
+        "RENT": 0,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [],
+      "exemptions": []
+    },
+    {
+      "id": "us_withholding",
+      "jurisdictions": ["US"],
+      "description": "United States - Standard withholding rates",
+      "rates": {
+        "DIVIDEND": 30,
+        "INTEREST": 30,
+        "ROYALTY": 30,
+        "RENT": 30,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [
+        {
+          "field": "investor.taxTreatyCountry",
+          "op": "eq",
+          "value": true,
+          "rateOverride": {
+            "DIVIDEND": 15,
+            "INTEREST": 0,
+            "ROYALTY": 0
+          }
+        }
+      ],
+      "exemptions": [
+        {
+          "field": "investor.type",
+          "op": "eq",
+          "value": "qualified_intermediary",
+          "reason": "QI exempt from withholding"
+        },
+        {
+          "field": "investor.w8BenValid",
+          "op": "eq",
+          "value": true,
+          "rateOverride": {
+            "DIVIDEND": 15
+          }
+        }
+      ],
+      "forms": ["W-8BEN", "W-8BEN-E", "W-9"]
+    },
+    {
+      "id": "uk_withholding",
+      "jurisdictions": ["GB"],
+      "description": "United Kingdom - Withholding rates",
+      "rates": {
+        "DIVIDEND": 0,
+        "INTEREST": 20,
+        "ROYALTY": 20,
+        "RENT": 20,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [
+        {
+          "field": "investor.ukResident",
+          "op": "eq",
+          "value": true,
+          "rateOverride": {
+            "INTEREST": 0
+          }
+        }
+      ],
+      "exemptions": []
+    },
+    {
+      "id": "eu_withholding",
+      "jurisdictions": ["DE", "FR", "IT", "ES", "NL", "BE", "AT", "IE", "PT", "LU"],
+      "description": "European Union - Variable rates by country",
+      "rates": {
+        "DIVIDEND": 25,
+        "INTEREST": 0,
+        "ROYALTY": 0,
+        "RENT": 0,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [
+        {
+          "field": "investor.countryCode",
+          "op": "eq",
+          "value": "DE",
+          "rateOverride": {
+            "DIVIDEND": 26.375
+          }
+        },
+        {
+          "field": "investor.countryCode",
+          "op": "eq",
+          "value": "FR",
+          "rateOverride": {
+            "DIVIDEND": 30
+          }
+        }
+      ],
+      "exemptions": [
+        {
+          "field": "investor.type",
+          "op": "eq",
+          "value": "institutional",
+          "reason": "Institutional investors may claim exemption"
+        }
+      ]
+    },
+    {
+      "id": "sg_withholding",
+      "jurisdictions": ["SG"],
+      "description": "Singapore - No withholding on dividends",
+      "rates": {
+        "DIVIDEND": 0,
+        "INTEREST": 15,
+        "ROYALTY": 10,
+        "RENT": 0,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [],
+      "exemptions": []
+    },
+    {
+      "id": "hk_withholding",
+      "jurisdictions": ["HK"],
+      "description": "Hong Kong - No withholding tax",
+      "rates": {
+        "DIVIDEND": 0,
+        "INTEREST": 0,
+        "ROYALTY": 0,
+        "RENT": 0,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [],
+      "exemptions": []
+    },
+    {
+      "id": "default_withholding",
+      "jurisdictions": ["*"],
+      "description": "Default withholding for unlisted jurisdictions",
+      "rates": {
+        "DIVIDEND": 30,
+        "INTEREST": 30,
+        "ROYALTY": 30,
+        "RENT": 30,
+        "CAPITAL_GAIN": 0
+      },
+      "conditions": [],
+      "exemptions": []
+    }
+  ],
+  "processingRules": {
+    "roundingMode": "HALF_UP",
+    "decimalPlaces": 2,
+    "minimumWithholding": "0.01",
+    "currency": "distribution_currency",
+    "reportingRequired": true
+  },
+  "reporting": {
+    "generateAnnualStatement": true,
+    "forms": {
+      "US": ["1042-S", "1099-DIV"],
+      "GB": ["CT61"],
+      "DE": ["Steuerbescheinigung"],
+      "default": ["TAX_STATEMENT"]
+    }
+  },
+  "metadata": {
+    "author": "AHOY Compliance",
+    "lastUpdated": "2024-01-01",
+    "disclaimer": "Tax rates are indicative and should be verified with tax advisors. Treaty rates may apply based on investor documentation."
+  }
+}
