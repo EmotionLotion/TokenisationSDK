@@ -215,6 +215,7 @@ export * from './secrets/index.js';
 export * from './queue/index.js';
 export * from './audit/index.js';
 export * from './api/index.js';
+export * from './identity/index.js';
 
 // Re-export commonly used types from SDK
 export {
