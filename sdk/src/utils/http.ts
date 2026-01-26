@@ -22,6 +22,7 @@ export interface HttpClientConfig {
     retryDelay: number;
     retryOn: number[];
   };
+  defaultHeaders?: Record<string, string>;
 }
 
 export class HttpClient {
@@ -37,6 +38,7 @@ export class HttpClient {
         retryDelay: sdkConfig.retry?.retryDelay ?? 1000,
         retryOn: sdkConfig.retry?.retryOn ?? [408, 429, 500, 502, 503, 504],
       },
+      defaultHeaders: sdkConfig.defaultHeaders,
     };
   }
 
@@ -181,6 +183,7 @@ export class HttpClient {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'User-Agent': '@tokenisation/sdk/1.0.0',
+      ...this.config.defaultHeaders,
       ...custom,
     };
 

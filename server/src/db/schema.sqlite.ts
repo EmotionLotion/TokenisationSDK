@@ -35,12 +35,17 @@ export const partyWallets = sqliteTable('party_wallets', {
 // Assets table - Tokenized asset definitions
 export const assets = sqliteTable('assets', {
   id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id'),
+  projectId: text('project_id'),
   name: text('name').notNull(),
   description: text('description'),
+  titleDeedExternalId: text('title_deed_external_id'),
   rightType: text('right_type').notNull(), // OWNERSHIP, ACCESS, BEHAVIOR, VERIFICATION
   state: text('state').notNull().default('DRAFT'),
   issuerId: text('issuer_id').references(() => parties.id),
   jurisdiction: text('jurisdiction', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  attributes: text('attributes', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  verificationState: text('verification_state', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
   validityPeriod: text('validity_period', { mode: 'json' }).$type<Record<string, unknown>>(),
   transferabilityRules: text('transferability_rules', { mode: 'json' }).$type<Record<string, unknown>>(),
   metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),

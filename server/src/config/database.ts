@@ -133,12 +133,17 @@ function initSqliteSchema(database: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS assets (
       id TEXT PRIMARY KEY,
+      org_id TEXT,
+      project_id TEXT,
       name TEXT NOT NULL,
       description TEXT,
+      title_deed_external_id TEXT,
       right_type TEXT NOT NULL,
       state TEXT NOT NULL DEFAULT 'DRAFT',
       issuer_id TEXT REFERENCES parties(id),
       jurisdiction TEXT NOT NULL,
+      attributes TEXT DEFAULT '{}',
+      verification_state TEXT DEFAULT '{}',
       validity_period TEXT,
       transferability_rules TEXT,
       metadata TEXT DEFAULT '{}',

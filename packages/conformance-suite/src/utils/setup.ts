@@ -1,4 +1,5 @@
-import { createApiClient, ApiClient } from '@tokenisation/sdk';
+// Direct import from dist to avoid vitest resolution issues
+import { ApiClient } from '../../../../sdk/dist/ApiClient.js';
 import { JsonRpcProvider, Wallet } from 'ethers';
 import dotenv from 'dotenv';
 
@@ -12,11 +13,28 @@ export const TEST_CONFIG = {
 };
 
 export async function setupTestEnvironment() {
-    // 1. Initialize SDK Client
-    const client = new ApiClient({
-        apiKey: TEST_CONFIG.apiKey,
-        baseUrl: TEST_CONFIG.apiUrl,
-    });
+    console.log('Setting up test environment...');
+    console.log('API URL:', TEST_CONFIG.apiUrl);
+    console.log('RPC URL:', TEST_CONFIG.rpcUrl);
+
+    // 1. Initialize SDK Client with dev mode bypass headers
+    let client: ApiClient;
+    try {
+        client = new ApiClient({
+            apiKey: TEST_CONFIG.apiKey,
+            baseUrl: TEST_CONFIG.apiUrl,
+            defaultHeaders: {
+                // Dev mode bypass headers for local testing
+                'X-Dev-Org-Id': 'test-org',
+                'X-Dev-Party-Id': 'test-party',
+            },
+        });
+        console.log('Client created, has assets:', !!client.assets);
+        console.log('Client has tokens:', !!client.tokens);
+    } catch (e: any) {
+        console.error('Failed to create ApiClient:', e.message);
+        throw e;
+    }
 
     // 2. Initialize Chain Provider
     const provider = new JsonRpcProvider(TEST_CONFIG.rpcUrl);
@@ -25,9 +43,10 @@ export async function setupTestEnvironment() {
     // 3. Health Check
     try {
         const health = await client.healthCheck();
+        console.log('Health check result:', health);
         if (health.status !== 'ok') throw new Error('API not healthy');
-    } catch (e) {
-        console.warn('⚠️  API Health Check Failed (Ensure Docker is running)');
+    } catch (e: any) {
+        console.warn('⚠️  API Health Check Failed:', e.message);
     }
 
     return { client, provider, wallet };

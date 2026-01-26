@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { setupTestEnvironment, generateRandomString } from '../utils/setup.js';
-import { RightType } from '@tokenisation/sdk';
+import { RightType } from '../../../../sdk/dist/index.js';
 
 describe('Flow A: Asset Creation -> Token Issuance', () => {
     let ctx: Awaited<ReturnType<typeof setupTestEnvironment>>;

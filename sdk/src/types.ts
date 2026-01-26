@@ -20,6 +20,8 @@ export interface TokenizationSDKConfig {
     retryDelay: number;
     retryOn?: number[];
   };
+  /** Custom headers to include in all requests (useful for dev mode bypass) */
+  defaultHeaders?: Record<string, string>;
 }
 
 /**
