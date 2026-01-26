@@ -5,17 +5,16 @@
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)
-![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg)
+![Solidity](https://img.shields.io/badge/Solidity-0.8.22-363636.svg)
 ![ERC-3643](https://img.shields.io/badge/ERC--3643-Compliant-green.svg)
 
 **Enterprise-grade SDK for tokenizing real-world assets with built-in regulatory compliance.**
 
-[Quick Start](#-quick-start) •
-[Features](#-features) •
-[SDK Usage](#-sdk-usage) •
-[API Server](#-api-server) •
-[Architecture](#-architecture) •
-[Documentation](#-documentation)
+[Quick Start](#quick-start) |
+[SDK Usage](#sdk-usage) |
+[API Server](#api-server) |
+[Smart Contracts](#smart-contracts) |
+[Architecture](#architecture)
 
 </div>
 
@@ -31,7 +30,8 @@ The Tokenisation SDK is a complete toolkit for building compliant tokenized asse
 - **Multi-Standard Support** - ERC-20, ERC-721, ERC-1155, ERC-1410, ERC-4626, Soulbound Tokens
 - **Regulatory Ready** - KYC/AML verification, jurisdiction rules, investor accreditation, transfer restrictions
 - **Full-Stack Solution** - TypeScript SDK + REST API Server + React UI + Smart Contracts
-- **Multi-Chain** - Ethereum, Polygon, Base, and testnets
+- **Multi-Chain** - Ethereum, Polygon, Base, Arbitrum, and testnets
+- **Production Ready** - UUPS upgradeable proxies, multi-sig governance, rate limiting, idempotency
 
 ---
 
@@ -41,6 +41,7 @@ The Tokenisation SDK is a complete toolkit for building compliant tokenized asse
 
 - Node.js 18+
 - npm 9+
+- Foundry (for smart contract development)
 
 ### Installation
 
@@ -59,6 +60,9 @@ npm run build --workspace=sdk
 ### Start the API Server
 
 ```bash
+# Copy environment template
+cp server/.env.example server/.env
+
 # Development mode (SQLite - no external DB needed)
 cd server
 npm run dev
@@ -96,21 +100,34 @@ npm install @tokenisation/sdk
 
 ### Initialize the API Client
 
+The SDK provides a Stripe-like API client with resource modules:
+
 ```typescript
 import { ApiClient } from '@tokenisation/sdk';
 
+// API keys start with sk_ for secret keys
 const client = new ApiClient({
-  apiKey: 'your-api-key',
-  baseUrl: 'https://api.your-platform.com',
+  apiKey: 'sk_live_your-api-key',
+  baseUrl: 'https://api.your-platform.com', // optional, auto-detected from key
 });
+
+// Available modules:
+// client.projects   - Project management
+// client.assets     - Asset tokenization
+// client.investors  - Investor onboarding & KYC
+// client.tokens     - Token lifecycle & issuance
+// client.transfers  - Compliant transfers
+// client.compliance - Policy management
 ```
 
 ### Create an Asset
 
 ```typescript
+import { RightType } from '@tokenisation/sdk';
+
 const asset = await client.assets.create({
   name: 'Marina Heights Tower - Unit 1501',
-  rightType: 'OWNERSHIP',
+  rightType: RightType.OWNERSHIP,
   jurisdiction: {
     countryCode: 'AE',
     regulatoryFramework: 'DIFC',
@@ -123,7 +140,32 @@ const asset = await client.assets.create({
   },
 });
 
-console.log('Asset created:', asset.id);
+// Activate the asset for tokenization
+await client.assets.activate(asset.id);
+```
+
+### Onboard an Investor
+
+```typescript
+// Create investor record
+const investor = await client.investors.create({
+  email: 'investor@example.com',
+  name: 'John Doe',
+  jurisdiction: 'US',
+  type: 'individual',
+  accredited: true,
+});
+
+// Add a wallet
+const wallet = await client.investors.addWallet(investor.id, {
+  address: '0x1234567890abcdef1234567890abcdef12345678',
+  chainId: 8453, // Base
+  walletType: 'eoa',
+});
+
+// Complete KYC (or integrate with KYC provider)
+await client.investors.approveKyc(investor.id, 'Manual verification complete');
+await client.investors.activate(investor.id);
 ```
 
 ### Create and Deploy a Token
@@ -133,29 +175,46 @@ console.log('Asset created:', asset.id);
 const token = await client.tokens.create({
   name: 'Marina Heights Token',
   symbol: 'MHT',
-  totalSupply: '1000000000000000000000000', // 1M tokens (18 decimals)
+  decimals: 18,
+  maxSupply: '1000000000000000000000000', // 1M tokens
   chainId: 8453, // Base
-  standard: 'ERC3643',
-  complianceModules: ['identity', 'country', 'investor_type'],
+  assetId: asset.id,
 });
 
-// Deploy to blockchain
-const deployment = await client.tokens.deploy(token.id, {
-  deployerAddress: '0xYourDeployerAddress',
+// Deploy to blockchain (uses UUPS upgradeable proxy)
+const deployed = await client.tokens.deploy(token.id, {
+  identityRegistryAddress: '0x...', // optional
+  complianceAddress: '0x...',       // optional
 });
 
-console.log('Deployment TX:', deployment.transaction);
+console.log('Token deployed at:', deployed.contractAddress);
+```
+
+### Issue Tokens to Investors
+
+```typescript
+// Issue tokens - idempotencyKey is REQUIRED to prevent duplicates
+const issuance = await client.tokens.issue(token.id, {
+  investorId: investor.id,
+  walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+  amount: '1000000000000000000000', // 1000 tokens
+  idempotencyKey: 'issue-investor-123-batch-1', // unique key
+});
+
+console.log('Issuance status:', issuance.status);
 ```
 
 ### Transfer with Compliance Check
 
 ```typescript
 // Transfers automatically validate against compliance rules
+// idempotencyKey is REQUIRED to prevent duplicate transfers
 const transfer = await client.transfers.create({
   tokenId: token.id,
-  from: '0xSenderAddress',
-  to: '0xRecipientAddress',
+  fromWallet: '0xSenderAddress',
+  toWallet: '0xRecipientAddress',
   amount: '1000000000000000000', // 1 token
+  idempotencyKey: 'transfer-abc-123', // unique key for this transfer
 });
 
 // Transfer will fail if:
@@ -163,6 +222,22 @@ const transfer = await client.transfers.create({
 // - Recipient is in blocked jurisdiction
 // - Transfer exceeds holder limits
 // - Token is frozen or paused
+
+// Check transfer status
+const status = await client.transfers.getStatus(transfer.id);
+console.log('Current step:', status.currentStep);
+console.log('TX Hash:', status.txHash);
+```
+
+### Get Cap Table
+
+```typescript
+const capTable = await client.tokens.getCapTable(token.id);
+
+console.log('Total Supply:', capTable.totalSupply);
+for (const holder of capTable.holders) {
+  console.log(`${holder.walletAddress}: ${holder.balance} (${holder.percentage}%)`);
+}
 ```
 
 ---
@@ -185,6 +260,14 @@ const transfer = await client.transfers.create({
 
 The server provides a REST API for managing tokenized assets, with support for both PostgreSQL (production) and SQLite (development).
 
+### Development Setup
+
+```bash
+cd server
+cp .env.example .env
+npm run dev
+```
+
 ### Environment Variables
 
 ```bash
@@ -192,75 +275,204 @@ The server provides a REST API for managing tokenized assets, with support for b
 NODE_ENV=development
 PORT=3001
 
-# Database (PostgreSQL for production)
+# Database
+DB_MODE=sqlite                    # Use 'postgresql' for production
+SQLITE_PATH=./data/ahoy.db
 DATABASE_URL=postgres://user:pass@localhost:5432/tokenisation
 
-# Or use SQLite for development
-DB_MODE=sqlite
+# Authentication (CRITICAL for production)
+JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_EXPIRES_IN=7d
 
-# JWT Secret
-JWT_SECRET=your-secret-key
+# Development auth bypass (MUST be false in production!)
+AUTH_DEV_MODE=true
 
-# Blockchain RPC
-RPC_URL=https://mainnet.base.org
+# Redis (REQUIRED for production - distributed rate limiting)
+REDIS_URL=redis://localhost:6379
+
+# Blockchain RPC URLs
+BASE_RPC_URL=https://mainnet.base.org
+POLYGON_RPC_URL=https://polygon-rpc.com
+ETHEREUM_RPC_URL=https://eth.llamarpc.com
 ```
+
+### Production Security Requirements
+
+| Requirement | Development | Production |
+|-------------|-------------|------------|
+| `JWT_SECRET` | Any value | **32+ characters, cryptographically random** |
+| `AUTH_DEV_MODE` | `true` | **Must be `false`** (server refuses to start otherwise) |
+| `REDIS_URL` | Optional | **Required** for distributed rate limiting |
+| `NODE_ENV` | `development` | `production` |
 
 ### Key Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
+| `POST /api/v1/projects` | Create project |
 | `POST /api/v1/assets` | Create asset |
-| `GET /api/v1/assets/:id` | Get asset details |
-| `POST /api/v1/assets/:id/transition` | Change asset state |
+| `POST /api/v1/investors` | Create investor |
 | `POST /api/v1/tokens` | Create token |
 | `POST /api/v1/tokens/:id/deploy` | Deploy to chain |
-| `POST /api/v1/tokens/:id/issue` | Issue tokens to investor |
+| `POST /api/v1/tokens/:id/issue` | Issue tokens (requires idempotencyKey) |
+| `POST /api/v1/transfers` | Create transfer (requires idempotencyKey) |
 | `GET /api/v1/tokens/:id/cap-table` | Get cap table |
+| `POST /api/v1/compliance/policies` | Create compliance policy |
 | `GET /api/v1/health` | Health check |
 
 ### Authentication
 
 ```bash
-# API Key authentication
+# API Key authentication (production)
 curl -H "Authorization: Bearer sk_live_xxx" \
   https://api.your-platform.com/api/v1/assets
 
-# Development mode bypass (local only)
+# Development mode bypass (local only, when AUTH_DEV_MODE=true)
 curl -H "X-Dev-Org-Id: test-org" \
      -H "X-Dev-Party-Id: test-party" \
   http://localhost:3001/api/v1/assets
 ```
 
+### Idempotency
+
+Critical operations require an `Idempotency-Key` header to prevent duplicates:
+
+```bash
+curl -X POST http://localhost:3001/api/v1/transfers \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "Idempotency-Key: transfer-unique-id-12345" \
+  -H "Content-Type: application/json" \
+  -d '{"tokenId": "...", "fromWallet": "0x...", "toWallet": "0x...", "amount": "1000"}'
+```
+
+Operations requiring idempotency keys:
+- Token issuance (`POST /api/v1/tokens/:id/issue`)
+- Token redemption (`POST /api/v1/tokens/:id/redeem`)
+- Transfers (`POST /api/v1/transfers`)
+
 ---
 
-## ERC-3643 Compliance
+## Smart Contracts
 
-The SDK implements the full ERC-3643 (T-REX) standard for compliant security tokens:
+### Upgradeable Architecture
 
-### Identity Registry
+All token contracts use the **UUPS (Universal Upgradeable Proxy Standard)** pattern:
+
+```
+┌─────────────────┐     ┌─────────────────────────────┐
+│   ERC1967Proxy  │────▶│  ComplianceTokenUpgradeable │
+│  (User-facing)  │     │      (Implementation)       │
+└─────────────────┘     └─────────────────────────────┘
+```
+
+Benefits:
+- **Upgradeable** - Fix bugs and add features without redeploying
+- **Gas efficient** - Logic upgrades don't affect token balances
+- **Governance controlled** - Multi-sig approval required for upgrades
+
+### Governance
+
+Token upgrades are controlled by `TokenGovernor`, a multi-sig + timelock contract:
+
+```solidity
+// Governance parameters
+MIN_DELAY = 2 days      // Timelock delay before execution
+GRACE_PERIOD = 7 days   // Window to execute after ready
+REQUIRED_SIGS = 2       // Multi-sig threshold
+```
+
+Upgrade flow:
+1. Signer proposes upgrade via `propose()`
+2. Other signers approve via `approve()`
+3. Wait for timelock (2 days minimum)
+4. Execute upgrade via `execute()`
+
+### Deployment
+
+```bash
+cd contracts
+
+# Deploy to testnet
+forge script script/DeployUpgradeable.s.sol \
+  --rpc-url $SEPOLIA_RPC_URL \
+  --broadcast \
+  --verify
+
+# Required environment variables
+export DEPLOYER_PRIVATE_KEY=0x...
+export SIGNER_1=0x...  # Multi-sig signer 1
+export SIGNER_2=0x...  # Multi-sig signer 2
+export SIGNER_3=0x...  # Optional signer 3
+```
+
+### Contract Addresses
+
+Deployed contracts are logged after deployment. Save these addresses:
+- `IdentityRegistry` - Manages investor identities
+- `TokenGovernor` - Multi-sig governance
+- `Token Implementation` - Logic contract
+- `Token Proxy` - User-facing proxy address
+
+---
+
+## Compliance
+
+The SDK implements the full ERC-3643 (T-REX) standard for compliant security tokens.
+
+### Investor Onboarding
 
 ```typescript
-// Register investor identity
-await client.identities.register({
-  investorAddress: '0x...',
-  countryCode: 'US',
-  claims: [
-    { topic: 'KYC', issuer: '0xKYCProvider', data: '...' },
-    { topic: 'ACCREDITED', issuer: '0xAccreditationProvider', data: '...' },
+// 1. Create investor
+const investor = await client.investors.create({
+  email: 'investor@example.com',
+  jurisdiction: 'US',
+  accredited: true,
+});
+
+// 2. Add wallet
+await client.investors.addWallet(investor.id, {
+  address: '0x...',
+  chainId: 8453,
+});
+
+// 3. Complete KYC
+await client.investors.approveKyc(investor.id, 'Verified via provider');
+
+// 4. Activate
+await client.investors.activate(investor.id);
+```
+
+### Compliance Policies
+
+```typescript
+// Create a compliance policy
+const policy = await client.compliance.createPolicy({
+  name: 'US Accredited Investors',
+  jurisdiction: 'US',
+  rules: [
+    { type: 'IDENTITY_REQUIRED', parameters: {} },
+    { type: 'COUNTRY_WHITELIST', parameters: { countries: ['US', 'CA'] } },
+    { type: 'ACCREDITED_ONLY', parameters: { accreditedRequired: true } },
+    { type: 'MAX_HOLDERS', parameters: { maxHolders: 2000 } },
   ],
 });
+
+// Activate policy
+await client.compliance.activatePolicy(policy.id);
 ```
 
 ### Compliance Modules
 
 | Module | Description |
 |--------|-------------|
-| `identity` | Requires registered identity |
-| `country` | Jurisdiction whitelist/blacklist |
-| `investor_type` | Accredited investor requirements |
-| `max_holders` | Limit total token holders |
-| `time_lock` | Transfer lockup periods |
-| `max_balance` | Per-holder balance limits |
+| `IDENTITY_REQUIRED` | Requires registered identity |
+| `COUNTRY_WHITELIST` | Jurisdiction whitelist |
+| `COUNTRY_BLACKLIST` | Jurisdiction blacklist |
+| `ACCREDITED_ONLY` | Accredited investor requirements |
+| `MAX_HOLDERS` | Limit total token holders |
+| `MAX_BALANCE` | Per-holder balance limits |
+| `TIME_LOCK` | Transfer lockup periods |
 
 ### Transfer Validation
 
@@ -288,10 +500,12 @@ All transfers are validated against:
 │                         SDK Core                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                      ApiClient                            │  │
-│  │  ┌────────────┐ ┌────────────┐ ┌────────────────────────┐│  │
-│  │  │  Assets    │ │  Tokens    │ │      Transfers         ││  │
-│  │  │  Module    │ │  Module    │ │       Module           ││  │
-│  │  └────────────┘ └────────────┘ └────────────────────────┘│  │
+│  │  ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌─────────────┐ │  │
+│  │  │ Projects │ │  Assets  │ │ Investors │ │   Tokens    │ │  │
+│  │  └──────────┘ └──────────┘ └───────────┘ └─────────────┘ │  │
+│  │  ┌──────────┐ ┌────────────────────────────────────────┐ │  │
+│  │  │Transfers │ │             Compliance                  │ │  │
+│  │  └──────────┘ └────────────────────────────────────────┘ │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
@@ -312,14 +526,15 @@ All transfers are validated against:
                               │
 ┌─────────────────────────────▼───────────────────────────────────┐
 │                      Smart Contracts                            │
-│  ┌────────────────┐ ┌────────────────┐ ┌──────────────────────┐│
-│  │ T-REX Token    │ │  Identity      │ │  Modular             ││
-│  │ (ERC-3643)     │ │  Registry      │ │  Compliance          ││
-│  └────────────────┘ └────────────────┘ └──────────────────────┘│
-│  ┌────────────────┐ ┌────────────────┐ ┌──────────────────────┐│
-│  │  Token Factory │ │ Claim Issuers  │ │  Trusted Issuers     ││
-│  │  (CREATE2)     │ │                │ │  Registry            ││
-│  └────────────────┘ └────────────────┘ └──────────────────────┘│
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐│
+│  │ ComplianceToken  │  │  Identity        │  │ Token          ││
+│  │ Upgradeable      │  │  Registry        │  │ Governor       ││
+│  │ (UUPS Proxy)     │  │                  │  │ (Multi-sig)    ││
+│  └──────────────────┘  └──────────────────┘  └────────────────┘│
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐│
+│  │  Modular         │  │  Token Factory   │  │  ERC1967Proxy  ││
+│  │  Compliance      │  │  (CREATE2)       │  │                ││
+│  └──────────────────┘  └──────────────────┘  └────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -331,32 +546,38 @@ All transfers are validated against:
 TokenisationSDK/
 ├── sdk/                          # TypeScript SDK
 │   ├── src/
-│   │   ├── modules/              # API modules (assets, tokens, transfers)
+│   │   ├── ApiClient.ts          # Main API client (Stripe-like interface)
+│   │   ├── modules/              # API modules (projects, assets, investors,
+│   │   │                         #              tokens, transfers, compliance)
 │   │   ├── contracts/adapters/   # Token adapters (ERC-20, 721, 1155, 3643)
 │   │   ├── plugins/              # Wallet, oracle, storage plugins
-│   │   └── utils/                # HTTP client, helpers
+│   │   └── utils/                # HTTP client, validation
 │   └── tests/
 │
 ├── server/                       # Express API Server
 │   ├── src/
-│   │   ├── routes/               # REST endpoints
-│   │   ├── services/             # Business logic
-│   │   ├── middleware/           # Auth, validation
-│   │   └── db/                   # Database schemas
+│   │   ├── routes/               # REST endpoints (25 route files)
+│   │   ├── services/             # Business logic with transactions
+│   │   ├── middleware/           # Auth, rate limiting, idempotency
+│   │   └── db/                   # Drizzle ORM schemas
+│   └── .env.example              # Environment configuration template
 │
-├── contracts/                    # Solidity Contracts
+├── contracts/                    # Solidity Contracts (Foundry)
 │   ├── src/
-│   │   ├── tokens/               # Token implementations
-│   │   ├── identity/             # Identity registry
-│   │   ├── compliance/           # Compliance modules
-│   │   └── factory/              # Token factory
+│   │   ├── tokens/               # ComplianceTokenUpgradeable (UUPS)
+│   │   ├── governance/           # TokenGovernor (multi-sig + timelock)
+│   │   ├── identity/             # IdentityRegistry
+│   │   └── compliance/           # Modular compliance rules
+│   ├── script/                   # Deployment scripts
+│   └── test/                     # Foundry tests
 │
-├── ui/                           # React Platform UI
+├── ui/                           # React Platform UI (Vite + TailwindCSS)
 │
 ├── packages/
 │   └── conformance-suite/        # Integration tests
 │
 └── docs/                         # Documentation
+    └── getting-started/          # Quick start guide
 ```
 
 ---
@@ -372,11 +593,11 @@ npm run test:run      # Single run
 npm run test:coverage # With coverage
 ```
 
-### Conformance Tests
+### Server Tests
 
 ```bash
-# Requires running server + local blockchain
-npm test --workspace=@tokenisation/conformance-suite
+cd server
+npm test              # Run all tests
 ```
 
 ### Contract Tests
@@ -388,6 +609,13 @@ forge test -vvv       # Verbose
 forge coverage        # Coverage report
 ```
 
+### Conformance Tests
+
+```bash
+# Requires running server + local blockchain
+npm test --workspace=@tokenisation/conformance-suite
+```
+
 ---
 
 ## Multi-Chain Support
@@ -397,8 +625,10 @@ forge coverage        # Coverage report
 | Ethereum Mainnet | 1 | Supported |
 | Polygon | 137 | Supported |
 | Base | 8453 | Primary L2 |
+| Arbitrum | 42161 | Supported |
 | Sepolia | 11155111 | Testnet |
 | Base Sepolia | 84532 | Testnet |
+| Arbitrum Sepolia | 421614 | Testnet |
 
 ---
 
@@ -406,11 +636,9 @@ forge coverage        # Coverage report
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start](docs/guides/QUICKSTART.md) | Get running in 5 minutes |
-| [SDK Guide](docs/guides/SDK_USAGE.md) | Complete SDK usage |
-| [API Reference](docs/reference/REST_API.md) | REST API endpoints |
-| [ERC-3643 Guide](docs/guides/ERC3643.md) | Compliance implementation |
-| [Deployment](docs/operations/DEPLOYMENT_RUNBOOK.md) | Production deployment |
+| [Quick Start](docs/getting-started/QUICKSTART.md) | Get running fast |
+| [Server Setup](server/.env.example) | Environment configuration |
+| [Contract Deployment](contracts/script/DeployUpgradeable.s.sol) | Deploy upgradeable tokens |
 
 ---
 
@@ -434,7 +662,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 <div align="center">
 
 **Built for the RWA ecosystem**
-
-[Documentation](docs/) • [Issues](https://github.com/your-org/TokenisationSDK/issues) • [Discussions](https://github.com/your-org/TokenisationSDK/discussions)
 
 </div>
