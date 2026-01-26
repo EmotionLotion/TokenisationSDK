@@ -30,3 +30,4 @@ export { InvestorsModule } from './investors.js';
 export { TokensModule } from './tokens.js';
 export { TransfersModule } from './transfers.js';
 export { ComplianceModule } from './compliance.js';
+export { AssetsModule } from './assets.js';

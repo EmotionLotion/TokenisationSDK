@@ -2,7 +2,7 @@
 
 This document contains the deployed contract addresses for the Tokenisation SDK across all supported networks.
 
-> **Note**: This file should be updated after each deployment. See the [Deployment Runbook](./operations/DEPLOYMENT_RUNBOOK.md) for procedures.
+> **Note**: This file should be updated after each deployment. See the [Deployment Runbook](./DEPLOYMENT_RUNBOOK.md) for procedures.
 
 ---
 
@@ -188,6 +188,6 @@ forge verify-contract \
 
 ## Related Documents
 
-- [Deployment Runbook](./operations/DEPLOYMENT_RUNBOOK.md)
-- [Contract Reference](./reference/CONTRACTS.md)
-- [Chainlink Integration Guide](./guides/CHAINLINK_INTEGRATION.md)
+- [Deployment Runbook](./DEPLOYMENT_RUNBOOK.md)
+- [Contract Reference](../api/CONTRACTS.md)
+- [Chainlink Integration Guide](../guides/CHAINLINK_INTEGRATION.md)

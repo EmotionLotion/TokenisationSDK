@@ -43,6 +43,7 @@ import { InvestorsModule } from './modules/investors.js';
 import { TokensModule } from './modules/tokens.js';
 import { TransfersModule } from './modules/transfers.js';
 import { ComplianceModule } from './modules/compliance.js';
+import { AssetsModule } from './modules/assets.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -54,6 +55,9 @@ export class ApiClient {
 
   /** Projects management */
   public readonly projects: ProjectsModule;
+
+  /** Asset management (tokenizable assets) */
+  public readonly assets: AssetsModule;
 
   /** Investor onboarding and KYC */
   public readonly investors: InvestorsModule;
@@ -95,6 +99,7 @@ export class ApiClient {
 
     // Initialize modules
     this.projects = new ProjectsModule(this.http);
+    this.assets = new AssetsModule(this.http);
     this.investors = new InvestorsModule(this.http);
     this.tokens = new TokensModule(this.http);
     this.transfers = new TransfersModule(this.http);

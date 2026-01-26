@@ -232,12 +232,12 @@ export class KycPlugin {
       });
 
       const session: KycSession = {
-        sessionId: response.sessionId || sessionId,
+        sessionId: (response.sessionId as string) || sessionId,
         userId: request.userId,
         walletAddress: request.walletAddress,
-        url: response.url,
-        accessToken: response.accessToken,
-        expiresAt: response.expiresAt || expiresAt,
+        url: response.url as string | undefined,
+        accessToken: response.accessToken as string | undefined,
+        expiresAt: (response.expiresAt as string) || expiresAt,
         level,
         provider: this.config.provider,
       };
@@ -315,11 +315,11 @@ export class KycPlugin {
           status: response.status as VerificationStatus,
           level: response.level as VerificationLevel,
           verified: response.status === VerificationStatus.APPROVED,
-          expiresAt: response.expiresAt,
-          rejectionReason: response.rejectionReason,
-          providerReferenceId: response.providerReferenceId,
-          country: response.country,
-          metadata: response.metadata,
+          expiresAt: response.expiresAt as string | undefined,
+          rejectionReason: response.rejectionReason as string | undefined,
+          providerReferenceId: response.providerReferenceId as string | undefined,
+          country: response.country as string | undefined,
+          metadata: response.metadata as Record<string, unknown> | undefined,
         };
 
         this.verifications.set(userId, result);
@@ -524,14 +524,3 @@ export function createKycPlugin(config: KycPluginConfig): KycPlugin {
   return new KycPlugin(config);
 }
 
-// ============================================================================
-// RE-EXPORTS
-// ============================================================================
-
-export type {
-  KycPluginConfig,
-  KycSession,
-  VerificationResult,
-  StartVerificationRequest,
-  KycWebhookEvent,
-};

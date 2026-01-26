@@ -769,4 +769,4 @@ linkManager.onAlert((alert) => {
 - [Chainlink Documentation](https://docs.chain.link/)
 - [Chainlink Functions Playground](https://functions.chain.link/)
 - [LINK Token Faucets](https://faucets.chain.link/)
-- [SDK Mainnet Costs Guide](../reference/MAINNET_COSTS.md)
+- [SDK Mainnet Costs Guide](../api/MAINNET_COSTS.md)

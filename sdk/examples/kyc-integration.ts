@@ -15,7 +15,7 @@ import {
   VerificationLevel,
   VerificationStatus,
   type KycWebhookEvent,
-} from '../src/plugins/kyc';
+} from '../src/plugins/kyc/index.js';
 import { ethers } from 'ethers';
 
 // Configuration

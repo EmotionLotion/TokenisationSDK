@@ -816,5 +816,5 @@ describe('End-to-End Compliance', () => {
 
 - [ERC-3643 Specification](https://erc3643.io/)
 - [T-REX Token Standard](https://github.com/TokenySolutions/T-REX)
-- [SDK API Reference](../reference/SDK_API.md)
-- [Contract Reference](../reference/CONTRACTS.md)
+- [SDK API Reference](../api/SDK_API.md)
+- [Contract Reference](../api/CONTRACTS.md)
