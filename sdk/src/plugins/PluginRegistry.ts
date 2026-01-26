@@ -16,6 +16,7 @@ import type {
   IChainPlugin,
   ITokenAdapter,
 } from '../core/interfaces.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 /**
  * Plugin registry configuration
@@ -65,15 +66,20 @@ export class PluginRegistry implements IPluginRegistry {
   register<T extends AnyPlugin>(type: PluginType, plugin: T): void {
     const typeMap = this.plugins.get(type);
     if (!typeMap) {
-      throw new Error(`Unknown plugin type: ${type}`);
+      throw new ValidationError(`Unknown plugin type: ${type}`, {
+        field: 'type',
+        constraints: { allowedValues: 'jurisdiction, compliance, oracle, storage, chain, token' },
+      });
     }
 
     const pluginId = plugin.pluginId;
 
     // Check if plugin already exists
     if (typeMap.has(pluginId) && !this.config.allowReplacement) {
-      throw new Error(
-        `Plugin ${pluginId} already registered for type ${type}`
+      throw new SDKError(
+        `Plugin ${pluginId} already registered for type ${type}`,
+        ErrorCode.ALREADY_EXISTS,
+        { details: { pluginId, type } }
       );
     }
 
@@ -195,7 +201,10 @@ export class PluginRegistry implements IPluginRegistry {
    */
   private validatePlugin(type: PluginType, plugin: AnyPlugin): void {
     if (!plugin.pluginId || typeof plugin.pluginId !== 'string') {
-      throw new Error('Plugin must have a valid pluginId');
+      throw new ValidationError('Plugin must have a valid pluginId', {
+        field: 'pluginId',
+        constraints: { required: 'true', type: 'string' },
+      });
     }
 
     // Type-specific validation
@@ -223,52 +232,85 @@ export class PluginRegistry implements IPluginRegistry {
 
   private validateJurisdictionPlugin(plugin: IJurisdictionPlugin): void {
     if (typeof plugin.canCreateAsset !== 'function') {
-      throw new Error('Jurisdiction plugin must implement canCreateAsset');
+      throw new ValidationError('Jurisdiction plugin must implement canCreateAsset', {
+        field: 'canCreateAsset',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
     if (typeof plugin.canTransfer !== 'function') {
-      throw new Error('Jurisdiction plugin must implement canTransfer');
+      throw new ValidationError('Jurisdiction plugin must implement canTransfer', {
+        field: 'canTransfer',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
   }
 
   private validateCompliancePlugin(plugin: ICompliancePlugin): void {
     if (typeof plugin.evaluateTransfer !== 'function') {
-      throw new Error('Compliance plugin must implement evaluateTransfer');
+      throw new ValidationError('Compliance plugin must implement evaluateTransfer', {
+        field: 'evaluateTransfer',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
     if (typeof plugin.getPartyStatus !== 'function') {
-      throw new Error('Compliance plugin must implement getPartyStatus');
+      throw new ValidationError('Compliance plugin must implement getPartyStatus', {
+        field: 'getPartyStatus',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
   }
 
   private validateOraclePlugin(plugin: IOraclePlugin): void {
     if (typeof plugin.fetchData !== 'function') {
-      throw new Error('Oracle plugin must implement fetchData');
+      throw new ValidationError('Oracle plugin must implement fetchData', {
+        field: 'fetchData',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
   }
 
   private validateStoragePlugin(plugin: IStoragePlugin): void {
     if (typeof plugin.store !== 'function') {
-      throw new Error('Storage plugin must implement store');
+      throw new ValidationError('Storage plugin must implement store', {
+        field: 'store',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
     if (typeof plugin.retrieve !== 'function') {
-      throw new Error('Storage plugin must implement retrieve');
+      throw new ValidationError('Storage plugin must implement retrieve', {
+        field: 'retrieve',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
   }
 
   private validateChainPlugin(plugin: IChainPlugin): void {
     if (typeof plugin.connect !== 'function') {
-      throw new Error('Chain plugin must implement connect');
+      throw new ValidationError('Chain plugin must implement connect', {
+        field: 'connect',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
     if (typeof plugin.sendTransaction !== 'function') {
-      throw new Error('Chain plugin must implement sendTransaction');
+      throw new ValidationError('Chain plugin must implement sendTransaction', {
+        field: 'sendTransaction',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
   }
 
   private validateTokenPlugin(plugin: ITokenAdapter): void {
     if (typeof plugin.mint !== 'function') {
-      throw new Error('Token plugin must implement mint');
+      throw new ValidationError('Token plugin must implement mint', {
+        field: 'mint',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
     if (typeof plugin.transfer !== 'function') {
-      throw new Error('Token plugin must implement transfer');
+      throw new ValidationError('Token plugin must implement transfer', {
+        field: 'transfer',
+        constraints: { type: 'function', required: 'true' },
+      });
     }
   }
 }

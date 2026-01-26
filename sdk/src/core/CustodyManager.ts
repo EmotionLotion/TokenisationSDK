@@ -30,6 +30,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -272,10 +273,16 @@ export class CustodyManager {
     // Validate threshold for multi-sig
     if (params.type === CustodyType.MULTI_SIG) {
       if (arrangement.threshold > arrangement.custodians.length) {
-        throw new Error('Threshold cannot exceed number of custodians');
+        throw new ValidationError('Threshold cannot exceed number of custodians', {
+          field: 'threshold',
+          constraints: { maximum: String(arrangement.custodians.length) },
+        });
       }
       if (arrangement.threshold < 1) {
-        throw new Error('Threshold must be at least 1');
+        throw new ValidationError('Threshold must be at least 1', {
+          field: 'threshold',
+          constraints: { minimum: '1' },
+        });
       }
     }
 
@@ -301,7 +308,11 @@ export class CustodyManager {
   ): CustodyArrangement {
     const arrangement = this.arrangements.get(arrangementId);
     if (!arrangement) {
-      throw new Error('Custody arrangement not found');
+      throw new SDKError(
+        'Custody arrangement not found',
+        ErrorCode.NOT_FOUND,
+        { details: { arrangementId } }
+      );
     }
 
     const updated = {
@@ -392,16 +403,28 @@ export class CustodyManager {
   }): RecoveryRequest {
     const request = this.recoveryRequests.get(params.requestId);
     if (!request) {
-      throw new Error('Recovery request not found');
+      throw new SDKError(
+        'Recovery request not found',
+        ErrorCode.NOT_FOUND,
+        { details: { requestId: params.requestId } }
+      );
     }
 
     if (request.status !== ApprovalStatus.PENDING) {
-      throw new Error('Recovery request is not pending');
+      throw new SDKError(
+        'Recovery request is not pending',
+        ErrorCode.INVALID_STATE,
+        { details: { requestId: params.requestId, currentStatus: request.status } }
+      );
     }
 
     // Check for duplicate approval
     if (request.approvals.some(a => a.approverId === params.approverId)) {
-      throw new Error('Approver has already responded to this request');
+      throw new SDKError(
+        'Approver has already responded to this request',
+        ErrorCode.ALREADY_EXISTS,
+        { details: { requestId: params.requestId, approverId: params.approverId } }
+      );
     }
 
     const approval: RecoveryApproval = {
@@ -445,15 +468,27 @@ export class CustodyManager {
   executeRecovery(requestId: string): RecoveryRequest {
     const request = this.recoveryRequests.get(requestId);
     if (!request) {
-      throw new Error('Recovery request not found');
+      throw new SDKError(
+        'Recovery request not found',
+        ErrorCode.NOT_FOUND,
+        { details: { requestId } }
+      );
     }
 
     if (request.status !== ApprovalStatus.APPROVED) {
-      throw new Error('Recovery request is not approved');
+      throw new SDKError(
+        'Recovery request is not approved',
+        ErrorCode.INVALID_STATE,
+        { details: { requestId, currentStatus: request.status } }
+      );
     }
 
     if (request.executableAfter && new Date(request.executableAfter) > new Date()) {
-      throw new Error('Time lock has not expired');
+      throw new SDKError(
+        'Time lock has not expired',
+        ErrorCode.INVALID_STATE,
+        { details: { requestId, executableAfter: request.executableAfter } }
+      );
     }
 
     request.status = ApprovalStatus.EXECUTED;
@@ -523,11 +558,19 @@ export class CustodyManager {
   }): OverrideRequest {
     const request = this.overrideRequests.get(params.requestId);
     if (!request) {
-      throw new Error('Override request not found');
+      throw new SDKError(
+        'Override request not found',
+        ErrorCode.NOT_FOUND,
+        { details: { requestId: params.requestId } }
+      );
     }
 
     if (request.status !== ApprovalStatus.PENDING) {
-      throw new Error('Override request is not pending');
+      throw new SDKError(
+        'Override request is not pending',
+        ErrorCode.INVALID_STATE,
+        { details: { requestId: params.requestId, currentStatus: request.status } }
+      );
     }
 
     const approval: OverrideApproval = {
@@ -561,11 +604,19 @@ export class CustodyManager {
   executeOverride(requestId: string): OverrideRequest {
     const request = this.overrideRequests.get(requestId);
     if (!request) {
-      throw new Error('Override request not found');
+      throw new SDKError(
+        'Override request not found',
+        ErrorCode.NOT_FOUND,
+        { details: { requestId } }
+      );
     }
 
     if (request.status !== ApprovalStatus.APPROVED) {
-      throw new Error('Override request is not approved');
+      throw new SDKError(
+        'Override request is not approved',
+        ErrorCode.INVALID_STATE,
+        { details: { requestId, currentStatus: request.status } }
+      );
     }
 
     request.status = ApprovalStatus.EXECUTED;

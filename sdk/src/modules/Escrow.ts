@@ -8,6 +8,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { BaseEvent, EventType } from '../core/types.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // TYPES AND SCHEMAS
@@ -372,18 +373,29 @@ export class EscrowEngine {
   ): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     if (escrow.status !== EscrowStatus.DRAFT && escrow.status !== EscrowStatus.FUNDED) {
-      throw new Error('Escrow cannot be funded in current state');
+      throw new SDKError(
+        'Escrow cannot be funded in current state',
+        ErrorCode.INVALID_STATE,
+        { details: { escrowId, currentStatus: escrow.status } }
+      );
     }
 
     const depositor = escrow.parties.find(
       p => p.partyId === depositorId && p.role === 'DEPOSITOR'
     );
     if (!depositor) {
-      throw new Error('Depositor not found in escrow parties');
+      throw new ValidationError('Depositor not found in escrow parties', {
+        field: 'depositorId',
+        constraints: { validParty: 'DEPOSITOR' },
+      });
     }
 
     depositor.depositedAmount = (
@@ -438,12 +450,19 @@ export class EscrowEngine {
   async signEscrow(escrowId: string, partyId: string): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     const party = escrow.parties.find(p => p.partyId === partyId);
     if (!party) {
-      throw new Error('Party not found in escrow');
+      throw new ValidationError('Party not found in escrow', {
+        field: 'partyId',
+        constraints: { validParty: 'true' },
+      });
     }
 
     party.hasSigned = true;
@@ -462,7 +481,11 @@ export class EscrowEngine {
   async checkConditions(escrowId: string): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     const now = new Date();
@@ -536,11 +559,19 @@ export class EscrowEngine {
   ): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     if (!this.canRelease(escrow)) {
-      throw new Error('Release conditions not met');
+      throw new SDKError(
+        'Release conditions not met',
+        ErrorCode.INVALID_STATE,
+        { details: { escrowId, conditions: escrow.conditions.map(c => ({ id: c.id, isMet: c.isMet })) } }
+      );
     }
 
     const releaseAmount = amount || (
@@ -549,7 +580,10 @@ export class EscrowEngine {
 
     const remaining = BigInt(escrow.amount) - BigInt(escrow.releasedAmount);
     if (BigInt(releaseAmount) > remaining) {
-      throw new Error('Release amount exceeds remaining balance');
+      throw new ValidationError('Release amount exceeds remaining balance', {
+        field: 'amount',
+        constraints: { maximum: remaining.toString() },
+      });
     }
 
     escrow.releasedAmount = (
@@ -604,12 +638,20 @@ export class EscrowEngine {
   ): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     // Check if refund is allowed
     if (escrow.status === EscrowStatus.RELEASED) {
-      throw new Error('Cannot refund released escrow');
+      throw new SDKError(
+        'Cannot refund released escrow',
+        ErrorCode.INVALID_STATE,
+        { details: { escrowId, status: escrow.status } }
+      );
     }
 
     // Check expiration
@@ -662,16 +704,27 @@ export class EscrowEngine {
   ): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     const party = escrow.parties.find(p => p.partyId === partyId);
     if (!party) {
-      throw new Error('Party not in escrow');
+      throw new ValidationError('Party not in escrow', {
+        field: 'partyId',
+        constraints: { validParty: 'true' },
+      });
     }
 
     if (escrow.disputeDeadline && new Date().toISOString() > escrow.disputeDeadline) {
-      throw new Error('Dispute deadline passed');
+      throw new SDKError(
+        'Dispute deadline passed',
+        ErrorCode.INVALID_STATE,
+        { details: { escrowId, disputeDeadline: escrow.disputeDeadline } }
+      );
     }
 
     escrow.status = EscrowStatus.DISPUTED;
@@ -699,18 +752,30 @@ export class EscrowEngine {
   ): Promise<Escrow> {
     const escrow = this.escrows.get(escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     if (escrow.status !== EscrowStatus.DISPUTED) {
-      throw new Error('Escrow is not in dispute');
+      throw new SDKError(
+        'Escrow is not in dispute',
+        ErrorCode.INVALID_STATE,
+        { details: { escrowId, currentStatus: escrow.status } }
+      );
     }
 
     const arbiter = escrow.parties.find(
       p => p.partyId === arbiterId && p.role === 'ARBITER'
     );
     if (!arbiter) {
-      throw new Error('Only arbiter can resolve dispute');
+      throw new SDKError(
+        'Only arbiter can resolve dispute',
+        ErrorCode.UNAUTHORIZED,
+        { details: { escrowId, arbiterId } }
+      );
     }
 
     const remaining = BigInt(escrow.amount) - BigInt(escrow.releasedAmount);
@@ -769,7 +834,11 @@ export class EscrowEngine {
   }): Milestone {
     const escrow = this.escrows.get(params.escrowId);
     if (!escrow) {
-      throw new Error(`Escrow not found: ${params.escrowId}`);
+      throw new SDKError(
+        `Escrow not found: ${params.escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId: params.escrowId } }
+      );
     }
 
     const milestone: Milestone = {
@@ -818,12 +887,20 @@ export class EscrowEngine {
   ): Milestone {
     const milestones = this.milestones.get(escrowId);
     if (!milestones) {
-      throw new Error(`No milestones for escrow: ${escrowId}`);
+      throw new SDKError(
+        `No milestones for escrow: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     const milestone = milestones.find(m => m.id === milestoneId);
     if (!milestone) {
-      throw new Error(`Milestone not found: ${milestoneId}`);
+      throw new SDKError(
+        `Milestone not found: ${milestoneId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId, milestoneId } }
+      );
     }
 
     milestone.evidence.push({
@@ -848,12 +925,20 @@ export class EscrowEngine {
   ): Promise<Milestone> {
     const milestones = this.milestones.get(escrowId);
     if (!milestones) {
-      throw new Error(`No milestones for escrow: ${escrowId}`);
+      throw new SDKError(
+        `No milestones for escrow: ${escrowId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId } }
+      );
     }
 
     const milestone = milestones.find(m => m.id === milestoneId);
     if (!milestone) {
-      throw new Error(`Milestone not found: ${milestoneId}`);
+      throw new SDKError(
+        `Milestone not found: ${milestoneId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { escrowId, milestoneId } }
+      );
     }
 
     milestone.approvals.push({

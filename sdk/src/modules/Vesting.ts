@@ -11,6 +11,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { IEventStore } from '../core/interfaces.js';
 import { EventType, type BaseEvent } from '../core/types.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // TYPES
@@ -220,7 +221,11 @@ export class VestingEngine {
   calculateVesting(scheduleId: string, asOfDate?: string): VestingCalculation {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) {
-      throw new Error(`Schedule not found: ${scheduleId}`);
+      throw new SDKError(
+        `Schedule not found: ${scheduleId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId } }
+      );
     }
 
     const calculationDate = asOfDate ?? new Date().toISOString();
@@ -272,19 +277,29 @@ export class VestingEngine {
   }> {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) {
-      throw new Error(`Schedule not found: ${scheduleId}`);
+      throw new SDKError(
+        `Schedule not found: ${scheduleId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId } }
+      );
     }
 
     const calculation = this.calculateVesting(scheduleId);
     const availableToClaim = BigInt(calculation.availableToClaim);
 
     if (availableToClaim <= 0n) {
-      throw new Error('No tokens available to claim');
+      throw new ValidationError('No tokens available to claim', {
+        field: 'scheduleId',
+        constraints: { availableToClaim: '0' },
+      });
     }
 
     const claimAmount = amount ? BigInt(amount) : availableToClaim;
     if (claimAmount > availableToClaim) {
-      throw new Error(`Cannot claim ${claimAmount}, only ${availableToClaim} available`);
+      throw new ValidationError(`Cannot claim ${claimAmount}, only ${availableToClaim} available`, {
+        field: 'amount',
+        constraints: { maximum: availableToClaim.toString() },
+      });
     }
 
     // Update schedule
@@ -321,20 +336,35 @@ export class VestingEngine {
   completeMilestone(scheduleId: string, milestoneId: string): VestingMilestone {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) {
-      throw new Error(`Schedule not found: ${scheduleId}`);
+      throw new SDKError(
+        `Schedule not found: ${scheduleId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId } }
+      );
     }
 
     if (schedule.vestingType !== VestingType.MILESTONE) {
-      throw new Error('Schedule is not milestone-based');
+      throw new ValidationError('Schedule is not milestone-based', {
+        field: 'scheduleId',
+        constraints: { vestingType: VestingType.MILESTONE },
+      });
     }
 
     const milestone = schedule.milestones?.find(m => m.id === milestoneId);
     if (!milestone) {
-      throw new Error(`Milestone not found: ${milestoneId}`);
+      throw new SDKError(
+        `Milestone not found: ${milestoneId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId, milestoneId } }
+      );
     }
 
     if (milestone.completed) {
-      throw new Error('Milestone already completed');
+      throw new SDKError(
+        'Milestone already completed',
+        ErrorCode.ALREADY_EXISTS,
+        { details: { scheduleId, milestoneId } }
+      );
     }
 
     milestone.completed = true;
@@ -371,11 +401,19 @@ export class VestingEngine {
   terminate(scheduleId: string, terminationType: TerminationType): VestingSchedule {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) {
-      throw new Error(`Schedule not found: ${scheduleId}`);
+      throw new SDKError(
+        `Schedule not found: ${scheduleId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId } }
+      );
     }
 
     if (schedule.status === VestingStatus.TERMINATED) {
-      throw new Error('Schedule already terminated');
+      throw new SDKError(
+        'Schedule already terminated',
+        ErrorCode.INVALID_STATE,
+        { details: { scheduleId, currentStatus: schedule.status } }
+      );
     }
 
     const now = new Date().toISOString();
@@ -436,12 +474,19 @@ export class VestingEngine {
   accelerate(scheduleId: string, triggerEvent: string): VestingSchedule {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) {
-      throw new Error(`Schedule not found: ${scheduleId}`);
+      throw new SDKError(
+        `Schedule not found: ${scheduleId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId } }
+      );
     }
 
     const trigger = schedule.accelerationTriggers?.find(t => t.events.includes(triggerEvent));
     if (!trigger) {
-      throw new Error(`No acceleration trigger for event: ${triggerEvent}`);
+      throw new ValidationError(`No acceleration trigger for event: ${triggerEvent}`, {
+        field: 'triggerEvent',
+        constraints: { validTriggers: schedule.accelerationTriggers?.map(t => t.events).flat().join(', ') || 'none' },
+      });
     }
 
     const acceleratedAmount = (BigInt(schedule.totalAmount) * BigInt(trigger.accelerationPercent)) / 100n;

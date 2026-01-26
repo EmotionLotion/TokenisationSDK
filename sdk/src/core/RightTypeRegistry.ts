@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { TransferabilityMode } from './types.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // RIGHT TYPE DEFINITION
@@ -417,7 +418,11 @@ export class RightTypeRegistry {
    */
   register(definition: RightTypeDefinition): void {
     if (this.types.has(definition.id)) {
-      throw new Error(`Right type '${definition.id}' already exists`);
+      throw new SDKError(
+        `Right type '${definition.id}' already exists`,
+        ErrorCode.ALREADY_EXISTS,
+        { details: { id: definition.id } }
+      );
     }
     this.types.set(definition.id, definition);
   }
@@ -483,7 +488,10 @@ export class RightTypeRegistry {
    */
   remove(id: string): boolean {
     if (BUILT_IN_RIGHT_TYPES[id]) {
-      throw new Error(`Cannot remove built-in right type '${id}'`);
+      throw new ValidationError(`Cannot remove built-in right type '${id}'`, {
+        field: 'id',
+        constraints: { immutable: 'true' },
+      });
     }
     return this.types.delete(id);
   }
@@ -494,7 +502,11 @@ export class RightTypeRegistry {
   validateMetadata(rightTypeId: string, metadata: Record<string, unknown>): boolean {
     const rightType = this.get(rightTypeId);
     if (!rightType) {
-      throw new Error(`Unknown right type: ${rightTypeId}`);
+      throw new SDKError(
+        `Unknown right type: ${rightTypeId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { rightTypeId } }
+      );
     }
 
     // Check required fields
@@ -523,7 +535,11 @@ export class RightTypeRegistry {
   getDefaultTransferability(rightTypeId: string): TransferabilityMode {
     const rightType = this.get(rightTypeId);
     if (!rightType) {
-      throw new Error(`Unknown right type: ${rightTypeId}`);
+      throw new SDKError(
+        `Unknown right type: ${rightTypeId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { rightTypeId } }
+      );
     }
 
     return rightType.behavior.defaultTransferable

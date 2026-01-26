@@ -8,6 +8,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { BaseEvent, EventType } from '../core/types.js';
+import { SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // TYPES AND SCHEMAS
@@ -382,11 +383,19 @@ export class CashFlowEngine {
   ): Promise<DistributionEvent> {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) {
-      throw new Error(`Schedule not found: ${scheduleId}`);
+      throw new SDKError(
+        `Schedule not found: ${scheduleId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { scheduleId } }
+      );
     }
 
     if (!this.balanceProvider) {
-      throw new Error('Balance provider not set');
+      throw new SDKError(
+        'Balance provider not set',
+        ErrorCode.NOT_INITIALIZED,
+        { details: { required: 'balanceProvider' } }
+      );
     }
 
     const now = new Date().toISOString();
@@ -497,12 +506,20 @@ export class CashFlowEngine {
   ): Promise<{ amount: string; claimed: boolean }> {
     const distribution = this.distributions.get(distributionId);
     if (!distribution) {
-      throw new Error(`Distribution not found: ${distributionId}`);
+      throw new SDKError(
+        `Distribution not found: ${distributionId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { distributionId } }
+      );
     }
 
     const payout = distribution.payouts.find(p => p.recipientId === recipientId);
     if (!payout) {
-      throw new Error(`Recipient not found in distribution: ${recipientId}`);
+      throw new SDKError(
+        `Recipient not found in distribution: ${recipientId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { distributionId, recipientId } }
+      );
     }
 
     if (payout.claimed) {

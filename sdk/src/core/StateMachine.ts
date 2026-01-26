@@ -7,6 +7,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { LifecycleState, BaseEvent, EventType } from './types.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // STATE MACHINE TYPES
@@ -343,7 +344,10 @@ export class StateMachine {
    */
   setState(assetId: string, state: string): void {
     if (!this.stateMap.has(state)) {
-      throw new Error(`Unknown state: ${state}`);
+      throw new ValidationError(`Unknown state: ${state}`, {
+        field: 'state',
+        constraints: { validStates: Array.from(this.stateMap.keys()).join(', ') },
+      });
     }
     this.assetStates.set(assetId, state);
   }
@@ -523,7 +527,11 @@ export class StateMachine {
   addGuard(from: string, to: string, guard: StateMachineGuard): void {
     const transition = this.findTransition(from, to);
     if (!transition) {
-      throw new Error(`No transition from ${from} to ${to}`);
+      throw new SDKError(
+        `No transition from ${from} to ${to}`,
+        ErrorCode.NOT_FOUND,
+        { details: { from, to } }
+      );
     }
     if (!transition.guards) {
       transition.guards = [];
@@ -537,7 +545,11 @@ export class StateMachine {
   addAction(from: string, to: string, action: TransitionAction): void {
     const transition = this.findTransition(from, to);
     if (!transition) {
-      throw new Error(`No transition from ${from} to ${to}`);
+      throw new SDKError(
+        `No transition from ${from} to ${to}`,
+        ErrorCode.NOT_FOUND,
+        { details: { from, to } }
+      );
     }
     if (!transition.actions) {
       transition.actions = [];
@@ -641,7 +653,11 @@ export class StateMachineRegistry {
   create(configId: string, eventStore?: { append: (event: BaseEvent) => Promise<void> }): StateMachine {
     const config = this.configs.get(configId);
     if (!config) {
-      throw new Error(`Unknown state machine configuration: ${configId}`);
+      throw new SDKError(
+        `Unknown state machine configuration: ${configId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { configId, availableConfigs: Array.from(this.configs.keys()) } }
+      );
     }
     return new StateMachine(config, eventStore);
   }

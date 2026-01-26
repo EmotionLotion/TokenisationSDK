@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { BaseEvent, EventType } from '../core/types.js';
 import { StateMachine, GOVERNANCE_LIFECYCLE } from '../core/StateMachine.js';
+import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
 // ============================================================================
 // TYPES AND SCHEMAS
@@ -342,7 +343,11 @@ export class GovernanceEngine {
   }): Promise<Proposal> {
     const config = this.configs.get(params.assetId);
     if (!config) {
-      throw new Error(`Governance not configured for asset: ${params.assetId}`);
+      throw new SDKError(
+        `Governance not configured for asset: ${params.assetId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { assetId: params.assetId } }
+      );
     }
 
     // Check proposal threshold
@@ -353,14 +358,20 @@ export class GovernanceEngine {
         new Date().toISOString()
       );
       if (BigInt(power) < BigInt(config.proposalThreshold)) {
-        throw new Error('Insufficient voting power to create proposal');
+        throw new ValidationError('Insufficient voting power to create proposal', {
+          field: 'proposerId',
+          constraints: { minimumVotingPower: config.proposalThreshold },
+        });
       }
     }
 
     // Check active proposal limit
     const activeProposals = this.getActiveProposals(params.assetId, params.proposerId);
     if (activeProposals.length >= config.maxActiveProposalsPerUser) {
-      throw new Error('Maximum active proposals reached');
+      throw new ValidationError('Maximum active proposals reached', {
+        field: 'proposerId',
+        constraints: { maxActiveProposals: String(config.maxActiveProposalsPerUser) },
+      });
     }
 
     const now = new Date();
@@ -430,11 +441,18 @@ export class GovernanceEngine {
     if (!proposal) return null;
 
     if (proposal.seconded) {
-      throw new Error('Proposal already seconded');
+      throw new SDKError(
+        'Proposal already seconded',
+        ErrorCode.ALREADY_EXISTS,
+        { details: { proposalId, seconderId: proposal.seconderId } }
+      );
     }
 
     if (proposal.proposerId === seconderId) {
-      throw new Error('Proposer cannot second their own proposal');
+      throw new ValidationError('Proposer cannot second their own proposal', {
+        field: 'seconderId',
+        constraints: { mustNotEqual: 'proposerId' },
+      });
     }
 
     const config = this.configs.get(proposal.assetId);
@@ -467,21 +485,37 @@ export class GovernanceEngine {
   ): Promise<VoteRecord> {
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
-      throw new Error(`Proposal not found: ${proposalId}`);
+      throw new SDKError(
+        `Proposal not found: ${proposalId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { proposalId } }
+      );
     }
 
     if (proposal.state !== 'ACTIVE_VOTING') {
-      throw new Error('Voting is not active for this proposal');
+      throw new SDKError(
+        'Voting is not active for this proposal',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, currentState: proposal.state } }
+      );
     }
 
     const now = new Date();
     if (now.toISOString() > proposal.votingEndsAt) {
-      throw new Error('Voting period has ended');
+      throw new SDKError(
+        'Voting period has ended',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, votingEndsAt: proposal.votingEndsAt } }
+      );
     }
 
     // Check if already voted
     if (proposal.voteRecords.some(v => v.voterId === voterId)) {
-      throw new Error('Already voted on this proposal');
+      throw new SDKError(
+        'Already voted on this proposal',
+        ErrorCode.ALREADY_EXISTS,
+        { details: { proposalId, voterId } }
+      );
     }
 
     // Get voting power
@@ -557,21 +591,37 @@ export class GovernanceEngine {
   async finalizeProposal(proposalId: string): Promise<Proposal> {
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
-      throw new Error(`Proposal not found: ${proposalId}`);
+      throw new SDKError(
+        `Proposal not found: ${proposalId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { proposalId } }
+      );
     }
 
     if (proposal.state !== 'ACTIVE_VOTING') {
-      throw new Error('Proposal is not in voting state');
+      throw new SDKError(
+        'Proposal is not in voting state',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, currentState: proposal.state } }
+      );
     }
 
     const now = new Date();
     if (now.toISOString() < proposal.votingEndsAt) {
-      throw new Error('Voting period has not ended');
+      throw new SDKError(
+        'Voting period has not ended',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, votingEndsAt: proposal.votingEndsAt } }
+      );
     }
 
     const config = this.configs.get(proposal.assetId);
     if (!config) {
-      throw new Error('Governance config not found');
+      throw new SDKError(
+        'Governance config not found',
+        ErrorCode.NOT_FOUND,
+        { details: { assetId: proposal.assetId } }
+      );
     }
 
     // Check quorum
@@ -607,16 +657,28 @@ export class GovernanceEngine {
   async queueProposal(proposalId: string): Promise<Proposal> {
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
-      throw new Error(`Proposal not found: ${proposalId}`);
+      throw new SDKError(
+        `Proposal not found: ${proposalId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { proposalId } }
+      );
     }
 
     if (proposal.state !== 'PASSED') {
-      throw new Error('Proposal must be passed to queue');
+      throw new SDKError(
+        'Proposal must be passed to queue',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, currentState: proposal.state, requiredState: 'PASSED' } }
+      );
     }
 
     const config = this.configs.get(proposal.assetId);
     if (!config) {
-      throw new Error('Governance config not found');
+      throw new SDKError(
+        'Governance config not found',
+        ErrorCode.NOT_FOUND,
+        { details: { assetId: proposal.assetId } }
+      );
     }
 
     proposal.state = 'QUEUED';
@@ -636,16 +698,28 @@ export class GovernanceEngine {
   async executeProposal(proposalId: string, executor: string): Promise<Proposal> {
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
-      throw new Error(`Proposal not found: ${proposalId}`);
+      throw new SDKError(
+        `Proposal not found: ${proposalId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { proposalId } }
+      );
     }
 
     if (proposal.state !== 'QUEUED' && proposal.state !== 'PASSED') {
-      throw new Error('Proposal is not ready for execution');
+      throw new SDKError(
+        'Proposal is not ready for execution',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, currentState: proposal.state, requiredStates: ['QUEUED', 'PASSED'] } }
+      );
     }
 
     const now = new Date();
     if (proposal.executionTime && now.toISOString() < proposal.executionTime) {
-      throw new Error('Timelock not expired');
+      throw new SDKError(
+        'Timelock not expired',
+        ErrorCode.INVALID_STATE,
+        { details: { proposalId, executionTime: proposal.executionTime } }
+      );
     }
 
     // Execute actions (placeholder - actual execution depends on chain)
@@ -681,12 +755,20 @@ export class GovernanceEngine {
   async cancelProposal(proposalId: string, cancellerId: string, reason?: string): Promise<Proposal> {
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
-      throw new Error(`Proposal not found: ${proposalId}`);
+      throw new SDKError(
+        `Proposal not found: ${proposalId}`,
+        ErrorCode.NOT_FOUND,
+        { details: { proposalId } }
+      );
     }
 
     // Only proposer can cancel, or if voting hasn't started
     if (proposal.proposerId !== cancellerId && proposal.state !== 'PENDING') {
-      throw new Error('Only proposer can cancel');
+      throw new SDKError(
+        'Only proposer can cancel',
+        ErrorCode.UNAUTHORIZED,
+        { details: { proposalId, cancellerId, proposerId: proposal.proposerId } }
+      );
     }
 
     proposal.state = 'CANCELLED';
@@ -711,11 +793,17 @@ export class GovernanceEngine {
   ): Promise<Delegation> {
     const config = this.configs.get(assetId);
     if (!config || !config.allowDelegation) {
-      throw new Error('Delegation not allowed for this asset');
+      throw new ValidationError('Delegation not allowed for this asset', {
+        field: 'assetId',
+        constraints: { allowDelegation: 'true' },
+      });
     }
 
     if (delegatorId === delegateId) {
-      throw new Error('Cannot delegate to self');
+      throw new ValidationError('Cannot delegate to self', {
+        field: 'delegateId',
+        constraints: { mustNotEqual: 'delegatorId' },
+      });
     }
 
     const delegation: Delegation = {
@@ -820,7 +908,12 @@ export class GovernanceEngine {
    * BigInt square root approximation
    */
   private bigIntSqrt(n: bigint): bigint {
-    if (n < 0n) throw new Error('Square root of negative number');
+    if (n < 0n) {
+      throw new ValidationError('Square root of negative number', {
+        field: 'n',
+        constraints: { minimum: '0' },
+      });
+    }
     if (n < 2n) return n;
 
     let x = n;

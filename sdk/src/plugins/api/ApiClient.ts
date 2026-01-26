@@ -4,6 +4,9 @@
  * HTTP client with JWT authentication for communicating with the backend API server.
  */
 
+import { AuthenticationError, NetworkError, ErrorCode } from '../../errors/index.js';
+import type { EventType } from '../../core/types.js';
+
 export interface ApiClientConfig {
   baseUrl: string;
   getToken?: () => string | null;
@@ -19,6 +22,70 @@ export interface ApiError {
   message: string;
   code: string;
   status: number;
+}
+
+// Domain types for API responses
+export interface PartyInfo {
+  id: string;
+  name: string;
+  type: string;
+  roles: string[];
+  jurisdiction: string;
+  verificationLevel: string;
+  kycVerified: boolean;
+  accreditedInvestor?: boolean;
+  isFrozen?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AssetInfo {
+  id: string;
+  name: string;
+  rightType: string;
+  state: string;
+  issuerId: string;
+  totalSupply?: string;
+  decimals?: number;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EventInfo {
+  id: string;
+  type: EventType;
+  assetId: string;
+  timestamp: string;
+  actorId: string;
+  payload: Record<string, unknown>;
+  eventVersion: number;
+}
+
+export interface DeploymentInfo {
+  id: string;
+  chainId: number;
+  assetId: string;
+  contractType: string;
+  contractAddress: string;
+  deployTxHash?: string;
+  deployerAddress?: string;
+  createdAt?: string;
+}
+
+export interface ChainInfo {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+  explorerUrl: string;
+  nativeCurrency: {
+    name: string;
+    symbol: string;
+    decimals: number;
+  };
+  isDefault: boolean;
+  isTestnet: boolean;
 }
 
 export class ApiClient {
@@ -59,17 +126,20 @@ export class ApiClient {
 
     // Handle token expiration
     if (response.status === 401) {
-      const error = await response.json().catch(() => ({}));
+      const error = await response.json().catch(() => ({ message: 'Unauthorized' })) as { code?: string; message?: string };
       if (error.code === 'TOKEN_EXPIRED' || error.message?.includes('expired')) {
         this.onTokenExpired();
       }
-      throw new Error(error.message || 'Unauthorized');
+      throw new AuthenticationError(error.message || 'Unauthorized', ErrorCode.AUTH_FAILED);
     }
 
     // Handle other errors
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Request failed' }));
-      throw new Error(error.error?.message || error.message || `Request failed with status ${response.status}`);
+      const error = await response.json().catch(() => ({ message: 'Request failed' })) as { error?: { message?: string }; message?: string };
+      throw new NetworkError(
+        error.error?.message || error.message || `Request failed with status ${response.status}`,
+        { statusCode: response.status }
+      );
     }
 
     // Return empty object for 204 No Content
@@ -166,15 +236,18 @@ export class ApiClient {
     jurisdiction?: string;
     search?: string;
   }): Promise<{
-    parties: any[];
+    parties: PartyInfo[];
     total: number;
     page: number;
     limit: number;
   }> {
-    return this.get('/api/v1/parties', params as any);
+    const queryParams = params ? Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
+    ) : undefined;
+    return this.get('/api/v1/parties', queryParams);
   }
 
-  async getParty(id: string): Promise<any> {
+  async getParty(id: string): Promise<PartyInfo> {
     return this.get(`/api/v1/parties/${id}`);
   }
 
@@ -184,7 +257,7 @@ export class ApiClient {
     roles?: string[];
     jurisdiction: string;
     metadata?: Record<string, unknown>;
-  }): Promise<any> {
+  }): Promise<PartyInfo> {
     return this.post('/api/v1/parties', data);
   }
 
@@ -193,7 +266,7 @@ export class ApiClient {
     roles: string[];
     jurisdiction: string;
     metadata: Record<string, unknown>;
-  }>): Promise<any> {
+  }>): Promise<PartyInfo> {
     return this.patch(`/api/v1/parties/${id}`, data);
   }
 
@@ -202,15 +275,15 @@ export class ApiClient {
     expiryDate?: string;
     verificationLevel?: string;
     accreditedInvestor?: boolean;
-  }): Promise<any> {
+  }): Promise<PartyInfo> {
     return this.post(`/api/v1/parties/${partyId}/kyc`, data);
   }
 
-  async freezeParty(partyId: string, reason?: string): Promise<any> {
+  async freezeParty(partyId: string, reason?: string): Promise<PartyInfo> {
     return this.post(`/api/v1/parties/${partyId}/freeze`, { reason });
   }
 
-  async unfreezeParty(partyId: string): Promise<any> {
+  async unfreezeParty(partyId: string): Promise<PartyInfo> {
     return this.post(`/api/v1/parties/${partyId}/unfreeze`);
   }
 
@@ -223,29 +296,43 @@ export class ApiClient {
     issuerId?: string;
     search?: string;
   }): Promise<{
-    assets: any[];
+    assets: AssetInfo[];
     total: number;
     page: number;
     limit: number;
   }> {
-    return this.get('/api/v1/assets', params as any);
+    const queryParams = params ? Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
+    ) : undefined;
+    return this.get('/api/v1/assets', queryParams);
   }
 
-  async getAsset(id: string): Promise<any> {
+  async getAsset(id: string): Promise<AssetInfo> {
     return this.get(`/api/v1/assets/${id}`);
   }
 
-  async createAsset(data: any): Promise<any> {
+  async createAsset(data: {
+    name: string;
+    rightType: string;
+    issuerId: string;
+    totalSupply?: string;
+    decimals?: number;
+    metadata?: Record<string, unknown>;
+  }): Promise<AssetInfo> {
     return this.post('/api/v1/assets', data);
   }
 
-  async updateAsset(id: string, data: any): Promise<any> {
+  async updateAsset(id: string, data: Partial<{
+    name: string;
+    state: string;
+    metadata: Record<string, unknown>;
+  }>): Promise<AssetInfo> {
     return this.patch(`/api/v1/assets/${id}`, data);
   }
 
   async transitionAsset(id: string, toState: string, reason?: string): Promise<{
-    asset: any;
-    event: any;
+    asset: AssetInfo;
+    event: EventInfo;
   }> {
     return this.post(`/api/v1/assets/${id}/transition`, { toState, reason });
   }
@@ -274,7 +361,7 @@ export class ApiClient {
   async mint(assetId: string, to: string, amount: string): Promise<{
     success: boolean;
     txHash: string;
-    event: any;
+    event: EventInfo;
     newBalance: string;
   }> {
     return this.post(`/api/v1/tokens/${assetId}/mint`, { to, amount });
@@ -283,7 +370,7 @@ export class ApiClient {
   async transfer(assetId: string, from: string, to: string, amount: string): Promise<{
     success: boolean;
     txHash: string;
-    event: any;
+    event: EventInfo;
     fromBalance: string;
     toBalance: string;
   }> {
@@ -293,7 +380,7 @@ export class ApiClient {
   async burn(assetId: string, from: string, amount: string): Promise<{
     success: boolean;
     txHash: string;
-    event: any;
+    event: EventInfo;
     newBalance: string;
   }> {
     return this.post(`/api/v1/tokens/${assetId}/burn`, { from, amount });
@@ -309,15 +396,18 @@ export class ApiClient {
     to?: string;
     actorId?: string;
   }): Promise<{
-    events: any[];
+    events: EventInfo[];
     total: number;
     page: number;
     limit: number;
   }> {
-    return this.get('/api/v1/events', params as any);
+    const queryParams = params ? Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
+    ) : undefined;
+    return this.get('/api/v1/events', queryParams);
   }
 
-  async getEvent(id: string): Promise<any> {
+  async getEvent(id: string): Promise<EventInfo> {
     return this.get(`/api/v1/events/${id}`);
   }
 
@@ -326,19 +416,22 @@ export class ApiClient {
     limit?: number;
     types?: string;
   }): Promise<{
-    events: any[];
+    events: EventInfo[];
     total: number;
     page: number;
     limit: number;
   }> {
-    return this.get(`/api/v1/events/asset/${assetId}`, params as any);
+    const queryParams = params ? Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
+    ) : undefined;
+    return this.get(`/api/v1/events/asset/${assetId}`, queryParams);
   }
 
   async createEvent(event: {
     type: string;
     assetId: string;
     payload?: Record<string, unknown>;
-  }): Promise<any> {
+  }): Promise<EventInfo> {
     return this.post('/api/v1/events', event);
   }
 
@@ -361,15 +454,15 @@ export class ApiClient {
     return this.get('/api/v1/chains');
   }
 
-  async getChain(chainId: number): Promise<any> {
+  async getChain(chainId: number): Promise<ChainInfo> {
     return this.get(`/api/v1/chains/${chainId}`);
   }
 
-  async getChainDeployments(chainId: number): Promise<{ deployments: any[] }> {
+  async getChainDeployments(chainId: number): Promise<{ deployments: DeploymentInfo[] }> {
     return this.get(`/api/v1/chains/${chainId}/deployments`);
   }
 
-  async getAssetDeployments(assetId: string): Promise<{ deployments: any[] }> {
+  async getAssetDeployments(assetId: string): Promise<{ deployments: DeploymentInfo[] }> {
     return this.get(`/api/v1/chains/asset/${assetId}`);
   }
 
@@ -379,8 +472,8 @@ export class ApiClient {
     contractAddress: string;
     deployTxHash?: string;
     deployerAddress?: string;
-    abi?: any[];
-  }): Promise<any> {
+    abi?: Array<Record<string, unknown>>;
+  }): Promise<DeploymentInfo> {
     return this.post(`/api/v1/chains/${chainId}/deployments`, data);
   }
 
