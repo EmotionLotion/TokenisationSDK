@@ -24,6 +24,8 @@
 
 The Tokenisation SDK is a complete toolkit for building compliant tokenized asset platforms. It implements the **ERC-3643 (T-REX)** standard for security tokens, providing institutional-grade compliance out of the box.
 
+> **New to tokenization?** Start with [Core Concepts](docs/CONCEPTS.md) to understand what asset tokenization is and why it matters. See the [Glossary](docs/GLOSSARY.md) for term definitions.
+
 ### Key Capabilities
 
 - **ERC-3643 Compliant** - Full T-REX implementation with identity registry, compliance modules, and claim-based verification
@@ -577,7 +579,12 @@ TokenisationSDK/
 │   └── conformance-suite/        # Integration tests
 │
 └── docs/                         # Documentation
-    └── getting-started/          # Quick start guide
+    ├── CONCEPTS.md               # What is tokenization, domain model
+    ├── GLOSSARY.md               # Term definitions (80+ terms)
+    ├── API_REFERENCE.md          # Complete SDK API documentation
+    ├── ARCHITECTURE.md           # System design, security, production
+    └── getting-started/
+        └── QUICKSTART.md         # Step-by-step tutorial
 ```
 
 ---
@@ -634,11 +641,27 @@ npm test --workspace=@tokenisation/conformance-suite
 
 ## Documentation
 
+### For New Users
+
 | Document | Description |
 |----------|-------------|
-| [Quick Start](docs/getting-started/QUICKSTART.md) | Get running fast |
-| [Server Setup](server/.env.example) | Environment configuration |
-| [Contract Deployment](contracts/script/DeployUpgradeable.s.sol) | Deploy upgradeable tokens |
+| [Core Concepts](docs/CONCEPTS.md) | What is tokenization? Domain model, business case, end-to-end flow |
+| [Glossary](docs/GLOSSARY.md) | 80+ terms defined (KYC, AML, UUPS, ERC-3643, idempotency, etc.) |
+
+### For Developers
+
+| Document | Description |
+|----------|-------------|
+| [Quick Start](docs/getting-started/QUICKSTART.md) | Tokenize your first asset in minutes |
+| [API Reference](docs/API_REFERENCE.md) | Complete SDK documentation - all methods, parameters, examples |
+| [Architecture](docs/ARCHITECTURE.md) | System design, security features, production requirements |
+
+### Configuration & Deployment
+
+| Document | Description |
+|----------|-------------|
+| [Server Config](server/.env.example) | Environment variables reference |
+| [Contract Deployment](contracts/script/DeployUpgradeable.s.sol) | Deploy upgradeable tokens with governance |
 
 ---
 
