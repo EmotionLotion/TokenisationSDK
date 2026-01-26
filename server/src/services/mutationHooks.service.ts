@@ -344,7 +344,7 @@ function createMutationRecord(params: {
   diff?: MutationDiff[];
   ctx?: ReturnType<typeof getRequestContext>;
 }): MutationRecord {
-  const timestamp = new Date();
+  const timestamp = new Date().toISOString();
   const id = `mut_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
   const record: MutationRecord = {
@@ -487,9 +487,9 @@ export async function withTrackedTransaction<T>(
 ): Promise<T> {
   return db.transaction(async (tx) => {
     const ttx: TrackedTransaction = {
-      insert: (tableName, values, options) => trackedInsert(tx, tableName, values, options),
-      update: (tableName, where, updates, options) => trackedUpdate(tx, tableName, where, updates, options),
-      delete: (tableName, where, options) => trackedDelete(tx, tableName, where, options),
+      insert: ((tableName: any, values: any, options?: any) => trackedInsert(tx, tableName, values, options)) as typeof trackedInsert,
+      update: ((tableName: any, where: any, updates: any, options?: any) => trackedUpdate(tx, tableName, where, updates, options)) as typeof trackedUpdate,
+      delete: ((tableName: any, where: any, options?: any) => trackedDelete(tx, tableName, where, options)) as typeof trackedDelete,
       raw: tx as any,
     };
 

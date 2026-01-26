@@ -21,7 +21,7 @@ export interface Rule {
   type: RuleType;
   field: string;
   op: RuleOperator;
-  value: unknown;
+  value?: unknown;
   message?: string;
   code?: string;
 }

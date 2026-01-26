@@ -102,10 +102,10 @@ export async function createSchedule(input: CreateVestingScheduleInput) {
     walletAddress: input.walletAddress.toLowerCase(),
     totalAmount: input.totalAmount,
     vestingType: input.vestingType,
-    grantDate: input.grantDate.toISOString(),
-    startDate: input.startDate.toISOString(),
-    cliffDate: input.cliffDate?.toISOString(),
-    endDate: input.endDate.toISOString(),
+    grantDate: input.grantDate,
+    startDate: input.startDate,
+    cliffDate: input.cliffDate,
+    endDate: input.endDate,
     cliffMonths: input.cliffMonths || 0,
     vestingMonths: input.vestingMonths,
     cliffAmount: input.cliffAmount,
@@ -327,7 +327,7 @@ export async function createMilestone(input: CreateMilestoneInput) {
     name: input.name,
     description: input.description,
     vestingPercent: input.vestingPercent.toString(),
-    targetDate: input.targetDate?.toISOString(),
+    targetDate: input.targetDate,
     metadata: input.metadata || {},
   }).returning();
 

@@ -145,7 +145,7 @@ async function jsonRpcCall(rpcUrl: string, method: string, params: any[]): Promi
     }),
   });
 
-  const result = await response.json();
+  const result = await response.json() as { error?: { message: string }; result?: unknown };
 
   if (result.error) {
     throw new Error(`RPC Error: ${result.error.message}`);
@@ -411,7 +411,7 @@ export async function waitForTransaction(
       // Check confirmations
       const currentBlock = await jsonRpcCall(chain.rpcUrl, 'eth_blockNumber', []);
       const currentBlockNum = parseInt(currentBlock, 16);
-      const txBlockNum = receipt.txBlock;
+      const txBlockNum = receipt.blockNumber;
 
       if (currentBlockNum - txBlockNum >= confirmations) {
         return receipt;

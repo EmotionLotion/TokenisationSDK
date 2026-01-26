@@ -283,9 +283,11 @@ export async function createAllocation(
 
   // Check min/max investment limits
   const investmentBig = BigInt(input.investmentAmount);
-  const minBig = BigInt(offering.minInvestment);
-  if (investmentBig < minBig) {
-    throw new ValidationError(`Investment amount ${input.investmentAmount} is below minimum ${offering.minInvestment}`);
+  if (offering.minInvestment) {
+    const minBig = BigInt(offering.minInvestment);
+    if (investmentBig < minBig) {
+      throw new ValidationError(`Investment amount ${input.investmentAmount} is below minimum ${offering.minInvestment}`);
+    }
   }
 
   if (offering.maxInvestment) {
@@ -809,7 +811,7 @@ export function startChainReconciliationWorker(config: {
     return;
   }
 
-  logger.info('[ChainReconciliation] Starting worker with poll interval', { pollIntervalMs });
+  logger.info('[ChainReconciliation] Starting worker with poll interval', { metadata: { pollIntervalMs } });
 
   reconciliationInterval = setInterval(async () => {
     try {

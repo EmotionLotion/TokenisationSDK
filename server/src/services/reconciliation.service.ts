@@ -10,7 +10,7 @@
  */
 
 import { db, schema } from '../config/database.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, or } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as relayerService from './relayer.service.js';
@@ -497,7 +497,10 @@ async function getLastOffChainEvent(
   const event = await dbOps.query.ledgerEvents.findFirst({
     where: and(
       eq(ledgerEvents.tokenId, tokenId),
-      eq(ledgerEvents.walletAddress, walletAddress.toLowerCase())
+      or(
+        eq(ledgerEvents.toWallet, walletAddress.toLowerCase()),
+        eq(ledgerEvents.fromWallet, walletAddress.toLowerCase())
+      )
     ),
     orderBy: desc(ledgerEvents.createdAt),
   });

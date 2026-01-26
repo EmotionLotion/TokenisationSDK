@@ -221,10 +221,13 @@ export const investors = pgTable('investors', {
   phone: varchar('phone', { length: 32 }),
   jurisdiction: varchar('jurisdiction', { length: 2 }).notNull(),
   countryCode: varchar('country_code', { length: 2 }), // ISO country code
+  taxResidency: varchar('tax_residency', { length: 2 }), // Tax residency country code
   classification: varchar('classification', { length: 32 }).notNull().default('retail'), // retail, professional, institutional
   riskTier: varchar('risk_tier', { length: 16 }).notNull().default('medium'), // low, medium, high
   status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, active, suspended
   kycStatus: varchar('kyc_status', { length: 32 }).notNull().default('pending'), // pending, in_progress, passed, failed, expired
+  kycLevel: varchar('kyc_level', { length: 32 }).default('basic'), // basic, enhanced, institutional
+  kycProvider: varchar('kyc_provider', { length: 32 }), // sumsub, onfido, jumio
   piiRef: varchar('pii_ref', { length: 256 }), // Pointer to encrypted vault or provider reference
   accreditedStatus: varchar('accredited_status', { length: 32 }).default('unknown'), // unknown, pending, verified, expired
   accreditedVerifiedAt: timestamp('accredited_verified_at', { withTimezone: true }),
@@ -249,11 +252,13 @@ export const investorWallets = pgTable('investor_wallets', {
   investorId: uuid('investor_id').notNull().references(() => investors.id, { onDelete: 'cascade' }),
   chainId: integer('chain_id').notNull(),
   address: varchar('address', { length: 42 }).notNull(),
+  label: varchar('label', { length: 128 }), // User-friendly wallet label
   custodyType: varchar('custody_type', { length: 32 }).notNull().default('non_custodial'),
   status: varchar('status', { length: 32 }).notNull().default('active'), // active, revoked
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   orgInvestorChainAddressUnique: uniqueIndex('idx_investor_wallets_unique').on(table.orgId, table.investorId, table.chainId, table.address),
   orgIdx: index('idx_investor_wallets_org').on(table.orgId),
@@ -271,6 +276,7 @@ export const kycSessions = pgTable('kyc_sessions', {
   status: varchar('status', { length: 32 }).notNull().default('created'), // created, pending, approved, rejected, expired
   level: varchar('level', { length: 32 }).notNull().default('basic'), // basic, enhanced, institutional
   levelRequested: varchar('level_requested', { length: 32 }).notNull().default('basic'), // Requested verification level
+  redirectUrl: text('redirect_url'), // URL to redirect user for verification
   checks: jsonb('checks').default({}), // Screening results summary
   providerData: jsonb('provider_data').default({}), // Raw provider response data
   evidenceHashes: jsonb('evidence_hashes').default([]), // Hash references, not raw docs

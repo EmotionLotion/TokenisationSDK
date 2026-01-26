@@ -489,7 +489,11 @@ export async function getEventStats(orgId: string): Promise<{
   }
 
   return {
-    ...stats,
+    pending: stats.pending,
+    processing: stats.processing,
+    processed: stats.processed,
+    failed: stats.failed,
+    dlq: stats.dlq,
     byTopic,
   };
 }

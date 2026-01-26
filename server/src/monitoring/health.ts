@@ -235,7 +235,7 @@ export function createRpcHealthCheck(chainId: number, rpcUrl: string): HealthChe
         throw new Error(`RPC returned ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { result: string };
       const blockNumber = parseInt(data.result, 16);
 
       return {

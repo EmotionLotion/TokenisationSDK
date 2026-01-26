@@ -208,7 +208,7 @@ export async function generateTransferPack(
   ]);
 
   // Fetch policy versions for each decision (decision trace requirement)
-  const { policyVersions } = await import('../db/schema.js').then(m => m.default || m) as typeof schema;
+  const { policyVersions } = await import('../db/schema.js');
   const policyDecisionTrace = await Promise.all(
     complianceDecisions
       .filter(d => d.policyVersionId)
@@ -227,7 +227,7 @@ export async function generateTransferPack(
             policyId: policyVersion.policyId,
             version: policyVersion.version,
             ruleset: policyVersion.ruleset,
-            activatedAt: policyVersion.activatedAt,
+            publishedAt: policyVersion.publishedAt,
           } : null,
         };
       })
@@ -440,7 +440,7 @@ function createEvidencePack(params: {
   auditTrail: auditService.AuditLogEntry[];
 }): EvidencePack {
   const packId = `evp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-  const generatedAt = new Date();
+  const generatedAt = new Date().toISOString();
 
   const pack: Omit<EvidencePack, 'attestation'> = {
     id: packId,
@@ -483,7 +483,7 @@ function generateAttestation(pack: Omit<EvidencePack, 'attestation'>): EvidenceA
   return {
     contentHash,
     algorithm: 'SHA-256',
-    attestedAt: new Date(),
+    attestedAt: new Date().toISOString(),
     // Signature would be added here if server-side signing is configured
   };
 }
@@ -595,7 +595,7 @@ export async function generateClawbackPack(
   clawbackId: string,
   orgId: string
 ): Promise<EvidencePack> {
-  const { clawbacks, complianceApprovals, policyVersions } = await import('../db/schema.js').then(m => m.default || m) as typeof schema;
+  const { clawbacks, complianceApprovals, policyVersions } = await import('../db/schema.js');
 
   const clawback = await db.query.clawbacks.findFirst({
     where: and(eq(clawbacks.id, clawbackId), eq(clawbacks.orgId, orgId)),

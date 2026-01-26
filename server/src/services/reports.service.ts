@@ -19,7 +19,7 @@ import * as truthviewService from './truthview.service.js';
 import * as reconciliationService from './reconciliation.service.js';
 import { logger } from '../middleware/logger.js';
 
-const { tokens, ledgerPositions, transfers, investors, distributions, distributionPayouts, auditLogs, complianceDecisions } = schema;
+const { tokens, ledgerPositions, transfers, investors, distributions, distributionPayments, auditLog, decisions } = schema;
 
 // ============================================================================
 // Types
@@ -102,13 +102,14 @@ export async function generateReport(request: ReportRequest): Promise<GeneratedR
   // Generate asynchronously
   generateReportContent(report, request).catch(error => logger.error('Report generation failed', { error: error as Error }));
 
-  await auditService.logAction({
+  await auditService.log({
     orgId: request.orgId,
+    actorType: 'user',
     action: 'report.requested',
-    entityType: 'report',
-    entityId: id,
+    resourceType: 'report',
+    resourceId: id,
     actorId: request.requestedBy,
-    changes: {
+    metadata: {
       type: request.type,
       format: request.format,
     },
@@ -199,12 +200,13 @@ async function generateReportContent(report: GeneratedReport, request: ReportReq
 
     reports.set(report.id, report);
 
-    await auditService.logAction({
+    await auditService.log({
       orgId: request.orgId,
+      actorType: 'system',
       action: 'report.generated',
-      entityType: 'report',
-      entityId: report.id,
-      changes: {
+      resourceType: 'report',
+      resourceId: report.id,
+      metadata: {
         size: report.size,
         checksum: report.checksum,
       },
@@ -364,8 +366,8 @@ async function generateAuditTrailReport(request: ReportRequest): Promise<string>
         id: 'aud_001',
         timestamp: '2024-06-15T10:00:00Z',
         action: 'token.created',
-        entityType: 'token',
-        entityId: 'tok_001',
+        resourceType: 'token',
+        resourceId: 'tok_001',
         actorType: 'api_key',
         actorId: 'key_001',
         previousHash: null,
@@ -375,8 +377,8 @@ async function generateAuditTrailReport(request: ReportRequest): Promise<string>
         id: 'aud_002',
         timestamp: '2024-06-15T10:01:00Z',
         action: 'investor.created',
-        entityType: 'investor',
-        entityId: 'inv_001',
+        resourceType: 'investor',
+        resourceId: 'inv_001',
         actorType: 'api_key',
         actorId: 'key_001',
         previousHash: 'sha256:abc123...',
@@ -657,7 +659,7 @@ function convertToCSV(data: unknown): string {
 }
 
 function generateFilename(type: ReportType, format: ReportFormat): string {
-  const timestamp = new Date().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return `ahoy_${type}_${timestamp}.${format}`;
 }
 

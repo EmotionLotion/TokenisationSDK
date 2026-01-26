@@ -14,20 +14,20 @@ export interface IdempotencyRecord {
   id: string;
   orgId: string;
   key: string;
-  operation: string;
   requestHash: string;
-  responseCode: number;
-  responseBody: Record<string, unknown>;
-  status: 'processing' | 'completed' | 'failed';
-  expiresAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  statusCode: number | null;
+  responseBody: unknown;
+  status: string;
+  expiresAt: Date | null;
+  completedAt: Date | null;
+  error: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
 }
 
 export interface IdempotencyOptions {
   key: string;
   orgId: string;
-  operation: string;
   requestBody: unknown;
   ttlMs?: number;
 }
@@ -58,7 +58,7 @@ export async function checkIdempotencyKey(options: IdempotencyOptions): Promise<
   exists: boolean;
   record?: IdempotencyRecord;
 }> {
-  const { key, orgId, operation, requestBody, ttlMs = 24 * 60 * 60 * 1000 } = options;
+  const { key, orgId, requestBody, ttlMs = 24 * 60 * 60 * 1000 } = options;
 
   // Validate key format
   if (!key || key.length < 8 || key.length > 64) {
@@ -84,7 +84,7 @@ export async function checkIdempotencyKey(options: IdempotencyOptions): Promise<
     }
 
     // Check if expired
-    if (existing.expiresAt < new Date()) {
+    if (existing.expiresAt && existing.expiresAt < new Date()) {
       // Expired, delete and allow retry
       await db.delete(idempotencyKeys).where(eq(idempotencyKeys.id, existing.id));
     } else if (existing.status === 'completed') {
@@ -107,11 +107,10 @@ export async function checkIdempotencyKey(options: IdempotencyOptions): Promise<
   const [record] = await db.insert(idempotencyKeys).values({
     orgId,
     key,
-    operation,
     requestHash,
     status: 'processing',
-    responseCode: 0,
-    responseBody: {} as any,
+    statusCode: 0,
+    responseBody: {},
     expiresAt,
   }).returning();
 
@@ -123,14 +122,15 @@ export async function checkIdempotencyKey(options: IdempotencyOptions): Promise<
  */
 export async function completeIdempotencyKey(
   id: string,
-  responseCode: number,
+  statusCode: number,
   responseBody: Record<string, unknown>
 ): Promise<void> {
   await db.update(idempotencyKeys)
     .set({
       status: 'completed',
-      responseCode,
-      responseBody: responseBody as any,
+      statusCode,
+      responseBody,
+      completedAt: new Date(),
       updatedAt: new Date(),
     })
     .where(eq(idempotencyKeys.id, id));
@@ -139,11 +139,11 @@ export async function completeIdempotencyKey(
 /**
  * Marks an idempotency key as failed.
  */
-export async function failIdempotencyKey(id: string, error: string): Promise<void> {
+export async function failIdempotencyKey(id: string, errorMessage: string): Promise<void> {
   await db.update(idempotencyKeys)
     .set({
       status: 'failed',
-      responseBody: { error } as any,
+      error: errorMessage,
       updatedAt: new Date(),
     })
     .where(eq(idempotencyKeys.id, id));
@@ -266,7 +266,6 @@ export function idempotencyMiddleware(operation: string) {
       const { exists, record } = await checkIdempotencyKey({
         key: idempotencyKey,
         orgId: req.apiKey.orgId,
-        operation,
         requestBody: req.body,
       });
 
@@ -274,7 +273,7 @@ export function idempotencyMiddleware(operation: string) {
         // Return cached response
         res.setHeader('Idempotency-Key', idempotencyKey);
         res.setHeader('Idempotent-Replayed', 'true');
-        return res.status(record.responseCode).json(record.responseBody);
+        return res.status(record.statusCode || 200).json(record.responseBody);
       }
 
       // Store record ID for later completion

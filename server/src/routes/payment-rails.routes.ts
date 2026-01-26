@@ -70,11 +70,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.headers['x-org-id'] as string || 'default-org';
-    const { railType, isActive } = req.query;
+    const { railType, status } = req.query;
 
     const configs = await paymentRailsService.listRailConfigs(orgId, {
       railType: railType as paymentRailsService.PaymentRailType | undefined,
-      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      status: status as 'active' | 'disabled' | undefined,
     });
 
     res.json({ data: configs, count: configs.length });
@@ -159,6 +159,7 @@ router.post('/:railId/payments', async (req: Request, res: Response, next: NextF
     const {
       amount,
       currency,
+      direction,
       recipientId,
       recipientType,
       recipientAddress,
@@ -168,21 +169,20 @@ router.post('/:railId/payments', async (req: Request, res: Response, next: NextF
       metadata,
     } = req.body;
 
-    if (!amount || !currency || !recipientId || !recipientType) {
-      throw new ValidationError('amount, currency, recipientId, and recipientType are required');
+    if (!amount || !currency || !direction) {
+      throw new ValidationError('amount, currency, and direction are required');
     }
 
     const payment = await paymentRailsService.createPayment({
       orgId,
       railConfigId: railId,
+      direction: direction as 'inbound' | 'outbound',
       amount,
       currency,
-      recipientId,
-      recipientType,
-      recipientAddress,
-      recipientBankInfo,
-      payoutId,
-      distributionId,
+      investorId: recipientId,
+      walletAddress: recipientAddress,
+      bankDetails: recipientBankInfo,
+      reference: payoutId || distributionId,
       metadata,
     });
 
@@ -202,16 +202,23 @@ router.post('/:railId/payments/batch', async (req: Request, res: Response, next:
     const { railId } = req.params;
     const { currency, distributionId, payments: paymentInputs } = req.body;
 
-    if (!currency || !distributionId || !paymentInputs || !Array.isArray(paymentInputs)) {
-      throw new ValidationError('currency, distributionId, and payments array are required');
+    if (!currency || !paymentInputs || !Array.isArray(paymentInputs)) {
+      throw new ValidationError('currency and payments array are required');
     }
 
     const result = await paymentRailsService.createBatchPayments({
       orgId,
-      railConfigId: railId,
-      currency,
-      distributionId,
-      payments: paymentInputs,
+      payments: paymentInputs.map((p: any) => ({
+        railConfigId: railId,
+        direction: p.direction || 'outbound',
+        amount: p.amount,
+        currency,
+        investorId: p.recipientId || p.investorId,
+        walletAddress: p.recipientAddress || p.walletAddress,
+        bankDetails: p.bankDetails,
+        reference: p.reference,
+        metadata: p.metadata,
+      })),
     });
 
     res.status(201).json(result);
@@ -227,18 +234,18 @@ router.post('/:railId/payments/batch', async (req: Request, res: Response, next:
 router.get('/payments', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.headers['x-org-id'] as string || 'default-org';
-    const { status, railType, distributionId, recipientId, limit, offset } = req.query;
+    const { status, railType, investorId, direction, startDate, endDate } = req.query;
 
-    const result = await paymentRailsService.listPayments(orgId, {
+    const payments = await paymentRailsService.listPayments(orgId, {
       status: status as paymentRailsService.PaymentStatus | undefined,
       railType: railType as paymentRailsService.PaymentRailType | undefined,
-      distributionId: distributionId as string | undefined,
-      recipientId: recipientId as string | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      investorId: investorId as string | undefined,
+      direction: direction as 'inbound' | 'outbound' | undefined,
+      startDate: startDate as string | undefined,
+      endDate: endDate as string | undefined,
     });
 
-    res.json({ data: result.payments, count: result.payments.length, total: result.total });
+    res.json({ data: payments, count: payments.length, total: payments.length });
   } catch (error) {
     next(error);
   }
@@ -306,8 +313,8 @@ router.get('/payments/analytics', async (req: Request, res: Response, next: Next
     const { startDate, endDate, railType } = req.query;
 
     const analytics = await paymentRailsService.getPaymentAnalytics(orgId, {
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
+      startDate: startDate as string | undefined,
+      endDate: endDate as string | undefined,
       railType: railType as paymentRailsService.PaymentRailType | undefined,
     });
 

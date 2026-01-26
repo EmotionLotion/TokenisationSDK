@@ -95,7 +95,7 @@ export interface DistributionSummary {
   totalRecipients: number;
   amountPerToken: string;
   payments: Array<{
-    investorId: string;
+    investorId: string | null;
     walletAddress: string | null;
     tokenBalance: string;
     paymentAmount: string;
@@ -132,9 +132,9 @@ export async function createDistribution(input: CreateDistributionInput) {
     totalAmount: input.totalAmount,
     currency: input.currency,
     amountPerToken: '0',
-    recordDate: input.recordDate.toISOString(),
-    paymentDate: input.paymentDate.toISOString(),
-    exDividendDate: input.exDividendDate?.toISOString(),
+    recordDate: input.recordDate,
+    paymentDate: input.paymentDate,
+    exDividendDate: input.exDividendDate,
     allocationStrategy: input.allocationStrategy || 'pro_rata',
     paymentMethod: input.paymentMethod,
     status: 'draft',
@@ -253,6 +253,9 @@ export async function approveDistribution(distributionId: string, orgId: string,
 
   await withRetryableTransaction(async (tx) => {
     for (const payment of summary.payments) {
+      // Skip payments without an investor ID (orphan wallets)
+      if (!payment.investorId) continue;
+
       await tx.insert(distributionPayments).values({
         orgId,
         distributionId,
@@ -769,7 +772,7 @@ export async function executePaymentsIdempotent(
 
       // Mark as processing
       await db.update(distributionPayments)
-        .set({ status: 'processing', updatedAt: new Date() })
+        .set({ status: 'processing' })
         .where(and(
           eq(distributionPayments.id, payment.id),
           eq(distributionPayments.status, 'pending') // Optimistic locking
@@ -803,7 +806,6 @@ export async function executePaymentsIdempotent(
         .set({
           status: 'failed',
           error: errorMsg,
-          updatedAt: new Date(),
         })
         .where(eq(distributionPayments.id, payment.id));
 

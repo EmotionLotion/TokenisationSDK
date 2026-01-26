@@ -21,7 +21,7 @@ const {
   capTableSnapshots,
   decisions,
   policyVersions,
-  auditLogs,
+  auditLog,
   domainEventsOutbox,
 } = schema;
 
@@ -267,7 +267,7 @@ export async function generateRegulatoryPack(
 
   const pack: Omit<RegulatoryPack, 'attestation'> = {
     id: packId,
-    generatedAt: new Date(),
+    generatedAt: new Date().toISOString(),
     version: '1.0',
     type: 'token_regulatory_pack',
     subject: {
@@ -294,9 +294,9 @@ export async function generateRegulatoryPack(
     assetDetails: asset ? {
       id: asset.id,
       name: asset.name,
-      assetClass: asset.assetClass || undefined,
-      jurisdiction: asset.jurisdiction || undefined,
-      valuationCurrency: asset.valuationCurrency || undefined,
+      assetClass: (asset.metadata as any)?.assetClass || undefined,
+      jurisdiction: String(asset.jurisdiction || ''),
+      valuationCurrency: (asset.metadata as any)?.valuationCurrency || undefined,
       state: asset.state,
     } : undefined,
     capTable,
@@ -733,7 +733,7 @@ function generatePackAttestation(pack: Omit<RegulatoryPack, 'attestation'>): Pac
   return {
     contentHash,
     algorithm: 'SHA-256',
-    attestedAt: new Date(),
+    attestedAt: new Date().toISOString(),
   };
 }
 

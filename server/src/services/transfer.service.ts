@@ -733,11 +733,11 @@ async function updateLedgerPositionsInTx(
   await txContext.insert(ledgerEvents).values([
     {
       orgId,
-      type: 'transfer',
+      eventType: 'transfer',
       tokenId,
       fromWallet,
       toWallet,
-      amount,
+      delta: `-${amount}`, // Negative for sender
       ref: transfer.id,
       refType: 'transfer',
       balanceBefore: senderBalanceBefore,
@@ -745,11 +745,11 @@ async function updateLedgerPositionsInTx(
     },
     {
       orgId,
-      type: 'transfer',
+      eventType: 'transfer',
       tokenId,
       fromWallet,
       toWallet,
-      amount,
+      delta: amount, // Positive for receiver
       ref: transfer.id,
       refType: 'transfer',
       balanceBefore: receiverBalanceBefore,

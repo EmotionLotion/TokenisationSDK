@@ -174,10 +174,10 @@ export async function recordLedgerEvent(input: {
     orgId: input.orgId,
     tokenId: input.tokenId,
     eventType: input.eventType,
-    walletAddress: input.walletAddress.toLowerCase(),
-    amount: input.amount,
+    toWallet: input.walletAddress.toLowerCase(),
+    delta: input.amount,
     txHash: input.txHash,
-    blockNumber: input.blockNumber,
+    txBlock: input.blockNumber,
     metadata: input.metadata || {},
   }).returning();
 
@@ -272,13 +272,13 @@ export async function createCapTableSnapshot(
   const [snapshot] = await db.insert(capTableSnapshots).values({
     orgId,
     tokenId,
-    snapshotAt: new Date(),
+    asOf: new Date(),
     totalHolders,
-    totalSupply: token.totalSupply,
-    circulatingSupply,
-    positions: positionsData as any,
+    totalSupply: token.totalSupply || '0',
+    snapshot: { positions: positionsData, circulatingSupply },
+    merkleRoot: hash,
+    generatedBy: 'system',
     metadata: metadata || {},
-    hash,
   }).returning();
 
   return snapshot as CapTableSnapshot;
@@ -397,7 +397,7 @@ export async function getPositionSummary(tokenId: string, orgId: string): Promis
     averageBalance: averageBalance.toString(),
     medianBalance: medianBalance.toString(),
     largestHolder: {
-      investorId: largest.investorId,
+      investorId: largest.investorId || '',
       balance: largest.balance,
       percentage: largestPercentage,
     },
@@ -486,14 +486,16 @@ export async function getHolderMovements(orgId: string, params: {
   const walletBalances = new Map<string, bigint>();
 
   for (const event of events) {
-    const amount = BigInt(event.amount);
+    const amount = BigInt(event.delta);
     if (amount > 0n) {
       volumeIn += amount;
     } else {
       volumeOut += -amount;
     }
 
-    const key = `${event.tokenId}:${event.walletAddress}`;
+    // Use toWallet for credits, fromWallet for debits
+    const wallet = event.toWallet || event.fromWallet || '';
+    const key = `${event.tokenId}:${wallet}`;
     const current = walletBalances.get(key) || 0n;
     walletBalances.set(key, current + amount);
   }
@@ -553,7 +555,7 @@ export async function getTransferVolume(orgId: string, params: {
 
   for (const t of transferData) {
     let key: string;
-    const date = new Date(t.createdAt);
+    const date = new Date(t.createdAt ?? new Date());
 
     if (groupBy === 'day') {
       key = date.toISOString().split('T')[0];
@@ -627,7 +629,7 @@ export async function getInvestorPortfolio(investorId: string, orgId: string): P
     tokenSymbol: token.symbol,
     walletAddress: position.walletAddress,
     balance: position.balance,
-    lockedBalance: position.lockedBalance || '0',
+    lockedBalance: position.frozenBalance || '0',
   }));
 
   return {

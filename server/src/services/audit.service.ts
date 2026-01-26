@@ -164,7 +164,7 @@ export async function log(input: CreateAuditLogInput): Promise<AuditLogEntry> {
     description: entry.description,
     metadata: entry.metadata as Record<string, unknown>,
     prevHash: entry.prevHash,
-    createdAt: entry.createdAt,
+    createdAt: entry.createdAt ?? new Date(),
   });
 
   // Update with the computed hash
@@ -573,6 +573,6 @@ export async function exportAuditLog(orgId: string, params: {
   return {
     data: entries,
     format: params.format || 'json',
-    exportedAt: new Date(),
+    exportedAt: new Date().toISOString(),
   };
 }

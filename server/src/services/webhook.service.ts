@@ -194,7 +194,7 @@ export async function dispatchEvent(orgId: string, eventType: string, payload: o
   const webhookPayload: WebhookPayload = {
     id: eventId,
     type: eventType,
-    createdAt: new Date(),
+    createdAt: new Date().toISOString(),
     data: payload,
   };
 

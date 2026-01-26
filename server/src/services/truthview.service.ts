@@ -9,7 +9,7 @@
  */
 
 import { db, schema } from '../config/database.js';
-import { eq, and, lte, gte, desc, asc } from 'drizzle-orm';
+import { eq, and, lte, gte, desc, asc, or } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { NotFoundError } from '../middleware/errorHandler.js';
 
@@ -138,7 +138,10 @@ export async function getHistoricalBalance(
     .where(
       and(
         eq(ledgerEvents.tokenId, tokenId),
-        eq(ledgerEvents.walletAddress, normalizedWallet),
+        or(
+          eq(ledgerEvents.toWallet, normalizedWallet),
+          eq(ledgerEvents.fromWallet, normalizedWallet)
+        ),
         lte(ledgerEvents.createdAt, asOf)
       )
     )
@@ -149,8 +152,13 @@ export async function getHistoricalBalance(
   let lastEvent: typeof events[0] | null = null;
 
   for (const event of events) {
-    const amount = BigInt(event.amount || '0');
-    balance += amount;
+    const delta = BigInt(event.delta || '0');
+    // If wallet is the receiver, add to balance; if sender, subtract
+    if (event.toWallet === normalizedWallet) {
+      balance += delta;
+    } else if (event.fromWallet === normalizedWallet) {
+      balance -= delta;
+    }
     lastEvent = event;
   }
 
@@ -194,8 +202,8 @@ export async function getHistoricalBalances(
     : new Date(); // For block-based queries, use current date as proxy
 
   // Get all unique wallet addresses with events before the target date
-  const uniqueWallets = await db
-    .selectDistinct({ walletAddress: ledgerEvents.walletAddress })
+  const toWallets = await db
+    .selectDistinct({ walletAddress: ledgerEvents.toWallet })
     .from(ledgerEvents)
     .where(
       and(
@@ -203,6 +211,23 @@ export async function getHistoricalBalances(
         lte(ledgerEvents.createdAt, asOfDate)
       )
     );
+
+  const fromWallets = await db
+    .selectDistinct({ walletAddress: ledgerEvents.fromWallet })
+    .from(ledgerEvents)
+    .where(
+      and(
+        eq(ledgerEvents.tokenId, query.tokenId),
+        lte(ledgerEvents.createdAt, asOfDate)
+      )
+    );
+
+  // Combine and dedupe wallet addresses
+  const walletSet = new Set<string>();
+  for (const { walletAddress } of [...toWallets, ...fromWallets]) {
+    if (walletAddress) walletSet.add(walletAddress);
+  }
+  const uniqueWallets = Array.from(walletSet).map(walletAddress => ({ walletAddress }));
 
   const balances: HistoricalBalance[] = [];
 
@@ -396,25 +421,51 @@ export async function getStateChanges(
   const runningBalances = new Map(balancesBefore);
 
   for (const event of events) {
-    const walletAddress = event.walletAddress;
-    const previousBalance = runningBalances.get(walletAddress) || 0n;
-    const change = BigInt(event.amount || '0');
-    const newBalance = previousBalance + change;
+    const delta = BigInt(event.delta || '0');
 
-    runningBalances.set(walletAddress, newBalance);
+    // Track change for toWallet (recipient)
+    if (event.toWallet) {
+      const walletAddress = event.toWallet;
+      const previousBalance = runningBalances.get(walletAddress) || 0n;
+      const newBalance = previousBalance + delta;
 
-    changes.push({
-      eventId: event.id,
-      timestamp: event.createdAt,
-      blockNumber: event.txBlock ?? undefined,
-      eventType: event.eventType,
-      walletAddress,
-      previousBalance: previousBalance.toString(),
-      newBalance: newBalance.toString(),
-      change: change.toString(),
-      txHash: event.txHash ?? undefined,
-      metadata: event.metadata as Record<string, unknown> | undefined,
-    });
+      runningBalances.set(walletAddress, newBalance);
+
+      changes.push({
+        eventId: event.id,
+        timestamp: event.createdAt ?? new Date(),
+        blockNumber: event.txBlock ?? undefined,
+        eventType: event.eventType,
+        walletAddress,
+        previousBalance: previousBalance.toString(),
+        newBalance: newBalance.toString(),
+        change: delta.toString(),
+        txHash: event.txHash ?? undefined,
+        metadata: event.metadata as Record<string, unknown> | undefined,
+      });
+    }
+
+    // Track change for fromWallet (sender) - subtract
+    if (event.fromWallet) {
+      const walletAddress = event.fromWallet;
+      const previousBalance = runningBalances.get(walletAddress) || 0n;
+      const newBalance = previousBalance - delta;
+
+      runningBalances.set(walletAddress, newBalance);
+
+      changes.push({
+        eventId: event.id,
+        timestamp: event.createdAt ?? new Date(),
+        blockNumber: event.txBlock ?? undefined,
+        eventType: event.eventType,
+        walletAddress,
+        previousBalance: previousBalance.toString(),
+        newBalance: newBalance.toString(),
+        change: (-delta).toString(),
+        txHash: event.txHash ?? undefined,
+        metadata: event.metadata as Record<string, unknown> | undefined,
+      });
+    }
   }
 
   // Calculate summary statistics

@@ -110,12 +110,13 @@ export async function createSettlement(input: CreateSettlementInput): Promise<Se
   }).returning();
 
   // Audit log
-  await auditService.logAction({
+  await auditService.log({
     orgId: input.orgId,
+    actorType: 'system',
     action: 'settlement.created',
-    entityType: 'settlement',
-    entityId: settlement.id,
-    changes: {
+    resourceType: 'settlement',
+    resourceId: settlement.id,
+    metadata: {
       txHash: input.txHash,
       chainId: input.chainId,
       requiredConfirmations,
@@ -257,12 +258,13 @@ export async function updateConfirmations(
         .where(eq(transfers.id, settlement.transferId));
     }
 
-    await auditService.logAction({
+    await auditService.log({
       orgId: settlement.orgId,
+      actorType: 'system',
       action: 'settlement.finalized',
-      entityType: 'settlement',
-      entityId: id,
-      changes: {
+      resourceType: 'settlement',
+      resourceId: id,
+      metadata: {
         confirmations,
         finalizedBlock: currentBlock,
       },
@@ -327,12 +329,13 @@ export async function markAsReorged(
       .where(eq(transfers.id, settlement.transferId));
   }
 
-  await auditService.logAction({
+  await auditService.log({
     orgId: settlement.orgId,
+    actorType: 'system',
     action: 'settlement.reorged',
-    entityType: 'settlement',
-    entityId: id,
-    changes: { reason },
+    resourceType: 'settlement',
+    resourceId: id,
+    metadata: { reason },
   });
 
   return updated as SettlementRecord;

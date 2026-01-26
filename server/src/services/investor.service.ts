@@ -221,12 +221,12 @@ export async function createInvestor(input: CreateInvestorInput) {
     email: input.email.toLowerCase(),
     phone: input.phone,
     type: input.type,
+    jurisdiction: input.countryCode.toUpperCase(),
     countryCode: input.countryCode.toUpperCase(),
     taxResidency: input.taxResidency?.toUpperCase(),
     status: 'pending',
     kycStatus: 'not_started',
-    profile: input.profile || {},
-    metadata: input.metadata || {},
+    metadata: { ...input.metadata, profile: input.profile } || {},
   }).returning();
 
   // Emit event
@@ -302,7 +302,7 @@ export async function listInvestors(orgId: string, params: {
   if (search) {
     const searchLower = search.toLowerCase();
     results = results.filter(inv =>
-      inv.email.toLowerCase().includes(searchLower) ||
+      inv.email?.toLowerCase().includes(searchLower) ||
       inv.externalId?.toLowerCase().includes(searchLower) ||
       inv.phone?.includes(search)
     );

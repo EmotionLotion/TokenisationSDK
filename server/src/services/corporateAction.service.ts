@@ -131,7 +131,7 @@ export interface EntitlementSummary {
   type: CorporateActionType;
   totalEntitlements: number;
   entitlements: Array<{
-    investorId: string;
+    investorId: string | null;
     walletAddress: string;
     originalBalance: string;
     newBalance: string;
@@ -178,8 +178,8 @@ export async function createSplit(input: CreateSplitInput) {
         simplifiedRatio: `${simplified.numerator}:${simplified.denominator}`,
       },
       announcementDate: new Date(),
-      recordDate: input.recordDate.toISOString(),
-      effectiveDate: input.effectiveDate.toISOString(),
+      recordDate: input.recordDate,
+      effectiveDate: input.effectiveDate,
       status: 'announced',
       metadata: input.metadata || {},
     }).returning();
@@ -237,8 +237,8 @@ export async function createReverseSplit(input: CreateReverseSplitInput) {
     description: input.description,
     parameters: { ratio: input.ratio, multiplier, newShares, oldShares },
     announcementDate: new Date(),
-    recordDate: input.recordDate.toISOString(),
-    effectiveDate: input.effectiveDate.toISOString(),
+    recordDate: input.recordDate,
+    effectiveDate: input.effectiveDate,
     status: 'announced',
     metadata: input.metadata || {},
   }).returning();
@@ -279,8 +279,8 @@ export async function createConversion(input: CreateConversionInput) {
     description: input.description,
     parameters: { conversionRate: input.conversionRate, newTokenId: input.newTokenId },
     announcementDate: new Date(),
-    recordDate: input.recordDate.toISOString(),
-    effectiveDate: input.effectiveDate.toISOString(),
+    recordDate: input.recordDate,
+    effectiveDate: input.effectiveDate,
     newTokenId: input.newTokenId,
     status: 'announced',
     metadata: input.metadata || {},
@@ -434,6 +434,9 @@ export async function approveCorporateAction(actionId: string, orgId: string, ap
 
   await withRetryableTransaction(async (tx) => {
     for (const ent of summary.entitlements) {
+      // Skip entries without an investor ID (orphan wallets)
+      if (!ent.investorId) continue;
+
       await tx.insert(corporateActionEntitlements).values({
         orgId,
         corporateActionId: actionId,

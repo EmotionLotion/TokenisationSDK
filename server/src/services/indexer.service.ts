@@ -128,7 +128,7 @@ async function getLogs(
     }),
   });
 
-  const result = await response.json();
+  const result = await response.json() as { error?: { message: string }; result?: any[] };
 
   if (result.error) {
     throw new Error(`RPC Error: ${result.error.message}`);
@@ -316,10 +316,10 @@ async function updatePositionFromChain(
     orgId,
     tokenId,
     eventType: 'transfer',
-    walletAddress: normalizedWallet,
-    amount,
+    toWallet: normalizedWallet,
+    delta: amount,
     txHash,
-    txBlock: event.blockNumber,
+    txBlock: blockNumber,
     metadata: { source: 'indexer' },
   });
 }
@@ -509,8 +509,8 @@ export async function reconcileToken(tokenId: string, orgId: string): Promise<{
         orgId,
         tokenId,
         eventType: 'reconciliation',
-        walletAddress: position.walletAddress,
-        amount: (BigInt(onChainBalance) - BigInt(offChainBalance)).toString(),
+        toWallet: position.walletAddress,
+        delta: (BigInt(onChainBalance) - BigInt(offChainBalance)).toString(),
         metadata: {
           previousBalance: offChainBalance,
           newBalance: onChainBalance,
@@ -589,7 +589,7 @@ export async function reindexToken(
     throw new ValidationError('Token not deployed');
   }
 
-  const startBlock = fromBlock || token.deploymentBlockNumber || 0;
+  const startBlock = fromBlock || 0;
   const currentBlock = await relayerService.getBlockNumber(token.chainId);
 
   let eventsProcessed = 0;
