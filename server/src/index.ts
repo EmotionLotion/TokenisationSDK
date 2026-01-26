@@ -27,6 +27,8 @@ import { eventbusRouter } from './routes/eventbus.routes.js';
 import { idempotencyRouter } from './routes/idempotency.routes.js';
 import { settlementRouter } from './routes/settlement.routes.js';
 import { distributionRouter } from './routes/distribution.routes.js';
+import { vestingRouter } from './routes/vesting.routes.js';
+import { corporateActionRouter } from './routes/corporateAction.routes.js';
 import paymentRailsRouter from './routes/payment-rails.routes.js';
 import reportsRouter from './routes/reports.routes.js';
 import { kycRouter } from './routes/kyc.routes.js';
@@ -123,6 +125,8 @@ app.use('/api/v1/eventbus', eventbusRouter); // Internal event bus
 app.use('/api/v1/idempotency', idempotencyRouter); // Idempotency management
 app.use('/api/v1/settlements', settlementRouter); // Settlement finality tracking
 app.use('/api/v1/distributions', distributionRouter); // Yield/dividend distributions
+app.use('/api/v1/vesting', vestingRouter); // Vesting schedules & releases
+app.use('/api/v1/corporate-actions', corporateActionRouter); // Corporate actions (splits, conversions)
 app.use('/api/v1/payment-rails', paymentRailsRouter); // Payment rails (USDC, Bank)
 app.use('/api/v1/reports', reportsRouter); // Report exports (cap table, audit, etc.)
 app.use('/api/v1/kyc', kycRouter); // KYC provider integration (SumSub, Onfido)

@@ -1,747 +1,345 @@
 import { db, schema } from '../config/database.js';
-import { eq, and, desc, gte, lte, inArray } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { eq, and, desc } from 'drizzle-orm';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
-import * as ledgerService from './ledger.service.js';
+import * as auditService from './audit.service.js';
+import { withRetryableTransaction } from '../utils/transaction.js';
 
-const { tokens, ledgerPositions, investors } = schema;
+const { distributions, distributionPayments, tokens, investors, ledgerPositions, eventBusQueue } = schema;
 
 // ============================================================================
-// Types & Interfaces
+// Types
 // ============================================================================
 
-export type DistributionType =
-  | 'DIVIDEND'
-  | 'INTEREST'
-  | 'ROYALTY'
-  | 'REVENUE_SHARE'
-  | 'RENT'
-  | 'PROFIT_SHARE'
-  | 'YIELD'
-  | 'CUSTOM';
+export type DistributionType = 'dividend' | 'interest' | 'royalty' | 'revenue_share' | 'rent' | 'profit_share' | 'yield' | 'custom';
+export type DistributionStatus = 'draft' | 'announced' | 'approved' | 'processing' | 'completed' | 'cancelled';
+export type AllocationStrategy = 'pro_rata' | 'equal' | 'tiered' | 'time_weighted' | 'custom';
+export type PaymentMethod = 'on_chain' | 'bank_transfer' | 'mixed';
 
-export type DistributionFrequency =
-  | 'ONE_TIME'
-  | 'DAILY'
-  | 'WEEKLY'
-  | 'BIWEEKLY'
-  | 'MONTHLY'
-  | 'QUARTERLY'
-  | 'SEMI_ANNUAL'
-  | 'ANNUAL'
-  | 'ON_DEMAND';
-
-export type DistributionStatus =
-  | 'SCHEDULED'
-  | 'PROCESSING'
-  | 'COMPLETED'
-  | 'PARTIALLY_COMPLETED'
-  | 'FAILED'
-  | 'CANCELLED';
-
-export type AllocationStrategy =
-  | 'PRO_RATA'
-  | 'EQUAL'
-  | 'TIERED'
-  | 'TIME_WEIGHTED'
-  | 'CUSTOM';
-
-export interface DistributionSchedule {
-  id: string;
+export interface CreateDistributionInput {
   orgId: string;
   tokenId: string;
+  name: string;
+  description?: string;
   type: DistributionType;
-  frequency: DistributionFrequency;
-  allocationStrategy: AllocationStrategy;
-  paymentCurrency: string;
-  amount?: string;
-  rate?: number;
-  startDate: string;
-  endDate?: string;
-  nextDistribution?: string;
-  isActive: boolean;
-  minimumBalance?: string;
-  snapshotAt?: string;
-  parameters?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface DistributionEvent {
-  id: string;
-  orgId: string;
-  scheduleId: string;
-  tokenId: string;
-  type: DistributionType;
-  status: DistributionStatus;
   totalAmount: string;
   currency: string;
-  recipientCount: number;
-  snapshotAt: string;
-  executedAt?: string;
-  error?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface Payout {
-  id: string;
-  orgId: string;
-  distributionId: string;
-  recipientId: string;
-  recipientAddress?: string;
-  amount: string;
-  claimed: boolean;
-  claimedAt?: string;
-  txHash?: string;
-  createdAt: string;
-}
-
-export interface AllocationTier {
-  minBalance: string;
-  maxBalance?: string;
-  multiplier: number;
-}
-
-export interface HolderSnapshot {
-  holderId: string;
-  holderAddress?: string;
-  balance: string;
-  weight: number;
-  timeHeld?: number;
-}
-
-// ============================================================================
-// In-Memory Storage (will be replaced with DB tables in production)
-// ============================================================================
-
-const schedules = new Map<string, DistributionSchedule>();
-const distributions = new Map<string, DistributionEvent>();
-const payouts = new Map<string, Payout[]>();
-
-// ============================================================================
-// Schedule Management
-// ============================================================================
-
-export async function createSchedule(input: {
-  orgId: string;
-  tokenId: string;
-  type: DistributionType;
-  frequency: DistributionFrequency;
+  recordDate: Date;
+  paymentDate: Date;
+  exDividendDate?: Date;
   allocationStrategy?: AllocationStrategy;
-  paymentCurrency: string;
-  amount?: string;
-  rate?: number;
-  startDate: string;
-  endDate?: string;
-  minimumBalance?: string;
-  parameters?: Record<string, unknown>;
+  paymentMethod: PaymentMethod;
   metadata?: Record<string, unknown>;
-}): Promise<DistributionSchedule> {
-  // Verify token exists
+}
+
+export interface DistributionSummary {
+  distributionId: string;
+  totalAmount: string;
+  totalRecipients: number;
+  amountPerToken: string;
+  payments: Array<{
+    investorId: string;
+    walletAddress: string | null;
+    tokenBalance: string;
+    paymentAmount: string;
+    paymentMethod: string;
+  }>;
+}
+
+// ============================================================================
+// Distribution Management
+// ============================================================================
+
+export async function createDistribution(input: CreateDistributionInput) {
   const token = await db.query.tokens.findFirst({
     where: and(eq(tokens.id, input.tokenId), eq(tokens.orgId, input.orgId)),
   });
-
   if (!token) {
     throw new NotFoundError('Token not found');
   }
 
-  const now = new Date().toISOString();
-  const schedule: DistributionSchedule = {
-    id: uuidv4(),
+  if (!/^\d+$/.test(input.totalAmount) || BigInt(input.totalAmount) <= 0n) {
+    throw new ValidationError('Total amount must be a positive integer string');
+  }
+
+  if (input.paymentDate < input.recordDate) {
+    throw new ValidationError('Payment date must be on or after record date');
+  }
+
+  const [distribution] = await db.insert(distributions).values({
     orgId: input.orgId,
     tokenId: input.tokenId,
+    name: input.name,
+    description: input.description,
     type: input.type,
-    frequency: input.frequency,
-    allocationStrategy: input.allocationStrategy || 'PRO_RATA',
-    paymentCurrency: input.paymentCurrency,
-    amount: input.amount,
-    rate: input.rate,
-    startDate: input.startDate,
-    endDate: input.endDate,
-    nextDistribution: calculateNextDistribution(input.startDate, input.frequency),
-    isActive: true,
-    minimumBalance: input.minimumBalance,
-    parameters: input.parameters,
-    metadata: input.metadata,
-    createdAt: now,
-    updatedAt: now,
-  };
+    totalAmount: input.totalAmount,
+    currency: input.currency,
+    amountPerToken: '0',
+    recordDate: input.recordDate.toISOString(),
+    paymentDate: input.paymentDate.toISOString(),
+    exDividendDate: input.exDividendDate?.toISOString(),
+    allocationStrategy: input.allocationStrategy || 'pro_rata',
+    paymentMethod: input.paymentMethod,
+    status: 'draft',
+    metadata: input.metadata || {},
+  }).returning();
 
-  schedules.set(schedule.id, schedule);
-  return schedule;
-}
-
-export async function getSchedule(id: string, orgId: string): Promise<DistributionSchedule> {
-  const schedule = schedules.get(id);
-  if (!schedule || schedule.orgId !== orgId) {
-    throw new NotFoundError('Distribution schedule not found');
-  }
-  return schedule;
-}
-
-export async function listSchedules(orgId: string, params: {
-  tokenId?: string;
-  type?: DistributionType;
-  isActive?: boolean;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<DistributionSchedule[]> {
-  const { tokenId, type, isActive, limit = 100, offset = 0 } = params;
-
-  let results = Array.from(schedules.values())
-    .filter(s => s.orgId === orgId);
-
-  if (tokenId) results = results.filter(s => s.tokenId === tokenId);
-  if (type) results = results.filter(s => s.type === type);
-  if (isActive !== undefined) results = results.filter(s => s.isActive === isActive);
-
-  return results
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(offset, offset + limit);
-}
-
-export async function updateSchedule(
-  id: string,
-  orgId: string,
-  updates: Partial<Omit<DistributionSchedule, 'id' | 'orgId' | 'tokenId' | 'createdAt'>>
-): Promise<DistributionSchedule> {
-  const schedule = await getSchedule(id, orgId);
-
-  const updated: DistributionSchedule = {
-    ...schedule,
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
-
-  schedules.set(id, updated);
-  return updated;
-}
-
-export async function pauseSchedule(id: string, orgId: string): Promise<DistributionSchedule> {
-  return updateSchedule(id, orgId, { isActive: false });
-}
-
-export async function resumeSchedule(id: string, orgId: string): Promise<DistributionSchedule> {
-  return updateSchedule(id, orgId, { isActive: true });
-}
-
-export async function deleteSchedule(id: string, orgId: string): Promise<{ success: boolean }> {
-  const schedule = await getSchedule(id, orgId);
-  schedules.delete(id);
-  return { success: true };
-}
-
-export async function getDueSchedules(orgId: string): Promise<DistributionSchedule[]> {
-  const now = new Date().toISOString();
-  return Array.from(schedules.values())
-    .filter(s =>
-      s.orgId === orgId &&
-      s.isActive &&
-      s.nextDistribution &&
-      s.nextDistribution <= now
-    );
-}
-
-// ============================================================================
-// Distribution Execution
-// ============================================================================
-
-export async function executeDistribution(
-  scheduleId: string,
-  orgId: string,
-  options?: {
-    amount?: string;
-    snapshotAt?: string;
-    metadata?: Record<string, unknown>;
-  }
-): Promise<DistributionEvent> {
-  const schedule = await getSchedule(scheduleId, orgId);
-
-  if (!schedule.isActive) {
-    throw new ValidationError('Schedule is not active');
-  }
-
-  const now = new Date().toISOString();
-  const snapshotAt = options?.snapshotAt || now;
-  const totalAmount = options?.amount || schedule.amount || '0';
-
-  // Get holder snapshots from ledger
-  const holders = await getHolderSnapshots(schedule.tokenId, orgId, schedule.minimumBalance);
-
-  // Calculate allocations
-  const calculatedPayouts = calculateAllocations(
-    holders,
-    totalAmount,
-    schedule.allocationStrategy,
-    schedule.parameters
-  );
-
-  // Create distribution event
-  const distribution: DistributionEvent = {
-    id: uuidv4(),
-    orgId,
-    scheduleId: schedule.id,
-    tokenId: schedule.tokenId,
-    type: schedule.type,
-    status: 'PROCESSING',
-    totalAmount,
-    currency: schedule.paymentCurrency,
-    recipientCount: calculatedPayouts.length,
-    snapshotAt,
-    metadata: options?.metadata,
-    createdAt: now,
-  };
-
-  distributions.set(distribution.id, distribution);
-
-  // Create payout records
-  const payoutRecords: Payout[] = calculatedPayouts.map(p => ({
-    id: uuidv4(),
-    orgId,
-    distributionId: distribution.id,
-    recipientId: p.recipientId,
-    recipientAddress: p.recipientAddress,
-    amount: p.amount,
-    claimed: false,
-    createdAt: now,
-  }));
-
-  payouts.set(distribution.id, payoutRecords);
-
-  // Update schedule with next distribution date
-  await updateSchedule(scheduleId, orgId, {
-    nextDistribution: calculateNextDistribution(now, schedule.frequency),
-    snapshotAt,
+  await db.insert(eventBusQueue).values({
+    orgId: input.orgId,
+    topic: 'distribution.created',
+    payload: { distributionId: distribution.id, tokenId: input.tokenId, type: input.type },
   });
 
-  return distribution;
-}
-
-export async function completeDistribution(
-  distributionId: string,
-  orgId: string,
-  txHash?: string
-): Promise<DistributionEvent> {
-  const distribution = distributions.get(distributionId);
-  if (!distribution || distribution.orgId !== orgId) {
-    throw new NotFoundError('Distribution not found');
-  }
-
-  distribution.status = 'COMPLETED';
-  distribution.executedAt = new Date().toISOString();
-
-  // Update all payouts with txHash if provided
-  if (txHash) {
-    const distributionPayouts = payouts.get(distributionId) || [];
-    distributionPayouts.forEach(p => {
-      p.txHash = txHash;
-    });
-  }
+  await auditService.logSystemAction(
+    input.orgId,
+    'distribution_created',
+    'distribution',
+    distribution.id,
+    `Distribution "${input.name}" created for ${input.totalAmount} ${input.currency}`,
+    { tokenId: input.tokenId, type: input.type }
+  );
 
   return distribution;
 }
 
-export async function failDistribution(
-  distributionId: string,
-  orgId: string,
-  error: string
-): Promise<DistributionEvent> {
-  const distribution = distributions.get(distributionId);
-  if (!distribution || distribution.orgId !== orgId) {
+export async function getDistribution(id: string, orgId: string) {
+  const distribution = await db.query.distributions.findFirst({
+    where: and(eq(distributions.id, id), eq(distributions.orgId, orgId)),
+  });
+
+  if (!distribution) {
     throw new NotFoundError('Distribution not found');
   }
 
-  distribution.status = 'FAILED';
-  distribution.error = error;
-
-  return distribution;
-}
-
-export async function getDistribution(id: string, orgId: string): Promise<DistributionEvent> {
-  const distribution = distributions.get(id);
-  if (!distribution || distribution.orgId !== orgId) {
-    throw new NotFoundError('Distribution not found');
-  }
   return distribution;
 }
 
 export async function listDistributions(orgId: string, params: {
   tokenId?: string;
-  scheduleId?: string;
   status?: DistributionStatus;
   type?: DistributionType;
-  startDate?: Date;
-  endDate?: Date;
   limit?: number;
   offset?: number;
-} = {}): Promise<DistributionEvent[]> {
-  const { tokenId, scheduleId, status, type, startDate, endDate, limit = 100, offset = 0 } = params;
+} = {}) {
+  const { tokenId, status, type, limit = 50, offset = 0 } = params;
 
-  let results = Array.from(distributions.values())
-    .filter(d => d.orgId === orgId);
+  const conditions = [eq(distributions.orgId, orgId)];
+  if (tokenId) conditions.push(eq(distributions.tokenId, tokenId));
+  if (status) conditions.push(eq(distributions.status, status));
+  if (type) conditions.push(eq(distributions.type, type));
 
-  if (tokenId) results = results.filter(d => d.tokenId === tokenId);
-  if (scheduleId) results = results.filter(d => d.scheduleId === scheduleId);
-  if (status) results = results.filter(d => d.status === status);
-  if (type) results = results.filter(d => d.type === type);
-  if (startDate) results = results.filter(d => new Date(d.createdAt) >= startDate);
-  if (endDate) results = results.filter(d => new Date(d.createdAt) <= endDate);
-
-  return results
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(offset, offset + limit);
+  return db.select()
+    .from(distributions)
+    .where(and(...conditions))
+    .orderBy(desc(distributions.createdAt))
+    .limit(limit)
+    .offset(offset);
 }
 
-// ============================================================================
-// Payout Management
-// ============================================================================
-
-export async function getPayouts(distributionId: string, orgId: string): Promise<Payout[]> {
+export async function calculatePayments(distributionId: string, orgId: string): Promise<DistributionSummary> {
   const distribution = await getDistribution(distributionId, orgId);
-  return payouts.get(distributionId) || [];
-}
 
-export async function claimPayout(
-  distributionId: string,
-  recipientId: string,
-  orgId: string
-): Promise<{ amount: string; claimed: boolean }> {
-  const distribution = await getDistribution(distributionId, orgId);
-  const distributionPayouts = payouts.get(distributionId) || [];
-
-  const payout = distributionPayouts.find(p => p.recipientId === recipientId);
-  if (!payout) {
-    throw new NotFoundError('Payout not found for this recipient');
-  }
-
-  if (payout.claimed) {
-    return { amount: payout.amount, claimed: false };
-  }
-
-  payout.claimed = true;
-  payout.claimedAt = new Date().toISOString();
-
-  return { amount: payout.amount, claimed: true };
-}
-
-export async function getUnclaimedPayouts(recipientId: string, orgId: string): Promise<{
-  distributionId: string;
-  amount: string;
-  currency: string;
-  type: DistributionType;
-}[]> {
-  const unclaimed: {
-    distributionId: string;
-    amount: string;
-    currency: string;
-    type: DistributionType;
-  }[] = [];
-
-  for (const [distributionId, distributionPayouts] of payouts.entries()) {
-    const distribution = distributions.get(distributionId);
-    if (!distribution || distribution.orgId !== orgId) continue;
-    if (distribution.status !== 'COMPLETED') continue;
-
-    const payout = distributionPayouts.find(
-      p => p.recipientId === recipientId && !p.claimed
-    );
-
-    if (payout) {
-      unclaimed.push({
-        distributionId,
-        amount: payout.amount,
-        currency: distribution.currency,
-        type: distribution.type,
-      });
-    }
-  }
-
-  return unclaimed;
-}
-
-// ============================================================================
-// Analytics
-// ============================================================================
-
-export async function getDistributionSummary(tokenId: string, orgId: string): Promise<{
-  tokenId: string;
-  totalDistributed: Record<string, string>;
-  totalDistributions: number;
-  completedDistributions: number;
-  pendingPayouts: number;
-  lastDistribution?: string;
-}> {
-  const tokenDistributions = Array.from(distributions.values())
-    .filter(d => d.tokenId === tokenId && d.orgId === orgId);
-
-  const totalDistributed: Record<string, bigint> = {};
-  let completedDistributions = 0;
-  let pendingPayouts = 0;
-  let lastDistribution: string | undefined;
-
-  for (const dist of tokenDistributions) {
-    if (dist.status === 'COMPLETED') {
-      completedDistributions++;
-      totalDistributed[dist.currency] = (totalDistributed[dist.currency] || 0n) + BigInt(dist.totalAmount);
-
-      if (!lastDistribution || dist.executedAt! > lastDistribution) {
-        lastDistribution = dist.executedAt;
-      }
-    }
-
-    const distributionPayouts = payouts.get(dist.id) || [];
-    pendingPayouts += distributionPayouts.filter(p => !p.claimed).length;
-  }
-
-  const result: Record<string, string> = {};
-  for (const [currency, amount] of Object.entries(totalDistributed)) {
-    result[currency] = amount.toString();
-  }
-
-  return {
-    tokenId,
-    totalDistributed: result,
-    totalDistributions: tokenDistributions.length,
-    completedDistributions,
-    pendingPayouts,
-    lastDistribution,
-  };
-}
-
-export async function calculateYield(
-  tokenId: string,
-  orgId: string,
-  periodDays: number = 365
-): Promise<{
-  tokenId: string;
-  periodDays: number;
-  totalDistributed: string;
-  distributionCount: number;
-  averagePerDistribution: string;
-}> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - periodDays);
-
-  const relevantDistributions = Array.from(distributions.values())
-    .filter(d =>
-      d.tokenId === tokenId &&
-      d.orgId === orgId &&
-      d.status === 'COMPLETED' &&
-      new Date(d.createdAt) >= cutoff
-    );
-
-  const totalDistributed = relevantDistributions.reduce(
-    (sum, d) => sum + BigInt(d.totalAmount),
-    0n
-  );
-
-  const avgPerDistribution = relevantDistributions.length > 0
-    ? totalDistributed / BigInt(relevantDistributions.length)
-    : 0n;
-
-  return {
-    tokenId,
-    periodDays,
-    totalDistributed: totalDistributed.toString(),
-    distributionCount: relevantDistributions.length,
-    averagePerDistribution: avgPerDistribution.toString(),
-  };
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-async function getHolderSnapshots(
-  tokenId: string,
-  orgId: string,
-  minimumBalance?: string
-): Promise<HolderSnapshot[]> {
   const positions = await db.select()
     .from(ledgerPositions)
-    .where(and(
-      eq(ledgerPositions.tokenId, tokenId),
-      eq(ledgerPositions.orgId, orgId)
-    ));
+    .where(eq(ledgerPositions.tokenId, distribution.tokenId));
 
-  let holders: HolderSnapshot[] = positions.map(p => ({
-    holderId: p.investorId,
-    holderAddress: p.walletAddress,
-    balance: p.balance,
-    weight: 1,
-  }));
+  const holders = positions.filter(p => BigInt(p.balance) > 0n);
 
-  // Filter by minimum balance
-  if (minimumBalance) {
-    const minBal = BigInt(minimumBalance);
-    holders = holders.filter(h => BigInt(h.balance) >= minBal);
+  if (holders.length === 0) {
+    throw new ValidationError('No token holders found for distribution');
   }
 
-  return holders;
-}
+  const totalSupplyHeld = holders.reduce((sum, h) => sum + BigInt(h.balance), 0n);
+  const totalAmount = BigInt(distribution.totalAmount);
+  const amountPerToken = (totalAmount * BigInt(10 ** 18)) / totalSupplyHeld;
 
-function calculateAllocations(
-  holders: HolderSnapshot[],
-  totalAmount: string,
-  strategy: AllocationStrategy,
-  parameters?: Record<string, unknown>
-): { recipientId: string; recipientAddress?: string; amount: string }[] {
-  const total = BigInt(totalAmount);
+  const payments = holders.map(holder => {
+    let paymentAmount: bigint;
 
-  switch (strategy) {
-    case 'PRO_RATA':
-      return calculateProRata(holders, total);
-    case 'EQUAL':
-      return calculateEqual(holders, total);
-    case 'TIERED':
-      return calculateTiered(holders, total, parameters?.tiers as AllocationTier[] | undefined);
-    case 'TIME_WEIGHTED':
-      return calculateTimeWeighted(holders, total);
-    default:
-      return calculateProRata(holders, total);
-  }
-}
-
-function calculateProRata(
-  holders: HolderSnapshot[],
-  totalAmount: bigint
-): { recipientId: string; recipientAddress?: string; amount: string }[] {
-  const totalBalance = holders.reduce((sum, h) => sum + BigInt(h.balance), 0n);
-
-  if (totalBalance === 0n) {
-    return holders.map(h => ({
-      recipientId: h.holderId,
-      recipientAddress: h.holderAddress,
-      amount: '0',
-    }));
-  }
-
-  return holders.map(h => ({
-    recipientId: h.holderId,
-    recipientAddress: h.holderAddress,
-    amount: ((BigInt(h.balance) * totalAmount) / totalBalance).toString(),
-  }));
-}
-
-function calculateEqual(
-  holders: HolderSnapshot[],
-  totalAmount: bigint
-): { recipientId: string; recipientAddress?: string; amount: string }[] {
-  const count = BigInt(holders.length);
-  if (count === 0n) return [];
-
-  const perHolder = totalAmount / count;
-
-  return holders.map(h => ({
-    recipientId: h.holderId,
-    recipientAddress: h.holderAddress,
-    amount: perHolder.toString(),
-  }));
-}
-
-function calculateTiered(
-  holders: HolderSnapshot[],
-  totalAmount: bigint,
-  tiers?: AllocationTier[]
-): { recipientId: string; recipientAddress?: string; amount: string }[] {
-  if (!tiers || tiers.length === 0) {
-    return calculateProRata(holders, totalAmount);
-  }
-
-  const weightedHolders = holders.map(h => {
-    const balance = BigInt(h.balance);
-    let multiplier = 1;
-
-    for (const tier of tiers) {
-      if (balance >= BigInt(tier.minBalance)) {
-        if (!tier.maxBalance || balance <= BigInt(tier.maxBalance)) {
-          multiplier = tier.multiplier;
-          break;
-        }
-      }
+    switch (distribution.allocationStrategy) {
+      case 'pro_rata':
+        paymentAmount = (BigInt(holder.balance) * amountPerToken) / BigInt(10 ** 18);
+        break;
+      case 'equal':
+        paymentAmount = totalAmount / BigInt(holders.length);
+        break;
+      default:
+        paymentAmount = (BigInt(holder.balance) * amountPerToken) / BigInt(10 ** 18);
     }
 
     return {
-      ...h,
-      weightedBalance: balance * BigInt(Math.floor(multiplier * 100)) / 100n,
+      investorId: holder.investorId,
+      walletAddress: holder.walletAddress,
+      tokenBalance: holder.balance,
+      paymentAmount: paymentAmount.toString(),
+      paymentMethod: distribution.paymentMethod,
     };
   });
 
-  const totalWeighted = weightedHolders.reduce((sum, h) => sum + h.weightedBalance, 0n);
-
-  if (totalWeighted === 0n) {
-    return holders.map(h => ({
-      recipientId: h.holderId,
-      recipientAddress: h.holderAddress,
-      amount: '0',
-    }));
-  }
-
-  return weightedHolders.map(h => ({
-    recipientId: h.holderId,
-    recipientAddress: h.holderAddress,
-    amount: ((h.weightedBalance * totalAmount) / totalWeighted).toString(),
-  }));
+  return {
+    distributionId,
+    totalAmount: distribution.totalAmount,
+    totalRecipients: payments.length,
+    amountPerToken: amountPerToken.toString(),
+    payments,
+  };
 }
 
-function calculateTimeWeighted(
-  holders: HolderSnapshot[],
-  totalAmount: bigint
-): { recipientId: string; recipientAddress?: string; amount: string }[] {
-  const weightedHolders = holders.map(h => ({
-    ...h,
-    weightedBalance: BigInt(h.balance) * BigInt(h.timeHeld || 1),
-  }));
+export async function approveDistribution(distributionId: string, orgId: string, approvedBy: string) {
+  const distribution = await getDistribution(distributionId, orgId);
 
-  const totalWeighted = weightedHolders.reduce((sum, h) => sum + h.weightedBalance, 0n);
-
-  if (totalWeighted === 0n) {
-    return holders.map(h => ({
-      recipientId: h.holderId,
-      recipientAddress: h.holderAddress,
-      amount: '0',
-    }));
+  if (distribution.status !== 'draft' && distribution.status !== 'announced') {
+    throw new ValidationError(`Cannot approve distribution in ${distribution.status} status`);
   }
 
-  return weightedHolders.map(h => ({
-    recipientId: h.holderId,
-    recipientAddress: h.holderAddress,
-    amount: ((h.weightedBalance * totalAmount) / totalWeighted).toString(),
-  }));
+  const summary = await calculatePayments(distributionId, orgId);
+
+  await withRetryableTransaction(async (tx) => {
+    for (const payment of summary.payments) {
+      await tx.insert(distributionPayments).values({
+        orgId,
+        distributionId,
+        investorId: payment.investorId,
+        walletAddress: payment.walletAddress,
+        tokenBalance: payment.tokenBalance,
+        paymentAmount: payment.paymentAmount,
+        paymentMethod: payment.paymentMethod,
+        status: 'pending',
+      });
+    }
+
+    await tx.update(distributions)
+      .set({
+        status: 'approved',
+        amountPerToken: summary.amountPerToken,
+        totalRecipients: summary.totalRecipients,
+        snapshotData: { holders: summary.payments },
+        approvedBy,
+        approvedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(distributions.id, distributionId));
+  }, 3, 100);
+
+  await db.insert(eventBusQueue).values({
+    orgId,
+    topic: 'distribution.approved',
+    payload: { distributionId, totalRecipients: summary.totalRecipients },
+  });
+
+  await auditService.logSystemAction(orgId, 'distribution_approved', 'distribution', distributionId,
+    `Distribution approved with ${summary.totalRecipients} recipients`, { approvedBy, totalRecipients: summary.totalRecipients });
+
+  return getDistribution(distributionId, orgId);
 }
 
-function calculateNextDistribution(fromDate: string, frequency: DistributionFrequency): string {
-  const date = new Date(fromDate);
+export async function executeDistribution(distributionId: string, orgId: string) {
+  const distribution = await getDistribution(distributionId, orgId);
 
-  switch (frequency) {
-    case 'DAILY':
-      date.setDate(date.getDate() + 1);
-      break;
-    case 'WEEKLY':
-      date.setDate(date.getDate() + 7);
-      break;
-    case 'BIWEEKLY':
-      date.setDate(date.getDate() + 14);
-      break;
-    case 'MONTHLY':
-      date.setMonth(date.getMonth() + 1);
-      break;
-    case 'QUARTERLY':
-      date.setMonth(date.getMonth() + 3);
-      break;
-    case 'SEMI_ANNUAL':
-      date.setMonth(date.getMonth() + 6);
-      break;
-    case 'ANNUAL':
-      date.setFullYear(date.getFullYear() + 1);
-      break;
-    case 'ONE_TIME':
-    case 'ON_DEMAND':
-      return fromDate;
+  if (distribution.status !== 'approved') {
+    throw new ValidationError(`Cannot execute distribution in ${distribution.status} status`);
   }
 
-  return date.toISOString();
+  await db.update(distributions)
+    .set({ status: 'processing', updatedAt: new Date().toISOString() })
+    .where(eq(distributions.id, distributionId));
+
+  await db.insert(eventBusQueue).values({
+    orgId,
+    topic: 'distribution.execution.started',
+    payload: { distributionId },
+  });
+
+  const payments = await db.select()
+    .from(distributionPayments)
+    .where(and(eq(distributionPayments.distributionId, distributionId), eq(distributionPayments.status, 'pending')));
+
+  let processedCount = 0;
+  let totalPaid = 0n;
+
+  for (const payment of payments) {
+    try {
+      await db.update(distributionPayments)
+        .set({ status: 'processing' })
+        .where(eq(distributionPayments.id, payment.id));
+      processedCount++;
+      totalPaid += BigInt(payment.paymentAmount);
+    } catch (error) {
+      await db.update(distributionPayments)
+        .set({ status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' })
+        .where(eq(distributionPayments.id, payment.id));
+    }
+  }
+
+  await db.update(distributions)
+    .set({ paidRecipients: processedCount, totalPaid: totalPaid.toString(), updatedAt: new Date().toISOString() })
+    .where(eq(distributions.id, distributionId));
+
+  await auditService.logSystemAction(orgId, 'distribution_execution_started', 'distribution', distributionId,
+    `Distribution execution started for ${processedCount} payments`, { processedCount, totalPaid: totalPaid.toString() });
+
+  return getDistribution(distributionId, orgId);
+}
+
+export async function confirmPayment(paymentId: string, orgId: string, confirmation: { txHash?: string; bankReference?: string }) {
+  const payment = await db.query.distributionPayments.findFirst({
+    where: and(eq(distributionPayments.id, paymentId), eq(distributionPayments.orgId, orgId)),
+  });
+
+  if (!payment) throw new NotFoundError('Payment not found');
+  if (payment.status !== 'processing') throw new ValidationError(`Cannot confirm payment in ${payment.status} status`);
+
+  const [updated] = await db.update(distributionPayments)
+    .set({ status: 'completed', txHash: confirmation.txHash, bankReference: confirmation.bankReference, completedAt: new Date().toISOString() })
+    .where(eq(distributionPayments.id, paymentId))
+    .returning();
+
+  const remainingPayments = await db.select().from(distributionPayments)
+    .where(and(eq(distributionPayments.distributionId, payment.distributionId), eq(distributionPayments.status, 'pending')));
+  const processingPayments = await db.select().from(distributionPayments)
+    .where(and(eq(distributionPayments.distributionId, payment.distributionId), eq(distributionPayments.status, 'processing')));
+
+  if (remainingPayments.length === 0 && processingPayments.length === 0) {
+    await db.update(distributions).set({ status: 'completed', updatedAt: new Date().toISOString() }).where(eq(distributions.id, payment.distributionId));
+    await db.insert(eventBusQueue).values({ orgId, topic: 'distribution.completed', payload: { distributionId: payment.distributionId } });
+  }
+
+  const completedPayments = await db.select().from(distributionPayments)
+    .where(and(eq(distributionPayments.distributionId, payment.distributionId), eq(distributionPayments.status, 'completed')));
+  const totalPaid = completedPayments.reduce((sum, p) => sum + BigInt(p.paymentAmount), 0n);
+
+  await db.update(distributions)
+    .set({ paidRecipients: completedPayments.length, totalPaid: totalPaid.toString(), updatedAt: new Date().toISOString() })
+    .where(eq(distributions.id, payment.distributionId));
+
+  return updated;
+}
+
+export async function listPayments(distributionId: string, orgId: string, params?: { status?: string; limit?: number; offset?: number }) {
+  const { status, limit = 100, offset = 0 } = params || {};
+  const conditions = [eq(distributionPayments.distributionId, distributionId), eq(distributionPayments.orgId, orgId)];
+  if (status) conditions.push(eq(distributionPayments.status, status));
+
+  return db.select().from(distributionPayments).where(and(...conditions)).orderBy(desc(distributionPayments.createdAt)).limit(limit).offset(offset);
+}
+
+export async function cancelDistribution(distributionId: string, orgId: string, reason: string) {
+  const distribution = await getDistribution(distributionId, orgId);
+
+  if (distribution.status === 'completed' || distribution.status === 'cancelled') {
+    throw new ValidationError(`Cannot cancel distribution in ${distribution.status} status`);
+  }
+
+  await db.update(distributionPayments)
+    .set({ status: 'failed', error: `Distribution cancelled: ${reason}` })
+    .where(and(eq(distributionPayments.distributionId, distributionId), eq(distributionPayments.status, 'pending')));
+
+  const [updated] = await db.update(distributions)
+    .set({ status: 'cancelled', updatedAt: new Date().toISOString() })
+    .where(eq(distributions.id, distributionId))
+    .returning();
+
+  await db.insert(eventBusQueue).values({ orgId, topic: 'distribution.cancelled', payload: { distributionId, reason } });
+  await auditService.logSystemAction(orgId, 'distribution_cancelled', 'distribution', distributionId, `Distribution cancelled: ${reason}`, { reason });
+
+  return updated;
 }

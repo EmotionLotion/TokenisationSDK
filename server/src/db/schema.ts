@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, integer, jsonb, uniqueIndex, index, numeric, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, integer, jsonb, uniqueIndex, index, numeric, primaryKey, bigint } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // ============================================================================
 // SECTION 1: IAM (Identity & Access Management)
@@ -911,7 +912,51 @@ export const idempotencyKeys = pgTable('idempotency_keys', {
 }));
 
 // ============================================================================
-// SECTION 17: Internal Event Bus Queue
+// SECTION 17: Outbox Pattern (Transactional Events)
+// ============================================================================
+
+// Domain Events Outbox - Persist events in same transaction as business data
+export const domainEventsOutbox = pgTable('domain_events_outbox', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+
+  // Event identification
+  eventId: varchar('event_id', { length: 64 }).notNull(),
+  eventType: varchar('event_type', { length: 128 }).notNull(), // e.g., 'transfer.created', 'token.deployed'
+  aggregateType: varchar('aggregate_type', { length: 64 }).notNull(), // e.g., 'transfer', 'token', 'investor'
+  aggregateId: varchar('aggregate_id', { length: 256 }).notNull(), // The ID of the entity that generated this event
+
+  // Event data
+  payload: jsonb('payload').notNull(),
+  metadata: jsonb('metadata').default({}), // requestId, actorId, actorType, idempotencyKey, etc.
+
+  // Ordering
+  sequence: integer('sequence').notNull(), // Per-aggregate sequence number
+  globalSequence: integer('global_sequence'), // Global ordering (set by worker)
+
+  // Processing state
+  status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, processing, published, failed
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  retryCount: integer('retry_count').notNull().default(0),
+  lastError: text('last_error'),
+
+  // Tracing
+  requestId: varchar('request_id', { length: 64 }),
+  actorId: varchar('actor_id', { length: 256 }),
+  actorType: varchar('actor_type', { length: 32 }),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  eventIdUnique: uniqueIndex('idx_outbox_event_id').on(table.eventId),
+  orgIdx: index('idx_outbox_org').on(table.orgId),
+  statusIdx: index('idx_outbox_status').on(table.status),
+  aggregateIdx: index('idx_outbox_aggregate').on(table.aggregateType, table.aggregateId),
+  createdAtIdx: index('idx_outbox_created').on(table.createdAt),
+  pendingIdx: index('idx_outbox_pending').on(table.status).where(sql`status = 'pending'`),
+}));
+
+// ============================================================================
+// SECTION 17b: Internal Event Bus Queue
 // ============================================================================
 
 // Event Bus Queue - Internal message queue (for systems without Kafka)
@@ -936,6 +981,257 @@ export const eventBusQueue = pgTable('event_bus_queue', {
   statusIdx: index('idx_event_bus_queue_status').on(table.status),
   scheduledIdx: index('idx_event_bus_queue_scheduled').on(table.scheduledFor),
   eventIdUnique: uniqueIndex('idx_event_bus_queue_event_id').on(table.eventId),
+}));
+
+// ============================================================================
+// SECTION 18: Vesting Schedules
+// ============================================================================
+
+// Vesting Schedules - Employee/investor token vesting
+export const vestingSchedules = pgTable('vesting_schedules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').notNull().references(() => investors.id),
+  walletAddress: varchar('wallet_address', { length: 42 }).notNull(),
+
+  // Vesting parameters
+  totalAmount: varchar('total_amount', { length: 78 }).notNull(),
+  vestingType: varchar('vesting_type', { length: 20 }).notNull(), // linear, cliff, cliff_then_linear, milestone, graded
+  grantDate: timestamp('grant_date', { withTimezone: true }).notNull(),
+  startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+  cliffDate: timestamp('cliff_date', { withTimezone: true }), // Optional cliff
+  endDate: timestamp('end_date', { withTimezone: true }).notNull(),
+  cliffMonths: integer('cliff_months').default(0),
+  vestingMonths: integer('vesting_months').notNull(),
+  cliffAmount: varchar('cliff_amount', { length: 78 }), // Amount released at cliff
+
+  // Graded schedule (JSON array of { monthsFromGrant, cumulativePercent })
+  gradedSchedule: jsonb('graded_schedule'),
+
+  // Current state
+  vestedAmount: varchar('vested_amount', { length: 78 }).notNull().default('0'),
+  releasedAmount: varchar('released_amount', { length: 78 }).notNull().default('0'),
+  claimedAmount: varchar('claimed_amount', { length: 78 }).notNull().default('0'),
+
+  // Status
+  status: varchar('status', { length: 20 }).notNull().default('active'), // not_started, active, fully_vested, terminated, accelerated
+
+  // Termination
+  terminationDate: timestamp('termination_date', { withTimezone: true }),
+  terminationType: varchar('termination_type', { length: 30 }), // voluntary, for_cause, without_cause, death_disability, change_of_control
+
+  // Acceleration triggers (JSON)
+  accelerationTriggers: jsonb('acceleration_triggers'),
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_vesting_schedules_org').on(table.orgId),
+  tokenIdx: index('idx_vesting_schedules_token').on(table.tokenId),
+  investorIdx: index('idx_vesting_schedules_investor').on(table.investorId),
+  statusIdx: index('idx_vesting_schedules_status').on(table.status),
+}));
+
+// Vesting Milestones - For milestone-based vesting
+export const vestingMilestones = pgTable('vesting_milestones', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  scheduleId: uuid('schedule_id').notNull().references(() => vestingSchedules.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  vestingPercent: numeric('vesting_percent', { precision: 5, scale: 2 }).notNull(), // Percentage that vests
+  targetDate: timestamp('target_date', { withTimezone: true }),
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, completed
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  completedBy: uuid('completed_by'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  scheduleIdx: index('idx_vesting_milestones_schedule').on(table.scheduleId),
+  statusIdx: index('idx_vesting_milestones_status').on(table.status),
+}));
+
+// Vesting Releases - Record of token releases
+export const vestingReleases = pgTable('vesting_releases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  scheduleId: uuid('schedule_id').notNull().references(() => vestingSchedules.id, { onDelete: 'cascade' }),
+  amount: varchar('amount', { length: 78 }).notNull(),
+  releaseType: varchar('release_type', { length: 20 }).notNull(), // scheduled, cliff, milestone, acceleration, claim
+  milestoneId: uuid('milestone_id').references(() => vestingMilestones.id),
+  txHash: varchar('tx_hash', { length: 66 }),
+  txBlock: integer('tx_block'),
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, confirmed, failed
+  releasedAt: timestamp('released_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  scheduleIdx: index('idx_vesting_releases_schedule').on(table.scheduleId),
+  statusIdx: index('idx_vesting_releases_status').on(table.status),
+}));
+
+// ============================================================================
+// SECTION 19: Distributions (Dividends, Interest, etc.)
+// ============================================================================
+
+// Distributions - Dividend/interest payment events
+export const distributions = pgTable('distributions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+
+  // Distribution details
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  type: varchar('type', { length: 30 }).notNull(), // dividend, interest, royalty, revenue_share, rent, profit_share, yield, custom
+
+  // Amount
+  totalAmount: varchar('total_amount', { length: 78 }).notNull(),
+  currency: varchar('currency', { length: 10 }).notNull(), // USD, USDC, ETH, etc.
+  amountPerToken: varchar('amount_per_token', { length: 78 }).notNull(), // Amount per whole token (in smallest unit)
+
+  // Allocation
+  allocationStrategy: varchar('allocation_strategy', { length: 20 }).notNull().default('pro_rata'), // pro_rata, equal, tiered, time_weighted, custom
+
+  // Timing
+  recordDate: timestamp('record_date', { withTimezone: true }).notNull(), // Snapshot date for cap table
+  paymentDate: timestamp('payment_date', { withTimezone: true }).notNull(),
+  exDividendDate: timestamp('ex_dividend_date', { withTimezone: true }), // Date after which buyers don't get dividend
+
+  // Payment method
+  paymentMethod: varchar('payment_method', { length: 20 }).notNull(), // on_chain, bank_transfer, mixed
+
+  // Status
+  status: varchar('status', { length: 20 }).notNull().default('draft'), // draft, announced, approved, processing, completed, cancelled
+
+  // Snapshot data (frozen cap table at record date)
+  snapshotData: jsonb('snapshot_data'),
+
+  // Statistics
+  totalRecipients: integer('total_recipients'),
+  paidRecipients: integer('paid_recipients').default(0),
+  totalPaid: varchar('total_paid', { length: 78 }).default('0'),
+
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_distributions_org').on(table.orgId),
+  tokenIdx: index('idx_distributions_token').on(table.tokenId),
+  statusIdx: index('idx_distributions_status').on(table.status),
+  recordDateIdx: index('idx_distributions_record_date').on(table.recordDate),
+}));
+
+// Distribution Payments - Individual payment records
+export const distributionPayments = pgTable('distribution_payments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  distributionId: uuid('distribution_id').notNull().references(() => distributions.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').notNull().references(() => investors.id),
+  walletAddress: varchar('wallet_address', { length: 42 }),
+
+  // Amounts
+  tokenBalance: varchar('token_balance', { length: 78 }).notNull(), // At record date
+  paymentAmount: varchar('payment_amount', { length: 78 }).notNull(),
+
+  // Payment details
+  paymentMethod: varchar('payment_method', { length: 20 }).notNull(), // on_chain, bank_transfer
+  txHash: varchar('tx_hash', { length: 66 }),
+  txBlock: integer('tx_block'),
+  bankReference: varchar('bank_reference', { length: 100 }),
+
+  // Status
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, processing, completed, failed
+  error: text('error'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => ({
+  distributionIdx: index('idx_distribution_payments_distribution').on(table.distributionId),
+  investorIdx: index('idx_distribution_payments_investor').on(table.investorId),
+  statusIdx: index('idx_distribution_payments_status').on(table.status),
+}));
+
+// ============================================================================
+// SECTION 20: Corporate Actions
+// ============================================================================
+
+// Corporate Actions - Splits, mergers, conversions
+export const corporateActions = pgTable('corporate_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+
+  type: varchar('type', { length: 30 }).notNull(), // split, reverse_split, conversion, merger, spinoff, name_change
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+
+  // Parameters (type-specific JSON)
+  // split/reverse_split: { ratio: "2:1", multiplier: 2.0 }
+  // conversion: { newTokenId: "...", conversionRate: "1.5" }
+  // merger: { survivingTokenId: "...", exchangeRatio: "0.8" }
+  parameters: jsonb('parameters').notNull(),
+
+  // Timing
+  announcementDate: timestamp('announcement_date', { withTimezone: true }).notNull(),
+  recordDate: timestamp('record_date', { withTimezone: true }).notNull(),
+  effectiveDate: timestamp('effective_date', { withTimezone: true }).notNull(),
+
+  // Status
+  status: varchar('status', { length: 20 }).notNull().default('announced'), // announced, approved, processing, completed, cancelled
+
+  // For token conversions/mergers
+  newTokenId: uuid('new_token_id').references(() => tokens.id),
+
+  // Statistics
+  totalEntitlements: integer('total_entitlements'),
+  processedEntitlements: integer('processed_entitlements').default(0),
+
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  executedBy: uuid('executed_by'),
+  executedAt: timestamp('executed_at', { withTimezone: true }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_corporate_actions_org').on(table.orgId),
+  tokenIdx: index('idx_corporate_actions_token').on(table.tokenId),
+  statusIdx: index('idx_corporate_actions_status').on(table.status),
+  effectiveDateIdx: index('idx_corporate_actions_effective').on(table.effectiveDate),
+}));
+
+// Corporate Action Entitlements - Per-holder records
+export const corporateActionEntitlements = pgTable('corporate_action_entitlements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  corporateActionId: uuid('corporate_action_id').notNull().references(() => corporateActions.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').notNull().references(() => investors.id),
+  walletAddress: varchar('wallet_address', { length: 42 }).notNull(),
+
+  // Before
+  originalBalance: varchar('original_balance', { length: 78 }).notNull(),
+  originalTokenId: uuid('original_token_id').notNull(),
+
+  // After
+  newBalance: varchar('new_balance', { length: 78 }),
+  newTokenId: uuid('new_token_id'), // For conversions/mergers
+
+  // Fractional handling
+  fractionalAmount: varchar('fractional_amount', { length: 78 }), // Cash-in-lieu for fractional shares
+  cashInLieu: varchar('cash_in_lieu', { length: 78 }),
+
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, processed, failed
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  txHash: varchar('tx_hash', { length: 66 }),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  actionIdx: index('idx_corporate_action_entitlements_action').on(table.corporateActionId),
+  investorIdx: index('idx_corporate_action_entitlements_investor').on(table.investorId),
+  statusIdx: index('idx_corporate_action_entitlements_status').on(table.status),
 }));
 
 // ============================================================================
@@ -1051,3 +1347,23 @@ export type NewIdempotencyKey = typeof idempotencyKeys.$inferInsert;
 // Event Bus Types
 export type EventBusMessage = typeof eventBusQueue.$inferSelect;
 export type NewEventBusMessage = typeof eventBusQueue.$inferInsert;
+
+// Vesting Types
+export type VestingSchedule = typeof vestingSchedules.$inferSelect;
+export type NewVestingSchedule = typeof vestingSchedules.$inferInsert;
+export type VestingMilestone = typeof vestingMilestones.$inferSelect;
+export type NewVestingMilestone = typeof vestingMilestones.$inferInsert;
+export type VestingRelease = typeof vestingReleases.$inferSelect;
+export type NewVestingRelease = typeof vestingReleases.$inferInsert;
+
+// Distribution Types
+export type Distribution = typeof distributions.$inferSelect;
+export type NewDistribution = typeof distributions.$inferInsert;
+export type DistributionPayment = typeof distributionPayments.$inferSelect;
+export type NewDistributionPayment = typeof distributionPayments.$inferInsert;
+
+// Corporate Action Types
+export type CorporateAction = typeof corporateActions.$inferSelect;
+export type NewCorporateAction = typeof corporateActions.$inferInsert;
+export type CorporateActionEntitlement = typeof corporateActionEntitlements.$inferSelect;
+export type NewCorporateActionEntitlement = typeof corporateActionEntitlements.$inferInsert;

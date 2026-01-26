@@ -537,6 +537,181 @@ export const eventBusQueue = sqliteTable('event_bus_queue', {
   createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// Clawbacks table
+export const clawbacks = sqliteTable('clawbacks', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: text('investor_id').notNull().references(() => investors.id),
+  walletAddress: text('wallet_address').notNull(),
+  amount: text('amount').notNull(),
+  reason: text('reason').notNull(),
+  reasonCategory: text('reason_category').notNull().default('regulatory'),
+  legalReference: text('legal_reference'),
+  evidenceId: text('evidence_id'),
+  txHash: text('tx_hash'),
+  status: text('status').notNull().default('pending'),
+  initiatedBy: text('initiated_by').notNull(),
+  approvedBy: text('approved_by'),
+  approvedAt: text('approved_at'),
+  executedAt: text('executed_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Vesting Schedules table
+export const vestingSchedules = sqliteTable('vesting_schedules', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: text('investor_id').notNull().references(() => investors.id),
+  walletAddress: text('wallet_address').notNull(),
+  totalAmount: text('total_amount').notNull(),
+  vestedAmount: text('vested_amount').default('0'),
+  releasedAmount: text('released_amount').default('0'),
+  vestingType: text('vesting_type').notNull().default('linear'),
+  grantDate: text('grant_date').notNull(),
+  startDate: text('start_date').notNull(),
+  cliffDate: text('cliff_date'),
+  endDate: text('end_date').notNull(),
+  cliffMonths: integer('cliff_months').default(0),
+  vestingMonths: integer('vesting_months').notNull(),
+  cliffAmount: text('cliff_amount'),
+  gradedSchedule: text('graded_schedule', { mode: 'json' }).$type<Array<{ monthsFromGrant: number; cumulativePercent: number }>>(),
+  status: text('status').notNull().default('active'),
+  terminatedAt: text('terminated_at'),
+  terminationType: text('termination_type'),
+  terminatedBy: text('terminated_by'),
+  acceleratedAt: text('accelerated_at'),
+  accelerationPercent: integer('acceleration_percent'),
+  accelerationReason: text('acceleration_reason'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Vesting Milestones table
+export const vestingMilestones = sqliteTable('vesting_milestones', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  scheduleId: text('schedule_id').notNull().references(() => vestingSchedules.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  vestingPercent: integer('vesting_percent').notNull(),
+  targetDate: text('target_date'),
+  completedAt: text('completed_at'),
+  completedBy: text('completed_by'),
+  status: text('status').notNull().default('pending'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Vesting Releases table
+export const vestingReleases = sqliteTable('vesting_releases', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  scheduleId: text('schedule_id').notNull().references(() => vestingSchedules.id, { onDelete: 'cascade' }),
+  amount: text('amount').notNull(),
+  releaseDate: text('release_date').notNull(),
+  txHash: text('tx_hash'),
+  status: text('status').notNull().default('pending'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Distributions table
+export const distributions = sqliteTable('distributions', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  type: text('type').notNull().default('dividend'),
+  totalAmount: text('total_amount').notNull(),
+  currency: text('currency').notNull(),
+  amountPerToken: text('amount_per_token').default('0'),
+  recordDate: text('record_date').notNull(),
+  paymentDate: text('payment_date').notNull(),
+  exDividendDate: text('ex_dividend_date'),
+  allocationStrategy: text('allocation_strategy').notNull().default('pro_rata'),
+  paymentMethod: text('payment_method').notNull().default('on_chain'),
+  status: text('status').notNull().default('draft'),
+  totalRecipients: integer('total_recipients').default(0),
+  paidRecipients: integer('paid_recipients').default(0),
+  totalPaid: text('total_paid').default('0'),
+  snapshotData: text('snapshot_data', { mode: 'json' }).$type<Record<string, unknown>>(),
+  approvedBy: text('approved_by'),
+  approvedAt: text('approved_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Distribution Payments table
+export const distributionPayments = sqliteTable('distribution_payments', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  distributionId: text('distribution_id').notNull().references(() => distributions.id, { onDelete: 'cascade' }),
+  investorId: text('investor_id').notNull().references(() => investors.id),
+  walletAddress: text('wallet_address'),
+  tokenBalance: text('token_balance').notNull(),
+  paymentAmount: text('payment_amount').notNull(),
+  paymentMethod: text('payment_method').notNull(),
+  status: text('status').notNull().default('pending'),
+  txHash: text('tx_hash'),
+  bankReference: text('bank_reference'),
+  error: text('error'),
+  completedAt: text('completed_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Corporate Actions table
+export const corporateActions = sqliteTable('corporate_actions', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: text('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  parameters: text('parameters', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  announcementDate: text('announcement_date').notNull(),
+  recordDate: text('record_date').notNull(),
+  effectiveDate: text('effective_date').notNull(),
+  newTokenId: text('new_token_id'),
+  status: text('status').notNull().default('announced'),
+  totalEntitlements: integer('total_entitlements').default(0),
+  processedEntitlements: integer('processed_entitlements').default(0),
+  approvedBy: text('approved_by'),
+  approvedAt: text('approved_at'),
+  executedBy: text('executed_by'),
+  executedAt: text('executed_at'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// Corporate Action Entitlements table
+export const corporateActionEntitlements = sqliteTable('corporate_action_entitlements', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  corporateActionId: text('corporate_action_id').notNull().references(() => corporateActions.id, { onDelete: 'cascade' }),
+  investorId: text('investor_id').notNull().references(() => investors.id),
+  walletAddress: text('wallet_address').notNull(),
+  originalBalance: text('original_balance').notNull(),
+  originalTokenId: text('original_token_id').notNull(),
+  newBalance: text('new_balance'),
+  newTokenId: text('new_token_id'),
+  fractionalAmount: text('fractional_amount'),
+  status: text('status').notNull().default('pending'),
+  processedAt: text('processed_at'),
+  error: text('error'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
 // Type exports
 export type Party = typeof parties.$inferSelect;
 export type NewParty = typeof parties.$inferInsert;
@@ -558,3 +733,21 @@ export type Org = typeof orgs.$inferSelect;
 export type NewOrg = typeof orgs.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+
+// Phase 1 & 2 Types
+export type Clawback = typeof clawbacks.$inferSelect;
+export type NewClawback = typeof clawbacks.$inferInsert;
+export type VestingSchedule = typeof vestingSchedules.$inferSelect;
+export type NewVestingSchedule = typeof vestingSchedules.$inferInsert;
+export type VestingMilestone = typeof vestingMilestones.$inferSelect;
+export type NewVestingMilestone = typeof vestingMilestones.$inferInsert;
+export type VestingRelease = typeof vestingReleases.$inferSelect;
+export type NewVestingRelease = typeof vestingReleases.$inferInsert;
+export type Distribution = typeof distributions.$inferSelect;
+export type NewDistribution = typeof distributions.$inferInsert;
+export type DistributionPayment = typeof distributionPayments.$inferSelect;
+export type NewDistributionPayment = typeof distributionPayments.$inferInsert;
+export type CorporateAction = typeof corporateActions.$inferSelect;
+export type NewCorporateAction = typeof corporateActions.$inferInsert;
+export type CorporateActionEntitlement = typeof corporateActionEntitlements.$inferSelect;
+export type NewCorporateActionEntitlement = typeof corporateActionEntitlements.$inferInsert;
