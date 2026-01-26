@@ -55,6 +55,14 @@ import {
   type ComplianceEngineConfig,
   type ComplianceResult,
   type DecisionReceipt,
+  // Provider Registry (External Integrations)
+  ProviderRegistry,
+  providerRegistry,
+  type ICustodyProvider,
+  type IKYCProvider,
+  type IExchangeProvider,
+  type ISettlementProvider,
+  type ProviderType,
 } from './core/index.js';
 import {
   PluginRegistry,
@@ -225,6 +233,7 @@ export class TokenisationSDK {
   private policyEvaluator: PolicyEvaluator;
   private chainService?: ChainService;
   private _complianceEngine: ComplianceEngine;
+  private _providerRegistry: ProviderRegistry;
 
   // Extension modules
   private _rightTypeRegistry: RightTypeRegistry;
@@ -266,6 +275,7 @@ export class TokenisationSDK {
     this.lifecycleEngine = new LifecycleEngine(this.eventStore, this.policyEvaluator);
     this.lifecycleEngine = new LifecycleEngine(this.eventStore, this.policyEvaluator);
     this.pluginRegistry = new PluginRegistry();
+    this._providerRegistry = new ProviderRegistry();
 
     // Initialize chain service if config provided
     if (this.config.chain) {
@@ -755,6 +765,31 @@ export class TokenisationSDK {
     return this._complianceEngine;
   }
 
+  /**
+   * Get the provider registry for external integrations
+   *
+   * The SDK is the BRAIN. Providers are the BODY.
+   * Register your custody, KYC, exchange, and settlement providers here.
+   *
+   * @example
+   * ```typescript
+   * // Register Fireblocks for custody
+   * sdk.providers.registerCustody(fireblocksProvider);
+   *
+   * // Register Onfido for KYC
+   * sdk.providers.registerKYC(onfidoProvider);
+   *
+   * // Register tZERO for trading
+   * sdk.providers.registerExchange(tzeroProvider);
+   *
+   * // Register Paxos for settlement
+   * sdk.providers.registerSettlement(paxosProvider);
+   * ```
+   */
+  get providers(): ProviderRegistry {
+    return this._providerRegistry;
+  }
+
   // ============================================================================
   // COMPLIANCE-FIRST METHODS
   // ============================================================================
@@ -888,6 +923,13 @@ export type {
   ComplianceEngineConfig,
   DecisionReceipt,
 
+  // Provider types (external integrations)
+  ICustodyProvider,
+  IKYCProvider,
+  IExchangeProvider,
+  ISettlementProvider,
+  ProviderType,
+
   // Extension types
   RightTypeBehavior,
   StateDefinition,
@@ -919,4 +961,7 @@ export {
   EscrowEngine,
   // Compliance-first classes
   ComplianceEngine,
+  // Provider registry
+  ProviderRegistry,
+  providerRegistry,
 };

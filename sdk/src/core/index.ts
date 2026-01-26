@@ -37,6 +37,10 @@ export * from './PolicyHash.js';
 export * from './DecisionReceipt.js';
 export * from './ComplianceEngine.js';
 
+// Provider Interfaces (Custody, KYC, Exchange, Settlement)
+export * from './interfaces.providers.js';
+export * from './ProviderRegistry.js';
+
 // Custody & Recovery
 export * from './CustodyManager.js';
 
