@@ -120,6 +120,17 @@ export async function apiKeyMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
+    // In dev mode, allow bypass FIRST (before any other auth checks)
+    const DEV_MODE_LOCAL = process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_MODE === 'true';
+    if (DEV_MODE_LOCAL && req.headers['x-dev-org-id']) {
+      req.apiKey = {
+        orgId: req.headers['x-dev-org-id'] as string,
+        scopes: ['admin'],
+        keyId: 'dev-key',
+      };
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
 
     // Check for API key in header
@@ -148,17 +159,6 @@ export async function apiKeyMiddleware(
         req.user = decoded;
         return next();
       }
-    }
-
-    // In dev mode, allow bypass
-    const DEV_MODE_LOCAL = process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_MODE === 'true';
-    if (DEV_MODE_LOCAL && req.headers['x-dev-org-id']) {
-      req.apiKey = {
-        orgId: req.headers['x-dev-org-id'] as string,
-        scopes: ['admin'],
-        keyId: 'dev-key',
-      };
-      return next();
     }
 
     throw new UnauthorizedError('No valid authentication provided');

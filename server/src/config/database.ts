@@ -154,8 +154,9 @@ function initSqliteSchema(database: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
+      org_id TEXT,
       type TEXT NOT NULL,
-      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      asset_id TEXT REFERENCES assets(id) ON DELETE CASCADE,
       actor_id TEXT NOT NULL,
       payload TEXT DEFAULT '{}',
       event_version INTEGER DEFAULT 1,
@@ -194,6 +195,33 @@ function initSqliteSchema(database: Database.Database) {
       UNIQUE(asset_id, chain_id, contract_type)
     );
 
+    CREATE TABLE IF NOT EXISTS tokens (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      project_id TEXT,
+      asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      standard TEXT NOT NULL DEFAULT 'erc3643',
+      chain_id INTEGER NOT NULL,
+      address TEXT,
+      identity_registry_address TEXT,
+      compliance_address TEXT,
+      decimals INTEGER NOT NULL DEFAULT 18,
+      total_supply TEXT DEFAULT '0',
+      issued_supply TEXT DEFAULT '0',
+      max_supply TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      policy_id TEXT,
+      compliance_modules TEXT DEFAULT '[]',
+      deploy_tx_hash TEXT,
+      deployed_at TEXT,
+      deployed_by TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS token_balances (
       id TEXT PRIMARY KEY,
       asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
@@ -203,6 +231,37 @@ function initSqliteSchema(database: Database.Database) {
       UNIQUE(asset_id, holder_id)
     );
 
+    CREATE TABLE IF NOT EXISTS orgs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'active',
+      settings TEXT DEFAULT '{}',
+      risk_profile TEXT DEFAULT '{}',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL,
+      environment TEXT NOT NULL DEFAULT 'test',
+      scopes TEXT DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      last_used_at TEXT,
+      expires_at TEXT,
+      created_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_api_keys_org ON api_keys(org_id);
+    CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix);
+    CREATE INDEX IF NOT EXISTS idx_tokens_org ON tokens(org_id);
+    CREATE INDEX IF NOT EXISTS idx_tokens_status ON tokens(status);
+    CREATE INDEX IF NOT EXISTS idx_tokens_chain ON tokens(chain_id);
     CREATE INDEX IF NOT EXISTS idx_parties_jurisdiction ON parties(jurisdiction);
     CREATE INDEX IF NOT EXISTS idx_parties_type ON parties(type);
     CREATE INDEX IF NOT EXISTS idx_assets_state ON assets(state);

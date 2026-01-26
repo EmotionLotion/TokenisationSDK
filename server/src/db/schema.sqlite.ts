@@ -54,6 +54,34 @@ export const assets = sqliteTable('assets', {
   updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// Tokens table - Token definitions
+export const tokens = sqliteTable('tokens', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id'),
+  projectId: text('project_id'),
+  assetId: text('asset_id').references(() => assets.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  symbol: text('symbol').notNull(),
+  standard: text('standard').notNull().default('erc3643'),
+  chainId: integer('chain_id').notNull(),
+  address: text('address'),
+  identityRegistryAddress: text('identity_registry_address'),
+  complianceAddress: text('compliance_address'),
+  decimals: integer('decimals').notNull().default(18),
+  totalSupply: text('total_supply').default('0'),
+  issuedSupply: text('issued_supply').default('0'),
+  maxSupply: text('max_supply'),
+  status: text('status').notNull().default('draft'),
+  policyId: text('policy_id'),
+  complianceModules: text('compliance_modules', { mode: 'json' }).$type<string[]>().default([]),
+  deployTxHash: text('deploy_tx_hash'),
+  deployedAt: text('deployed_at'),
+  deployedBy: text('deployed_by'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
 // Events table - Audit trail (event sourcing)
 export const events = sqliteTable('events', {
   id: text('id').primaryKey().$defaultFn(() => randomUUID()),
@@ -107,6 +135,34 @@ export const tokenBalances = sqliteTable('token_balances', {
   lastUpdatedAt: text('last_updated_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// Organizations table
+export const orgs = sqliteTable('orgs', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  status: text('status').notNull().default('active'),
+  settings: text('settings', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  riskProfile: text('risk_profile', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// API Keys table
+export const apiKeys = sqliteTable('api_keys', {
+  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+  orgId: text('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  keyPrefix: text('key_prefix').notNull(),
+  keyHash: text('key_hash').notNull(),
+  environment: text('environment').notNull().default('test'),
+  scopes: text('scopes', { mode: 'json' }).$type<string[]>().default([]),
+  status: text('status').notNull().default('active'),
+  lastUsedAt: text('last_used_at'),
+  expiresAt: text('expires_at'),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
 // Type exports
 export type Party = typeof parties.$inferSelect;
 export type NewParty = typeof parties.$inferInsert;
@@ -114,6 +170,8 @@ export type PartyWallet = typeof partyWallets.$inferSelect;
 export type NewPartyWallet = typeof partyWallets.$inferInsert;
 export type Asset = typeof assets.$inferSelect;
 export type NewAsset = typeof assets.$inferInsert;
+export type Token = typeof tokens.$inferSelect;
+export type NewToken = typeof tokens.$inferInsert;
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -122,3 +180,7 @@ export type ChainDeployment = typeof chainDeployments.$inferSelect;
 export type NewChainDeployment = typeof chainDeployments.$inferInsert;
 export type TokenBalance = typeof tokenBalances.$inferSelect;
 export type NewTokenBalance = typeof tokenBalances.$inferInsert;
+export type Org = typeof orgs.$inferSelect;
+export type NewOrg = typeof orgs.$inferInsert;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;

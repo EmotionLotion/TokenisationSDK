@@ -15,12 +15,14 @@ export type TokenStandard = 'ERC3643' | 'ERC1400' | 'ERC20';
 
 export interface CreateTokenInput {
   orgId: string;
-  projectId: string;
+  projectId?: string;
+  assetId?: string;
   name: string;
   symbol: string;
   decimals?: number;
   standard?: TokenStandard;
   totalSupply: string;
+  maxSupply?: string;
   chainId: number;
   complianceModules?: string[];
   metadata?: Record<string, unknown>;

@@ -32,7 +32,7 @@ import reportsRouter from './routes/reports.routes.js';
 import { kycRouter } from './routes/kyc.routes.js';
 import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, standardRateLimiter, authRateLimiter, securityHeaders } from './middleware/apiGateway.js';
 import { requestLogger, errorLogger, logger } from './middleware/logger.js';
 
@@ -113,9 +113,9 @@ app.use('/api/v1/payment-rails', paymentRailsRouter); // Payment rails (USDC, Ba
 app.use('/api/v1/reports', reportsRouter); // Report exports (cap table, audit, etc.)
 app.use('/api/v1/kyc', kycRouter); // KYC provider integration (SumSub, Onfido)
 app.use('/api/v1/parties', authMiddleware, partyRouter);
-app.use('/api/v1/assets', authMiddleware, assetRouter);
+app.use('/api/v1/assets', apiKeyMiddleware, assetRouter);
 app.use('/api/v1/events', authMiddleware, eventRouter);
-app.use('/api/v1/tokens', authMiddleware, tokenRouter);
+app.use('/api/v1/tokens', apiKeyMiddleware, tokenRouter);
 app.use('/api/v1/chains', chainRouter); // Public chain config
 
 // Error logging and handling

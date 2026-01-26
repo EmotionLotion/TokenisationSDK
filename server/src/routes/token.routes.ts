@@ -11,12 +11,14 @@ export const tokenRouter = Router();
 // ============================================================================
 
 const createTokenSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.string().uuid().optional(),
+  assetId: z.string().uuid().optional(),
   name: z.string().min(1).max(100),
   symbol: z.string().min(1).max(10).regex(/^[A-Z0-9]+$/i, 'Symbol must be alphanumeric'),
   decimals: z.number().int().min(0).max(18).optional(),
   standard: z.enum(['ERC3643', 'ERC1400', 'ERC20']).optional(),
   totalSupply: z.string().regex(/^\d+$/, 'Must be a positive integer string'),
+  maxSupply: z.string().regex(/^\d+$/, 'Must be a positive integer string').optional(),
   chainId: z.number().int().positive(),
   complianceModules: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
