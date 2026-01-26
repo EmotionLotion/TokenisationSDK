@@ -43,7 +43,7 @@ The AHOY Tokenisation SDK is a comprehensive toolkit for building compliant toke
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/TokenisationSDK.git
+git clone https://github.com/EmotionLotion/TokenisationSDK.git
 cd TokenisationSDK
 
 # Install dependencies
@@ -467,7 +467,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Documentation](docs/README.md)
 - [API Reference](docs/reference/SDK_API.md)
 - [Examples](examples/)
-- [Issue Tracker](https://github.com/yourusername/TokenisationSDK/issues)
+- [Issue Tracker](https://github.com/EmotionLotion/TokenisationSDK/issues)
 
 ---
 
