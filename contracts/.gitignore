@@ -1,0 +1,20 @@
+# Compiler output
+cache/
+out/
+
+# Broadcast logs
+broadcast/
+
+# Environment files
+.env
+.env.local
+
+# Slither
+.slither.json
+
+# Coverage
+coverage/
+lcov.info
+
+# Lock files
+foundry.lock
