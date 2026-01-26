@@ -1,59 +1,79 @@
-# TokenisationSDK Documentation
+# Documentation
 
-> **"A Tokenisation SDK is a programmable factory that turns real-world rights, assets, or actions into verifiable, rule-based digital tokens."**
+Welcome to the Tokenisation SDK documentation.
 
-## Documentation Index
+## 📚 Table of Contents
 
 ### Getting Started
-| Document | Description |
-|----------|-------------|
-| [Quick Start](./guides/QUICKSTART.md) | Get your first asset tokenized in 5 minutes |
-| [Installation](./guides/INSTALLATION.md) | Detailed setup instructions |
-| [First Project](./guides/FIRST_PROJECT.md) | Step-by-step tutorial |
+New to the SDK? Start here.
+
+| Guide | Description |
+|-------|-------------|
+| [Quick Start](getting-started/QUICKSTART.md) | Get running in 5 minutes |
+| [Installation](getting-started/INSTALLATION.md) | Detailed setup instructions |
+| [First Project](getting-started/FIRST_PROJECT.md) | Build your first tokenized asset |
 
 ### Guides
-| Document | Description |
-|----------|-------------|
-| [SDK Usage](./guides/SDK_USAGE.md) | Complete SDK API guide |
-| [UI Kit](./guides/UI_KIT.md) | React component library |
-| [Server Setup](./guides/SERVER_SETUP.md) | API server configuration |
-| [Demo Walkthrough](./guides/MVP_SHOWCASE.md) | Full feature demonstration |
+Step-by-step tutorials for common tasks.
 
-### Architecture & Reference
+| Guide | Description |
+|-------|-------------|
+| [SDK Usage](guides/SDK_USAGE.md) | Complete SDK walkthrough |
+| [Compliance Setup](guides/COMPLIANCE_SETUP.md) | Configure KYC/AML rules |
+| [Chainlink Integration](guides/CHAINLINK_INTEGRATION.md) | Oracle price feeds & automation |
+| [Server Setup](guides/SERVER_SETUP.md) | Deploy the API server |
+| [UI Kit](guides/UI_KIT.md) | Using the component library |
+| [MVP Showcase](guides/MVP_SHOWCASE.md) | Feature demonstrations |
+
+### Architecture
+Understand how the SDK works under the hood.
+
 | Document | Description |
 |----------|-------------|
-| [Architecture Overview](./architecture/OVERVIEW.md) | System design and patterns |
-| [Plugin System](./architecture/PLUGINS.md) | Extending the SDK |
-| [Lifecycle Engine](./architecture/LIFECYCLE.md) | State machine documentation |
-| [Security Model](./architecture/SECURITY.md) | Security considerations |
+| [Overview](architecture/OVERVIEW.md) | System architecture |
+| [Plugins](architecture/PLUGINS.md) | Plugin system design |
+| [Lifecycle](architecture/LIFECYCLE.md) | Asset state machine |
+| [Security](architecture/SECURITY.md) | Security considerations |
+| [Technical Review](architecture/TECHNICAL_REVIEW.md) | Deep technical analysis |
 
 ### API Reference
-| Document | Description |
-|----------|-------------|
-| [SDK API](./reference/SDK_API.md) | Core SDK methods |
-| [REST API](./reference/REST_API.md) | Server endpoints |
-| [Smart Contracts](./reference/CONTRACTS.md) | Solidity contracts |
+Complete API documentation.
 
-### Business & Planning
-| Document | Description |
-|----------|-------------|
-| [Executive Summary](./business/EXECUTIVE_SUMMARY.md) | Product overview |
-| [Roadmap](./business/ROADMAP.md) | Development timeline |
-| [Implementation Plan](./business/IMPLEMENTATION_PLAN.md) | Original SDK plan |
+| Reference | Description |
+|-----------|-------------|
+| [SDK API](api/SDK_API.md) | TypeScript SDK reference |
+| [REST API](api/REST_API.md) | HTTP API endpoints |
+| [Smart Contracts](api/CONTRACTS.md) | Solidity contract reference |
+| [OpenAPI Spec](api/openapi.yaml) | OpenAPI 3.0 specification |
+| [Mainnet Costs](api/MAINNET_COSTS.md) | Gas costs & pricing |
+
+### Deployment
+Production deployment and operations.
+
+| Guide | Description |
+|-------|-------------|
+| [Deployment Runbook](deployment/DEPLOYMENT_RUNBOOK.md) | Step-by-step deployment |
+| [Contract Addresses](deployment/DEPLOYMENT_ADDRESSES.md) | Deployed contract addresses |
+| [Operations Manual](deployment/OPERATIONS_MANUAL.md) | Day-to-day operations |
+| [Troubleshooting](deployment/TROUBLESHOOTING.md) | Common issues & solutions |
 
 ---
 
-## Quick Links
+## Quick Start
 
 ```bash
-# Install SDK
-npm install @tokenisation/sdk
+# Clone the repo
+git clone https://github.com/EmotionLotion/TokenisationSDK.git
+cd TokenisationSDK
+
+# Install & build SDK
+cd sdk && npm install && npm run build
 
 # Run demo UI
-cd ui && npm run dev
+cd ../ui && npm install && npm run dev
 
 # Run API server
-cd server && npm run dev
+cd ../server && npm install && npm run dev
 ```
 
 ## Project Structure
@@ -64,80 +84,19 @@ TokenisationSDK/
 ├── contracts/           # Solidity smart contracts
 ├── server/              # Express API server
 ├── ui/                  # React dashboard
-├── ui-kit/              # Reusable React components
+├── examples/            # Example applications
+├── docker/              # Docker deployment
 └── docs/                # This documentation
-    ├── guides/          # How-to guides
+    ├── getting-started/ # Quick start guides
+    ├── guides/          # How-to tutorials
     ├── architecture/    # Design documents
-    ├── reference/       # API documentation
-    └── business/        # Business documents
+    ├── api/             # API reference
+    └── deployment/      # Operations guides
 ```
 
-## Implementation Status
+## Quick Links
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| SDK Core | 100% | Lifecycle, compliance, plugins (56 tests passing) |
-| Smart Contracts | 100% | ERC-3643 compliant |
-| API Server | 95% | SQLite/PostgreSQL ready |
-| UI Dashboard | 100% | Full platform interface |
-| UI Kit | 100% | 8 drop-in components |
-| Token Adapters | 100% | ERC20, ERC721, Soulbound, ERC1410, ERC4626 |
-| Vertical Integrations | 100% | COMET, Fly+, H2O hooks |
-| AHOY Economy | 100% | Staking, rewards, governance |
-
-## UI Routes
-
-| Route | Component | Description |
-|-------|-----------|-------------|
-| `/` | EcosystemHub | Main dashboard |
-| `/app/comet` | CometApp | COMET Logistics vertical |
-| `/app/flyplus` | FlyPlusApp | Fly+ Aviation vertical |
-| `/app/h2o` | H2OApp | H2O Utilities vertical |
-| `/app/ams` | AMSApp | AMS Marketplace |
-| `/app/trouve` | TrouveApp | Trouve service |
-| `/app/connect` | ConnectApp | Connect service |
-| `/app/equity` | EquityApp | Equity management |
-| `/factory` | AssetClassWizard | Visual asset factory (4-step wizard) |
-| `/identity` | IdentityProfile | DID/credential management |
-| `/marketplace` | UnifiedMarketplace | Cross-vertical trading |
-| `/oracle-manager` | OracleManager | Data feed configuration |
-| `/staking` | StakingDashboard | AHOY token staking |
-| `/cashflow` | CashFlowDashboard | Cash flow management |
-| `/governance` | GovernancePortal | DAO governance |
-| `/escrow` | EscrowTracker | Escrow tracking |
-| `/soulbound` | SoulboundProgress | Soulbound token progress |
-| `/assets` | Dashboard | Asset management |
-| `/identities` | IdentitiesPage | Identity registry |
-| `/policies` | PolicyStudio | Policy DSL editor |
-| `/transactions` | TransactionsPage | Transaction history |
-| `/oracles` | OraclesPage | Oracle status |
-| `/payouts` | PayoutsPage | Payout management |
-| `/developers` | DevelopersPage | Developer tools |
-
-## React Hooks
-
-### Blockchain Hooks (`hooks/useBlockchain.ts`)
-- `useWalletConnection()` - Wallet status
-- `useTokenBalance()` - ERC20 balance
-- `useTokenTransfer()` - Token transfers
-- `useTokenApproval()` - Spending approval
-- `useNFT()` - NFT operations
-- `useContractEvents()` - Event listening
-
-### Vertical Hooks (`hooks/useVerticals.ts`)
-- `useDriverReputation()` - COMET driver SBT
-- `useFlyPlusPasses()` - Fly+ ticket NFTs
-- `useWaterCredits()` - H2O IoT oracle credits
-
-### Economy Hooks (`hooks/useAhoyToken.ts`)
-- `useAhoyTokenInfo()` - Token metadata
-- `useAhoyBalance()` - User balance
-- `useAhoyStaking()` - Staking positions
-- `useVesting()` - Vesting schedules
-- `useRewardHistory()` - Reward tracking
-- `useGovernance()` - Proposal voting
-
-## Support
-
-- **Issues**: Report bugs and feature requests
-- **Discussions**: Ask questions and share ideas
+- [Main README](../README.md) - Project overview
+- [SDK Source](../sdk/) - TypeScript SDK
+- [Smart Contracts](../contracts/) - Solidity contracts
+- [Examples](../examples/) - Example applications
