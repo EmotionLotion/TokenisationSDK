@@ -61,7 +61,11 @@
     "lint": "eslint src --ext .ts",
     "docs": "typedoc",
     "docs:watch": "typedoc --watch",
-    "cli": "node dist/cli/index.js"
+    "cli": "node dist/cli/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "keywords": [
     "tokenisation",
@@ -74,9 +78,11 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/pg": "^8.16.0",
     "@types/react": "^18.2.0",
     "@types/uuid": "^9.0.7",
     "@vitest/coverage-v8": "^1.0.0",
+    "drizzle-kit": "^0.31.8",
     "typedoc": "^0.25.0",
     "typedoc-plugin-markdown": "^3.17.0",
     "typescript": "^5.3.0",
@@ -84,17 +90,19 @@
   },
   "dependencies": {
     "commander": "^11.1.0",
+    "drizzle-orm": "^0.45.1",
     "ethers": "^6.9.0",
+    "pg": "^8.17.2",
     "siwe": "^2.1.4",
     "uuid": "^9.0.0",
     "viem": "^2.44.4",
     "zod": "^3.22.4"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "@walletconnect/universal-provider": "^2.11.0",
+    "@metamask/onboarding": "^1.0.1",
     "@walletconnect/modal": "^2.6.0",
-    "@metamask/onboarding": "^1.0.1"
+    "@walletconnect/universal-provider": "^2.11.0",
+    "react": "^18.0.0"
   },
   "peerDependenciesMeta": {
     "react": {

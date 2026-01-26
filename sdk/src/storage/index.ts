@@ -3,3 +3,4 @@
  */
 
 export * from './DatabaseAdapter.js';
+export * from './postgres/index.js';

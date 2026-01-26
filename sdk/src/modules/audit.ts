@@ -249,8 +249,9 @@ export class AuditModule {
    * ```
    */
   async getStats(params?: { startDate?: string; endDate?: string }): Promise<AuditStats> {
+    const queryParams: Record<string, string | undefined> = params || {};
     const response = await this.http.get<AuditStats>('/api/v1/audit/stats/summary', {
-      params: params as Record<string, string>,
+      params: queryParams as any,
     });
     return response.data;
   }
