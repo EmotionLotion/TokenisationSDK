@@ -46,3 +46,6 @@ coverage/
 *.temp
 .cache/
 node_modules
+
+# Internal planning docs (not for repo)
+.internal/
