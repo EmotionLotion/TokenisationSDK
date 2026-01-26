@@ -180,7 +180,7 @@ export interface KYCProviderAdapter {
 /**
  * KYC Provider Factory
  */
-export type KYCProviderType = 'sumsub' | 'onfido' | 'mock';
+export type KYCProviderType = 'sumsub' | 'onfido' | 'jumio' | 'mock';
 
 export interface KYCProviderConfig {
   sumsub?: {
@@ -195,5 +195,12 @@ export interface KYCProviderConfig {
     apiToken: string;
     baseUrl?: string;
     webhookToken?: string;
+  };
+  jumio?: {
+    apiToken: string;
+    apiSecret: string;
+    baseUrl?: string;
+    callbackUrl?: string;
+    webhookSecret?: string;
   };
 }

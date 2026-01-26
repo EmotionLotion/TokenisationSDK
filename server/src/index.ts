@@ -32,6 +32,7 @@ import { corporateActionRouter } from './routes/corporateAction.routes.js';
 import paymentRailsRouter from './routes/payment-rails.routes.js';
 import reportsRouter from './routes/reports.routes.js';
 import { kycRouter } from './routes/kyc.routes.js';
+import { custodyRouter } from './routes/custody.routes.js';
 import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
@@ -130,6 +131,7 @@ app.use('/api/v1/corporate-actions', corporateActionRouter); // Corporate action
 app.use('/api/v1/payment-rails', paymentRailsRouter); // Payment rails (USDC, Bank)
 app.use('/api/v1/reports', reportsRouter); // Report exports (cap table, audit, etc.)
 app.use('/api/v1/kyc', kycRouter); // KYC provider integration (SumSub, Onfido)
+app.use('/api/v1/custody', custodyRouter); // Custody integration (Fireblocks, BitGo)
 app.use('/api/v1/parties', authMiddleware, partyRouter);
 app.use('/api/v1/assets', apiKeyMiddleware, assetRouter);
 app.use('/api/v1/events', authMiddleware, eventRouter);

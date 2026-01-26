@@ -5,6 +5,7 @@
 export * from './kyc.adapter.js';
 export * from './sumsub.adapter.js';
 export * from './onfido.adapter.js';
+export * from './jumio.adapter.js';
 
 import {
   KYCProviderAdapter,
@@ -20,6 +21,7 @@ import {
 } from './kyc.adapter.js';
 import { SumSubAdapter } from './sumsub.adapter.js';
 import { OnfidoAdapter } from './onfido.adapter.js';
+import { JumioAdapter } from './jumio.adapter.js';
 import crypto from 'crypto';
 
 /**
@@ -177,6 +179,12 @@ export function createKYCProvider(
       }
       return new OnfidoAdapter(config.onfido);
 
+    case 'jumio':
+      if (!config.jumio) {
+        throw new Error('Jumio configuration required');
+      }
+      return new JumioAdapter(config.jumio);
+
     case 'mock':
       return new MockKYCAdapter();
 
@@ -203,7 +211,15 @@ export function getDefaultKYCProvider(): KYCProviderAdapter {
       ? {
           apiToken: process.env.ONFIDO_API_TOKEN,
           webhookToken: process.env.ONFIDO_WEBHOOK_TOKEN,
-          region: (process.env.ONFIDO_REGION as 'us' | 'eu' | 'ca') || 'us',
+        }
+      : undefined,
+    jumio: process.env.JUMIO_API_TOKEN
+      ? {
+          apiToken: process.env.JUMIO_API_TOKEN,
+          apiSecret: process.env.JUMIO_API_SECRET || '',
+          baseUrl: process.env.JUMIO_BASE_URL,
+          callbackUrl: process.env.JUMIO_CALLBACK_URL,
+          webhookSecret: process.env.JUMIO_WEBHOOK_SECRET,
         }
       : undefined,
   };
