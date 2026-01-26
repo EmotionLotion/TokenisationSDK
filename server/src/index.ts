@@ -6,6 +6,7 @@ import compression from 'compression';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/openapi.js';
 import { testConnection, getDbMode } from './config/database.js';
+import { validateEnvironmentOrExit, getEnvironmentSummary } from './config/environment.js';
 import { authRouter } from './routes/auth.routes.js';
 import { partyRouter } from './routes/party.routes.js';
 import { assetRouter } from './routes/asset.routes.js';
@@ -184,6 +185,9 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Start server
 async function start() {
   try {
+    // Validate environment configuration first
+    validateEnvironmentOrExit();
+
     // Test database connection
     const dbOk = await testConnection();
     if (!dbOk) {
@@ -195,6 +199,9 @@ async function start() {
     // Check Redis connection (rate limiting will log its own status)
     const redisOk = isRedisAvailable();
 
+    // Get environment summary for logging
+    const envSummary = getEnvironmentSummary();
+
     app.listen(PORT, () => {
       logger.info('Server started', {
         metadata: {
@@ -203,9 +210,10 @@ async function start() {
           database: `${getDbMode().toUpperCase()} (${dbOk ? 'Connected' : 'Disconnected'})`,
           redis: redisOk ? 'Connected' : 'Not configured (using in-memory rate limiting)',
           corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+          ...envSummary,
         },
       });
-      console.log(`
+      logger.info(`
 ========================================
   AHOY Tokenisation API Server
 ========================================

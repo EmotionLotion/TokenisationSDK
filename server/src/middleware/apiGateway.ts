@@ -163,8 +163,9 @@ export function rateLimiter(config: RateLimitConfig) {
 
     // Handle skip options
     if (skipFailedRequests || skipSuccessfulRequests) {
-      const originalEnd = res.end.bind(res);
-      res.end = function (...args: Parameters<Response['end']>) {
+      const originalEnd = res.end;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      res.end = function (this: Response, chunk?: any, encoding?: any, cb?: any) {
         // Decrement if we should skip this request
         if (
           (skipFailedRequests && res.statusCode >= 400) ||
@@ -172,8 +173,8 @@ export function rateLimiter(config: RateLimitConfig) {
         ) {
           entry!.count = Math.max(0, entry!.count - 1);
         }
-        return originalEnd(...args);
-      };
+        return originalEnd.call(this, chunk, encoding, cb);
+      } as typeof res.end;
     }
 
     next();
@@ -273,8 +274,12 @@ export function maxRequestSize(maxSizeBytes: number) {
 // Security Headers Middleware
 // ============================================================================
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const IS_STAGING = process.env.NODE_ENV === 'staging';
+const ENFORCE_HTTPS = IS_PRODUCTION || IS_STAGING || process.env.ENFORCE_HTTPS === 'true';
+
 /**
- * Adds additional security headers.
+ * Adds comprehensive security headers.
  */
 export function securityHeaders(
   req: Request,
@@ -293,8 +298,28 @@ export function securityHeaders(
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
+  // Content-Security-Policy for API responses
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+
+  // Permissions-Policy (restrict browser features)
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
+
+  // HTTP Strict Transport Security (production only)
+  if (ENFORCE_HTTPS) {
+    // 1 year max-age, include subdomains, allow preload
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+
+  // Cache-Control for API responses (prevent caching of sensitive data)
+  if (!res.getHeader('Cache-Control')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+
   // Don't reveal server info
   res.removeHeader('X-Powered-By');
+  res.removeHeader('Server');
 
   next();
 }
@@ -304,20 +329,110 @@ export function securityHeaders(
 // ============================================================================
 
 /**
- * Handles CORS preflight requests efficiently.
+ * Parse allowed origins from environment or config
  */
-export function corsPreflightHandler(allowedOrigins: string[] = ['*']) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (req.method === 'OPTIONS') {
-      const origin = req.headers.origin;
+function parseAllowedOrigins(): string[] {
+  const envOrigin = process.env.CORS_ORIGIN;
+  if (!envOrigin) return [];
 
-      if (origin && (allowedOrigins.includes('*') || allowedOrigins.includes(origin))) {
+  // Support comma-separated origins
+  return envOrigin.split(',').map(o => o.trim()).filter(Boolean);
+}
+
+/**
+ * Validates if an origin is allowed.
+ * In production, only explicitly whitelisted origins are allowed.
+ */
+function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
+  if (!origin) return false;
+
+  // Never allow wildcard in production
+  if ((IS_PRODUCTION || IS_STAGING) && allowedOrigins.includes('*')) {
+    return false;
+  }
+
+  // Check explicit whitelist
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Check wildcard only in development
+  if (!IS_PRODUCTION && !IS_STAGING && allowedOrigins.includes('*')) return true;
+
+  // Support pattern matching for subdomains (e.g., *.example.com)
+  for (const allowed of allowedOrigins) {
+    if (allowed.startsWith('*.')) {
+      const domain = allowed.slice(2);
+      try {
+        const originUrl = new URL(origin);
+        if (originUrl.hostname.endsWith(domain) || originUrl.hostname === domain.slice(1)) {
+          return true;
+        }
+      } catch {
+        // Invalid URL, skip
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Handles CORS preflight requests with strict validation.
+ */
+export function corsPreflightHandler(allowedOrigins: string[] = parseAllowedOrigins()) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const origin = req.headers.origin;
+
+    if (req.method === 'OPTIONS') {
+      if (origin && isOriginAllowed(origin, allowedOrigins)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, Idempotency-Key');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, Idempotency-Key, X-Dev-Org-Id, X-Dev-Party-Id');
         res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
         res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
         res.status(204).end();
+        return;
+      } else if (origin) {
+        // Origin not allowed - return 403
+        res.status(403).json({
+          error: {
+            message: 'Origin not allowed by CORS policy',
+            code: 'CORS_NOT_ALLOWED',
+          },
+        });
+        return;
+      }
+    }
+
+    // Set CORS headers for non-preflight requests too
+    if (origin && isOriginAllowed(origin, allowedOrigins)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+    }
+
+    next();
+  };
+}
+
+/**
+ * Strict CORS middleware for production
+ */
+export function strictCors(allowedOrigins?: string[]) {
+  const origins = allowedOrigins || parseAllowedOrigins();
+
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const origin = req.headers.origin;
+
+    // In production, reject requests without origin or from disallowed origins
+    if (IS_PRODUCTION || IS_STAGING) {
+      if (origin && !isOriginAllowed(origin, origins)) {
+        res.status(403).json({
+          error: {
+            message: 'Origin not allowed',
+            code: 'CORS_ORIGIN_REJECTED',
+          },
+        });
         return;
       }
     }
@@ -402,7 +517,7 @@ export function apiGateway(options: {
     // Execute middlewares in sequence
     let index = 0;
 
-    const runNext = (err?: Error): void => {
+    const runNext: NextFunction = (err?: unknown): void => {
       if (err) {
         return next(err);
       }

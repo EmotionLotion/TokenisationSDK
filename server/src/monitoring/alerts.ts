@@ -4,6 +4,8 @@
  * Handles alert definitions, triggers, and notifications.
  */
 
+import { logger } from '../middleware/logger.js';
+
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 export type AlertStatus = 'firing' | 'resolved' | 'silenced';
 
@@ -224,7 +226,7 @@ class AlertManager {
     // Notify
     await this.notify([alert]);
 
-    console.log(`[ALERT] ${rule.severity.toUpperCase()}: ${rule.name} - Value: ${value}`);
+    logger.info(`[ALERT] ${rule.severity.toUpperCase()}: ${rule.name} - Value: ${value}`);
   }
 
   /**
@@ -242,7 +244,7 @@ class AlertManager {
     // Notify resolution
     await this.notify([alert]);
 
-    console.log(`[ALERT RESOLVED] ${alert.ruleName}`);
+    logger.info(`[ALERT RESOLVED] ${alert.ruleName}`);
   }
 
   /**
@@ -273,7 +275,7 @@ class AlertManager {
       try {
         await notifier.notify(alerts);
       } catch (error) {
-        console.error(`Notifier ${notifier.name} failed:`, error);
+        logger.error(`Notifier ${notifier.name} failed:`, { error: error as Error });
       }
     }
   }
@@ -404,7 +406,7 @@ export const consoleNotifier: AlertNotifier = {
     for (const alert of alerts) {
       const emoji = alert.severity === 'critical' ? '🚨' : alert.severity === 'warning' ? '⚠️' : 'ℹ️';
       const status = alert.status === 'resolved' ? '✅ RESOLVED' : '🔥 FIRING';
-      console.log(`${emoji} [${status}] ${alert.ruleName}: ${alert.annotations.summary || ''}`);
+      logger.info(`${emoji} [${status}] ${alert.ruleName}: ${alert.annotations.summary || ''}`);
     }
   },
 };

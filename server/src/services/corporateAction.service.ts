@@ -120,7 +120,7 @@ export interface CreateConversionInput {
   name: string;
   description?: string;
   newTokenId: string;
-  conversionRatio: string; // e.g., "3:2" means 3 new tokens for every 2 old
+  conversionRate: string; // e.g., "1.5" means 1.5 new tokens for every 1 old
   recordDate: Date;
   effectiveDate: Date;
   metadata?: Record<string, unknown>;
@@ -177,7 +177,7 @@ export async function createSplit(input: CreateSplitInput) {
         // Store simplified ratio string for display
         simplifiedRatio: `${simplified.numerator}:${simplified.denominator}`,
       },
-      announcementDate: new Date().toISOString(),
+      announcementDate: new Date(),
       recordDate: input.recordDate.toISOString(),
       effectiveDate: input.effectiveDate.toISOString(),
       status: 'announced',
@@ -236,7 +236,7 @@ export async function createReverseSplit(input: CreateReverseSplitInput) {
     name: input.name,
     description: input.description,
     parameters: { ratio: input.ratio, multiplier, newShares, oldShares },
-    announcementDate: new Date().toISOString(),
+    announcementDate: new Date(),
     recordDate: input.recordDate.toISOString(),
     effectiveDate: input.effectiveDate.toISOString(),
     status: 'announced',
@@ -278,7 +278,7 @@ export async function createConversion(input: CreateConversionInput) {
     name: input.name,
     description: input.description,
     parameters: { conversionRate: input.conversionRate, newTokenId: input.newTokenId },
-    announcementDate: new Date().toISOString(),
+    announcementDate: new Date(),
     recordDate: input.recordDate.toISOString(),
     effectiveDate: input.effectiveDate.toISOString(),
     newTokenId: input.newTokenId,
@@ -452,8 +452,8 @@ export async function approveCorporateAction(actionId: string, orgId: string, ap
       status: 'approved',
       totalEntitlements: summary.totalEntitlements,
       approvedBy,
-      approvedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      approvedAt: new Date(),
+      updatedAt: new Date(),
     }).where(eq(corporateActions.id, actionId));
   }, 3, 100);
 
@@ -480,7 +480,7 @@ export async function executeCorporateAction(actionId: string, orgId: string, ex
     throw new ValidationError(`Cannot execute action in ${action.status} status`);
   }
 
-  await db.update(corporateActions).set({ status: 'processing', updatedAt: new Date().toISOString() })
+  await db.update(corporateActions).set({ status: 'processing', updatedAt: new Date() })
     .where(eq(corporateActions.id, actionId));
 
   const entitlements = await db.select().from(corporateActionEntitlements)
@@ -499,26 +499,26 @@ export async function executeCorporateAction(actionId: string, orgId: string, ex
 
       if (action.type === 'conversion' && action.newTokenId) {
         // For conversions: zero out old position, credit new token
-        await tx.update(ledgerPositions).set({ balance: '0', lastMovementAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+        await tx.update(ledgerPositions).set({ balance: '0', lastEventAt: new Date(), updatedAt: new Date() })
           .where(and(eq(ledgerPositions.tokenId, action.tokenId), eq(ledgerPositions.walletAddress, ent.walletAddress.toLowerCase())));
 
         if (existingPosition && existingPosition.tokenId === targetTokenId) {
           const newBalance = BigInt(existingPosition.balance) + BigInt(ent.newBalance || '0');
-          await tx.update(ledgerPositions).set({ balance: newBalance.toString(), lastMovementAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+          await tx.update(ledgerPositions).set({ balance: newBalance.toString(), lastEventAt: new Date(), updatedAt: new Date() })
             .where(eq(ledgerPositions.id, existingPosition.id));
         } else {
           await tx.insert(ledgerPositions).values({
             orgId, tokenId: targetTokenId, investorId: ent.investorId, walletAddress: ent.walletAddress.toLowerCase(),
-            balance: ent.newBalance || '0', lastMovementAt: new Date().toISOString(),
+            balance: ent.newBalance || '0', lastEventAt: new Date(),
           });
         }
       } else {
         // For splits: update existing position
-        await tx.update(ledgerPositions).set({ balance: ent.newBalance || '0', lastMovementAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+        await tx.update(ledgerPositions).set({ balance: ent.newBalance || '0', lastEventAt: new Date(), updatedAt: new Date() })
           .where(and(eq(ledgerPositions.tokenId, action.tokenId), eq(ledgerPositions.walletAddress, ent.walletAddress.toLowerCase())));
       }
 
-      await tx.update(corporateActionEntitlements).set({ status: 'processed', processedAt: new Date().toISOString() })
+      await tx.update(corporateActionEntitlements).set({ status: 'processed', processedAt: new Date() })
         .where(eq(corporateActionEntitlements.id, ent.id));
 
       processedCount++;
@@ -528,8 +528,8 @@ export async function executeCorporateAction(actionId: string, orgId: string, ex
       status: 'completed',
       processedEntitlements: processedCount,
       executedBy,
-      executedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      executedAt: new Date(),
+      updatedAt: new Date(),
     }).where(eq(corporateActions.id, actionId));
   }, 3, 100);
 
@@ -565,7 +565,7 @@ export async function cancelCorporateAction(actionId: string, orgId: string, rea
     .where(and(eq(corporateActionEntitlements.corporateActionId, actionId), eq(corporateActionEntitlements.status, 'pending')));
 
   const [updated] = await db.update(corporateActions)
-    .set({ status: 'cancelled', updatedAt: new Date().toISOString() })
+    .set({ status: 'cancelled', updatedAt: new Date() })
     .where(eq(corporateActions.id, actionId))
     .returning();
 

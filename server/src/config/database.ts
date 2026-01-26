@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from '../db/schema.js';
+import { logger } from '../middleware/logger.js';
 
 const { Pool } = pg;
 
@@ -13,7 +14,7 @@ const pool = new Pool({
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected PostgreSQL error on idle client', err);
+  logger.error('Unexpected PostgreSQL error on idle client', { error: err as Error });
 });
 
 // Initialize Drizzle ORM with PostgreSQL
@@ -77,7 +78,7 @@ export async function testConnection(): Promise<boolean> {
     client.release();
     return true;
   } catch (error) {
-    console.error('Database connection test failed:', error);
+    logger.error('Database connection test failed:', { error: error as Error });
     return false;
   }
 }

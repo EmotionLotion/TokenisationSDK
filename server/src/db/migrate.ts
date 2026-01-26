@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import { logger } from '../middleware/logger.js';
 
 const { Pool } = pg;
 
@@ -14,7 +15,7 @@ const pool = new Pool({
 });
 
 async function migrate() {
-  console.log('Running database migrations...\n');
+  logger.info('Running database migrations...\n');
 
   const client = await pool.connect();
 
@@ -42,11 +43,11 @@ async function migrate() {
 
     for (const file of files) {
       if (executedNames.has(file)) {
-        console.log(`  [skip] ${file} (already executed)`);
+        logger.info(`  [skip] ${file} (already executed)`);
         continue;
       }
 
-      console.log(`  [run]  ${file}`);
+      logger.info(`  [run]  ${file}`);
 
       const sql = readFileSync(join(migrationsDir, file), 'utf-8');
 
@@ -59,12 +60,12 @@ async function migrate() {
         count++;
       } catch (error) {
         await client.query('ROLLBACK');
-        console.error(`\n  [FAIL] Migration ${file} failed:`);
+        logger.error(`\n  [FAIL] Migration ${file} failed:`, { error: error as Error });
         throw error;
       }
     }
 
-    console.log(`\nMigrations complete. ${count} migration(s) executed.`);
+    logger.info(`\nMigrations complete. ${count} migration(s) executed.`);
   } finally {
     client.release();
     await pool.end();
@@ -72,6 +73,6 @@ async function migrate() {
 }
 
 migrate().catch(err => {
-  console.error('Migration failed:', err);
+  logger.error('Migration failed:', { error: err as Error });
   process.exit(1);
 });

@@ -15,6 +15,7 @@ import { createHash } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as relayerService from './relayer.service.js';
 import * as auditService from './audit.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { tokens, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
 
@@ -168,7 +169,7 @@ export async function startReconciliation(
   reconciliationJobs.set(jobId, job);
 
   // Run reconciliation async
-  runReconciliation(job, defaultConfig).catch(console.error);
+  runReconciliation(job, defaultConfig).catch(error => logger.error('Reconciliation failed', { error: error as Error }));
 
   await auditService.logSystemAction(
     orgId,
@@ -356,7 +357,7 @@ async function reconcileToken(
         }
       }
     } catch (error) {
-      console.error(`Error reconciling position ${position.walletAddress}:`, error);
+      logger.error(`Error reconciling position ${position.walletAddress}`, { error: error as Error });
     }
   }
 
@@ -707,7 +708,7 @@ async function generateReconciliationReport(job: ReconciliationJob): Promise<Rec
     tokensProcessed: job.tokensProcessed,
     positionsChecked: job.positionsChecked,
     discrepanciesFound: job.discrepanciesFound,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(),
   });
 
   const attestationHash = createHash('sha256').update(attestationData).digest('hex');

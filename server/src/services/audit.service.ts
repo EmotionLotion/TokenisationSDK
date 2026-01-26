@@ -573,6 +573,6 @@ export async function exportAuditLog(orgId: string, params: {
   return {
     data: entries,
     format: params.format || 'json',
-    exportedAt: new Date().toISOString(),
+    exportedAt: new Date(),
   };
 }

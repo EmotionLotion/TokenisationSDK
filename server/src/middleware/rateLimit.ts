@@ -14,6 +14,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import Redis from 'ioredis';
+import { logger } from '../middleware/logger.js';
 
 // ============================================================================
 // Types & Interfaces
@@ -76,8 +77,8 @@ function getRedisClient(): Redis | null {
 
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
-    console.warn('[RateLimit] REDIS_URL not configured. Using in-memory rate limiting.');
-    console.warn('[RateLimit] Warning: In-memory rate limiting does not work across multiple server instances.');
+    logger.warn('[RateLimit] REDIS_URL not configured. Using in-memory rate limiting.');
+    logger.warn('[RateLimit] Warning: In-memory rate limiting does not work across multiple server instances.');
     return null;
   }
 
@@ -86,7 +87,7 @@ function getRedisClient(): Redis | null {
       // Connection options
       retryStrategy: (times) => {
         if (times > 3) {
-          console.error('[RateLimit] Redis connection failed after 3 attempts. Falling back to in-memory.');
+          logger.error('[RateLimit] Redis connection failed after 3 attempts. Falling back to in-memory.');
           redisAvailable = false;
           return null; // Stop retrying
         }
@@ -101,27 +102,27 @@ function getRedisClient(): Redis | null {
     });
 
     redisClient.on('connect', () => {
-      console.log('[RateLimit] Redis connected successfully.');
+      logger.info('[RateLimit] Redis connected successfully.');
       redisAvailable = true;
     });
 
     redisClient.on('error', (err) => {
-      console.error('[RateLimit] Redis error:', err.message);
+      logger.error('[RateLimit] Redis error:', { error: err as Error });
       redisAvailable = false;
     });
 
     redisClient.on('close', () => {
-      console.warn('[RateLimit] Redis connection closed.');
+      logger.warn('[RateLimit] Redis connection closed.');
       redisAvailable = false;
     });
 
     redisClient.on('reconnecting', () => {
-      console.log('[RateLimit] Redis reconnecting...');
+      logger.info('[RateLimit] Redis reconnecting...');
     });
 
     return redisClient;
   } catch (error) {
-    console.error('[RateLimit] Failed to create Redis client:', error);
+    logger.error('[RateLimit] Failed to create Redis client:', { error: error as Error });
     return null;
   }
 }
@@ -384,7 +385,7 @@ export function createRateLimiter(config: RateLimitConfig) {
             slidingWindow
           );
         } catch (redisError) {
-          console.warn('[RateLimit] Redis error, falling back to in-memory:', redisError);
+          logger.warn('[RateLimit] Redis error, falling back to in-memory:', { error: redisError as Error });
           result = incrementInMemory(fullKey, windowMs, maxRequests);
         }
       } else {
@@ -442,7 +443,7 @@ export function createRateLimiter(config: RateLimitConfig) {
               }
             } catch (error) {
               // Decrement errors are non-critical
-              console.warn('[RateLimit] Failed to decrement counter:', error);
+              logger.warn('[RateLimit] Failed to decrement counter:', { error: error as Error });
             }
           }
         });
@@ -451,7 +452,7 @@ export function createRateLimiter(config: RateLimitConfig) {
       next();
     } catch (error) {
       // Rate limiting errors should not block requests - log and continue
-      console.error('[RateLimit] Unexpected error:', error);
+      logger.error('[RateLimit] Unexpected error:', { error: error as Error });
       next();
     }
   };

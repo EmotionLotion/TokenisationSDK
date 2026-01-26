@@ -272,8 +272,8 @@ export async function approveDistribution(distributionId: string, orgId: string,
         totalRecipients: summary.totalRecipients,
         snapshotData: { holders: summary.payments },
         approvedBy,
-        approvedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        approvedAt: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(distributions.id, distributionId));
   }, 3, 100);
@@ -298,7 +298,7 @@ export async function executeDistribution(distributionId: string, orgId: string)
   }
 
   await db.update(distributions)
-    .set({ status: 'processing', updatedAt: new Date().toISOString() })
+    .set({ status: 'processing', updatedAt: new Date() })
     .where(eq(distributions.id, distributionId));
 
   await db.insert(eventBusQueue).values({
@@ -329,7 +329,7 @@ export async function executeDistribution(distributionId: string, orgId: string)
   }
 
   await db.update(distributions)
-    .set({ paidRecipients: processedCount, totalPaid: totalPaid.toString(), updatedAt: new Date().toISOString() })
+    .set({ paidRecipients: processedCount, totalPaid: totalPaid.toString(), updatedAt: new Date() })
     .where(eq(distributions.id, distributionId));
 
   await auditService.logSystemAction(orgId, 'distribution_execution_started', 'distribution', distributionId,
@@ -347,7 +347,7 @@ export async function confirmPayment(paymentId: string, orgId: string, confirmat
   if (payment.status !== 'processing') throw new ValidationError(`Cannot confirm payment in ${payment.status} status`);
 
   const [updated] = await db.update(distributionPayments)
-    .set({ status: 'completed', txHash: confirmation.txHash, bankReference: confirmation.bankReference, completedAt: new Date().toISOString() })
+    .set({ status: 'completed', txHash: confirmation.txHash, bankReference: confirmation.bankReference, completedAt: new Date() })
     .where(eq(distributionPayments.id, paymentId))
     .returning();
 
@@ -357,7 +357,7 @@ export async function confirmPayment(paymentId: string, orgId: string, confirmat
     .where(and(eq(distributionPayments.distributionId, payment.distributionId), eq(distributionPayments.status, 'processing')));
 
   if (remainingPayments.length === 0 && processingPayments.length === 0) {
-    await db.update(distributions).set({ status: 'completed', updatedAt: new Date().toISOString() }).where(eq(distributions.id, payment.distributionId));
+    await db.update(distributions).set({ status: 'completed', updatedAt: new Date() }).where(eq(distributions.id, payment.distributionId));
     await db.insert(eventBusQueue).values({ orgId, topic: 'distribution.completed', payload: { distributionId: payment.distributionId } });
   }
 
@@ -366,7 +366,7 @@ export async function confirmPayment(paymentId: string, orgId: string, confirmat
   const totalPaid = completedPayments.reduce((sum, p) => sum + BigInt(p.paymentAmount), 0n);
 
   await db.update(distributions)
-    .set({ paidRecipients: completedPayments.length, totalPaid: totalPaid.toString(), updatedAt: new Date().toISOString() })
+    .set({ paidRecipients: completedPayments.length, totalPaid: totalPaid.toString(), updatedAt: new Date() })
     .where(eq(distributions.id, payment.distributionId));
 
   return updated;
@@ -392,7 +392,7 @@ export async function cancelDistribution(distributionId: string, orgId: string, 
     .where(and(eq(distributionPayments.distributionId, distributionId), eq(distributionPayments.status, 'pending')));
 
   const [updated] = await db.update(distributions)
-    .set({ status: 'cancelled', updatedAt: new Date().toISOString() })
+    .set({ status: 'cancelled', updatedAt: new Date() })
     .where(eq(distributions.id, distributionId))
     .returning();
 
@@ -466,7 +466,7 @@ export async function takeRecordDateSnapshot(
     const snapshotData = {
       distributionId,
       recordDate: distribution.recordDate,
-      capturedAt: new Date().toISOString(),
+      capturedAt: new Date(),
       totalHolders: nonZeroPositions.length,
       totalTokens,
       positions: nonZeroPositions.map(p => ({
@@ -480,9 +480,11 @@ export async function takeRecordDateSnapshot(
     const [snapshot] = await tx.insert(capTableSnapshots).values({
       orgId,
       tokenId: distribution.tokenId,
-      snapshotType: 'distribution_record_date',
-      snapshotDate: distribution.recordDate,
-      data: snapshotData as any,
+      asOf: distribution.recordDate,
+      snapshot: snapshotData as any,
+      totalHolders: nonZeroPositions.length,
+      totalSupply: totalTokens,
+      generatedBy: 'distribution_record_date',
       metadata: {
         distributionId,
         distributionName: distribution.name,
@@ -496,7 +498,7 @@ export async function takeRecordDateSnapshot(
         status: 'snapshot_taken',
         snapshotData: snapshotData as any,
         totalRecipients: nonZeroPositions.length,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(distributions.id, distributionId));
 
@@ -721,7 +723,7 @@ export async function executePaymentsIdempotent(
       // Mark distribution as completed
       if (!dryRun) {
         await db.update(distributions)
-          .set({ status: 'completed', updatedAt: new Date().toISOString() })
+          .set({ status: 'completed', updatedAt: new Date() })
           .where(eq(distributions.id, distributionId));
       }
     }
@@ -738,7 +740,7 @@ export async function executePaymentsIdempotent(
   // Update distribution to processing
   if (distribution.status === 'approved' && !dryRun) {
     await db.update(distributions)
-      .set({ status: 'processing', updatedAt: new Date().toISOString() })
+      .set({ status: 'processing', updatedAt: new Date() })
       .where(eq(distributions.id, distributionId));
   }
 
@@ -767,7 +769,7 @@ export async function executePaymentsIdempotent(
 
       // Mark as processing
       await db.update(distributionPayments)
-        .set({ status: 'processing', updatedAt: new Date().toISOString() })
+        .set({ status: 'processing', updatedAt: new Date() })
         .where(and(
           eq(distributionPayments.id, payment.id),
           eq(distributionPayments.status, 'pending') // Optimistic locking
@@ -801,7 +803,7 @@ export async function executePaymentsIdempotent(
         .set({
           status: 'failed',
           error: errorMsg,
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(eq(distributionPayments.id, payment.id));
 

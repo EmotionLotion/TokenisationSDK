@@ -440,7 +440,7 @@ function createEvidencePack(params: {
   auditTrail: auditService.AuditLogEntry[];
 }): EvidencePack {
   const packId = `evp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-  const generatedAt = new Date().toISOString();
+  const generatedAt = new Date();
 
   const pack: Omit<EvidencePack, 'attestation'> = {
     id: packId,
@@ -483,7 +483,7 @@ function generateAttestation(pack: Omit<EvidencePack, 'attestation'>): EvidenceA
   return {
     contentHash,
     algorithm: 'SHA-256',
-    attestedAt: new Date().toISOString(),
+    attestedAt: new Date(),
     // Signature would be added here if server-side signing is configured
   };
 }

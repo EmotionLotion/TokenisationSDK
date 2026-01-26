@@ -215,11 +215,16 @@ export const investors = pgTable('investors', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
   partyId: uuid('party_id').references(() => parties.id, { onDelete: 'set null' }),
+  externalId: varchar('external_id', { length: 256 }), // External system reference
   type: varchar('type', { length: 32 }).notNull(), // individual, company
+  email: varchar('email', { length: 256 }),
+  phone: varchar('phone', { length: 32 }),
   jurisdiction: varchar('jurisdiction', { length: 2 }).notNull(),
+  countryCode: varchar('country_code', { length: 2 }), // ISO country code
   classification: varchar('classification', { length: 32 }).notNull().default('retail'), // retail, professional, institutional
   riskTier: varchar('risk_tier', { length: 16 }).notNull().default('medium'), // low, medium, high
   status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, active, suspended
+  kycStatus: varchar('kyc_status', { length: 32 }).notNull().default('pending'), // pending, in_progress, passed, failed, expired
   piiRef: varchar('pii_ref', { length: 256 }), // Pointer to encrypted vault or provider reference
   accreditedStatus: varchar('accredited_status', { length: 32 }).default('unknown'), // unknown, pending, verified, expired
   accreditedVerifiedAt: timestamp('accredited_verified_at', { withTimezone: true }),
@@ -230,7 +235,10 @@ export const investors = pgTable('investors', {
 }, (table) => ({
   orgIdx: index('idx_investors_org').on(table.orgId),
   partyIdx: index('idx_investors_party').on(table.partyId),
+  externalIdIdx: index('idx_investors_external_id').on(table.orgId, table.externalId),
+  emailIdx: index('idx_investors_email').on(table.orgId, table.email),
   statusIdx: index('idx_investors_status').on(table.status),
+  kycStatusIdx: index('idx_investors_kyc_status').on(table.kycStatus),
   classificationIdx: index('idx_investors_classification').on(table.classification),
 }));
 
@@ -259,9 +267,12 @@ export const kycSessions = pgTable('kyc_sessions', {
   investorId: uuid('investor_id').notNull().references(() => investors.id, { onDelete: 'cascade' }),
   provider: varchar('provider', { length: 32 }).notNull(), // sumsub, onfido, jumio
   providerRef: varchar('provider_ref', { length: 256 }), // External reference ID
+  externalSessionId: varchar('external_session_id', { length: 256 }), // Provider session ID
   status: varchar('status', { length: 32 }).notNull().default('created'), // created, pending, approved, rejected, expired
   level: varchar('level', { length: 32 }).notNull().default('basic'), // basic, enhanced, institutional
+  levelRequested: varchar('level_requested', { length: 32 }).notNull().default('basic'), // Requested verification level
   checks: jsonb('checks').default({}), // Screening results summary
+  providerData: jsonb('provider_data').default({}), // Raw provider response data
   evidenceHashes: jsonb('evidence_hashes').default([]), // Hash references, not raw docs
   failureReasons: jsonb('failure_reasons').default([]),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
@@ -274,6 +285,7 @@ export const kycSessions = pgTable('kyc_sessions', {
   investorIdx: index('idx_kyc_sessions_investor').on(table.investorId),
   statusIdx: index('idx_kyc_sessions_status').on(table.status),
   providerIdx: index('idx_kyc_sessions_provider').on(table.provider),
+  externalSessionIdx: index('idx_kyc_sessions_external').on(table.externalSessionId),
 }));
 
 // ============================================================================
@@ -386,15 +398,18 @@ export const tokens = pgTable('tokens', {
   assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 256 }).notNull(),
   symbol: varchar('symbol', { length: 32 }).notNull(),
-  standard: varchar('standard', { length: 32 }).notNull().default('erc3643'), // erc3643, erc20, erc721, erc1155
+  standard: varchar('standard', { length: 32 }).notNull().default('ERC3643'), // ERC3643, ERC1400, ERC20
   chainId: integer('chain_id').notNull(),
   address: varchar('address', { length: 42 }),
   identityRegistryAddress: varchar('identity_registry_address', { length: 42 }),
   complianceAddress: varchar('compliance_address', { length: 42 }),
   decimals: integer('decimals').notNull().default(18),
   totalSupply: varchar('total_supply', { length: 78 }).default('0'),
-  status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, deploying, active, frozen, deprecated
+  issuedSupply: varchar('issued_supply', { length: 78 }).default('0'),
+  maxSupply: varchar('max_supply', { length: 78 }),
+  status: varchar('status', { length: 32 }).notNull().default('draft'), // draft, deploying, deployed, paused, frozen, deprecated
   policyId: uuid('policy_id').references(() => policies.id),
+  complianceModules: text('compliance_modules').array().default(['identity', 'country', 'investor_type']),
   deployTxHash: varchar('deploy_tx_hash', { length: 66 }),
   deployedAt: timestamp('deployed_at', { withTimezone: true }),
   deployedBy: varchar('deployed_by', { length: 42 }),
@@ -410,16 +425,20 @@ export const tokens = pgTable('tokens', {
   addressChainUnique: uniqueIndex('idx_tokens_address_chain').on(table.address, table.chainId),
 }));
 
-// Token Tranches - For future use with different right classes
+// Token Tranches - For different right classes
 export const tokenTranches = pgTable('token_tranches', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
   tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 128 }).notNull(),
+  supply: varchar('supply', { length: 78 }).notNull().default('0'),
+  issuedSupply: varchar('issued_supply', { length: 78 }).notNull().default('0'),
+  vestingSchedule: jsonb('vesting_schedule').default({}),
   rights: jsonb('rights').notNull().default({}),
   restrictions: jsonb('restrictions').default({}),
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   orgIdx: index('idx_token_tranches_org').on(table.orgId),
   tokenIdx: index('idx_token_tranches_token').on(table.tokenId),
@@ -430,13 +449,17 @@ export const issuances = pgTable('issuances', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
   tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').references(() => investors.id),
   toWallet: varchar('to_wallet', { length: 42 }).notNull(),
   toInvestorId: uuid('to_investor_id').references(() => investors.id),
+  trancheId: uuid('tranche_id').references(() => tokenTranches.id),
   amount: varchar('amount', { length: 78 }).notNull(), // BigInt as string
-  status: varchar('status', { length: 32 }).notNull().default('created'), // created, approved, submitted, confirmed, settled, failed
+  reason: text('reason'),
+  status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, approved, submitted, confirmed, failed
   decisionId: uuid('decision_id').references(() => decisions.id),
   txHash: varchar('tx_hash', { length: 66 }),
   txBlock: integer('tx_block'),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   idempotencyKey: varchar('idempotency_key', { length: 64 }),
   error: text('error'),
   metadata: jsonb('metadata').default({}),
@@ -454,13 +477,16 @@ export const redemptions = pgTable('redemptions', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
   tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').references(() => investors.id),
   fromWallet: varchar('from_wallet', { length: 42 }).notNull(),
   fromInvestorId: uuid('from_investor_id').references(() => investors.id),
   amount: varchar('amount', { length: 78 }).notNull(),
-  status: varchar('status', { length: 32 }).notNull().default('created'),
+  reason: text('reason'),
+  status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, approved, submitted, confirmed, failed
   decisionId: uuid('decision_id').references(() => decisions.id),
   txHash: varchar('tx_hash', { length: 66 }),
   txBlock: integer('tx_block'),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   idempotencyKey: varchar('idempotency_key', { length: 64 }),
   error: text('error'),
   metadata: jsonb('metadata').default({}),
@@ -584,15 +610,16 @@ export const offerings = pgTable('offerings', {
 
   name: varchar('name', { length: 256 }).notNull(),
   description: text('description'),
-  offeringType: varchar('offering_type', { length: 32 }).notNull(), // primary, secondary, private_placement
+  offeringType: varchar('offering_type', { length: 32 }).notNull().default('primary'), // primary, secondary, private_placement
 
   // Pricing (in smallest units)
   pricePerToken: varchar('price_per_token', { length: 78 }).notNull(),
-  priceCurrency: varchar('price_currency', { length: 10 }).notNull().default('USDC'),
+  currency: varchar('currency', { length: 16 }).notNull().default('USDC'),
   decimals: integer('decimals').notNull().default(6), // Currency decimals
 
-  // Supply
-  totalSupply: varchar('total_supply', { length: 78 }).notNull(),
+  // Supply and caps (in smallest units)
+  hardCap: varchar('hard_cap', { length: 78 }).notNull(),
+  softCap: varchar('soft_cap', { length: 78 }),
   minInvestment: varchar('min_investment', { length: 78 }),
   maxInvestment: varchar('max_investment', { length: 78 }),
 
@@ -601,12 +628,13 @@ export const offerings = pgTable('offerings', {
   endDate: timestamp('end_date', { withTimezone: true }),
 
   // Allocation tracking
-  allocatedAmount: varchar('allocated_amount', { length: 78 }).notNull().default('0'),
+  totalRaised: varchar('total_raised', { length: 78 }).notNull().default('0'),
+  totalAllocations: integer('total_allocations').notNull().default(0),
   mintedAmount: varchar('minted_amount', { length: 78 }).notNull().default('0'),
 
   // Status
   status: varchar('status', { length: 32 }).notNull().default('draft'),
-  // States: draft, pending_approval, open, paused, closed, cancelled
+  // States: draft, scheduled, open, paused, closed, settled, cancelled
 
   // Compliance
   policyId: uuid('policy_id').references(() => policies.id),
@@ -631,25 +659,34 @@ export const allocations = pgTable('allocations', {
   walletAddress: varchar('wallet_address', { length: 42 }).notNull(),
 
   // Allocation details (in smallest units)
-  tokenAmount: varchar('token_amount', { length: 78 }).notNull(),
-  paymentAmount: varchar('payment_amount', { length: 78 }).notNull(),
-  paymentCurrency: varchar('payment_currency', { length: 10 }).notNull(),
+  amount: varchar('amount', { length: 78 }).notNull(), // Token amount
+  investmentAmount: varchar('investment_amount', { length: 78 }).notNull(), // Payment amount
+  currency: varchar('currency', { length: 16 }).notNull(),
 
   // Status
-  status: varchar('status', { length: 32 }).notNull().default('pending'),
-  // States: pending, payment_pending, payment_received, minting, minted, failed, cancelled
+  status: varchar('status', { length: 32 }).notNull().default('pending_kyc'),
+  // States: pending_kyc, kyc_verified, compliance_pending, approved, rejected, mint_queued, minting, confirmed, failed, cancelled
+  rejectionReason: varchar('rejection_reason', { length: 1024 }),
 
   // Payment tracking
   paymentRef: varchar('payment_ref', { length: 256 }),
   paymentMethod: varchar('payment_method', { length: 32 }), // bank_transfer, crypto, card
   paymentReceivedAt: timestamp('payment_received_at', { withTimezone: true }),
 
+  // Chain tracking
+  txHash: varchar('tx_hash', { length: 66 }),
+  txBlock: integer('tx_block'),
+
   // Minting tracking
   issuanceId: uuid('issuance_id').references(() => issuances.id),
-  mintedAt: timestamp('minted_at', { withTimezone: true }),
 
   // Compliance
   decisionId: uuid('decision_id').references(() => decisions.id),
+
+  // Timestamps
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
 
   idempotencyKey: varchar('idempotency_key', { length: 64 }),
   metadata: jsonb('metadata').default({}),
@@ -660,6 +697,7 @@ export const allocations = pgTable('allocations', {
   offeringIdx: index('idx_allocations_offering').on(table.offeringId),
   investorIdx: index('idx_allocations_investor').on(table.investorId),
   statusIdx: index('idx_allocations_status').on(table.status),
+  txHashIdx: index('idx_allocations_tx_hash').on(table.txHash),
   idempotencyUnique: uniqueIndex('idx_allocations_idempotency').on(table.orgId, table.idempotencyKey),
 }));
 
@@ -886,13 +924,16 @@ export const ledgerPositions = pgTable('ledger_positions', {
 export const ledgerEvents = pgTable('ledger_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
-  type: varchar('type', { length: 32 }).notNull(), // issuance, transfer, redemption, force_transfer, freeze, unfreeze
   tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  investorId: uuid('investor_id').references(() => investors.id),
+  eventType: varchar('event_type', { length: 32 }).notNull(), // issuance, transfer, redemption, force_transfer, freeze, unfreeze
   fromWallet: varchar('from_wallet', { length: 42 }),
   toWallet: varchar('to_wallet', { length: 42 }),
-  amount: varchar('amount', { length: 78 }).notNull(),
-  ref: varchar('ref', { length: 256 }).notNull(), // transfer_id, issuance_id, or tx_hash
-  refType: varchar('ref_type', { length: 32 }).notNull(), // transfer, issuance, redemption, tx
+  delta: varchar('delta', { length: 78 }).notNull(), // Amount change (can be negative for redemptions)
+  ref: varchar('ref', { length: 256 }), // transfer_id, issuance_id, or tx_hash
+  refType: varchar('ref_type', { length: 32 }), // transfer, issuance, redemption, allocation, tx
+  txHash: varchar('tx_hash', { length: 66 }),
+  txBlock: integer('tx_block'),
   balanceBefore: varchar('balance_before', { length: 78 }),
   balanceAfter: varchar('balance_after', { length: 78 }),
   metadata: jsonb('metadata').default({}),
@@ -900,8 +941,9 @@ export const ledgerEvents = pgTable('ledger_events', {
 }, (table) => ({
   orgIdx: index('idx_ledger_events_org').on(table.orgId),
   tokenIdx: index('idx_ledger_events_token').on(table.tokenId),
-  typeIdx: index('idx_ledger_events_type').on(table.type),
+  eventTypeIdx: index('idx_ledger_events_type').on(table.eventType),
   refIdx: index('idx_ledger_events_ref').on(table.ref),
+  investorIdx: index('idx_ledger_events_investor').on(table.investorId),
   createdAtIdx: index('idx_ledger_events_created').on(table.createdAt),
 }));
 
@@ -1110,12 +1152,17 @@ export const idempotencyKeys = pgTable('idempotency_keys', {
   orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
   key: varchar('key', { length: 64 }).notNull(),
   requestHash: varchar('request_hash', { length: 64 }).notNull(), // SHA256 of request body
+  status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, processing, completed, failed
   responseBody: jsonb('response_body'),
   statusCode: integer('status_code'),
+  error: text('error'),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   orgKeyUnique: uniqueIndex('idx_idempotency_keys_org_key').on(table.orgId, table.key),
+  statusIdx: index('idx_idempotency_keys_status').on(table.status),
   expiresIdx: index('idx_idempotency_keys_expires').on(table.expiresAt),
 }));
 
@@ -1172,7 +1219,8 @@ export const eventBusQueue = pgTable('event_bus_queue', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').references(() => orgs.id, { onDelete: 'cascade' }),
   topic: varchar('topic', { length: 128 }).notNull(), // e.g., 'transfer.requested', 'token.deployed'
-  eventId: varchar('event_id', { length: 64 }).notNull(),
+  eventId: uuid('event_id').defaultRandom(), // Auto-generated if not provided
+  deduplicationKey: varchar('deduplication_key', { length: 128 }), // For idempotent event processing
   payload: jsonb('payload').notNull(),
   trace: jsonb('trace').default({}), // requestId, idempotencyKey, correlationId
   status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, processing, processed, failed, dlq
@@ -1180,14 +1228,19 @@ export const eventBusQueue = pgTable('event_bus_queue', {
   maxAttempts: integer('max_attempts').notNull().default(3),
   processedBy: varchar('processed_by', { length: 64 }), // Worker ID
   processedAt: timestamp('processed_at', { withTimezone: true }),
-  error: text('error'),
-  scheduledFor: timestamp('scheduled_for', { withTimezone: true }).defaultNow(),
+  processAfter: timestamp('process_after', { withTimezone: true }).defaultNow(), // Scheduled processing time
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  error: text('error'), // Final error if moved to DLQ
+  scheduledFor: timestamp('scheduled_for', { withTimezone: true }).defaultNow(), // Alias for processAfter
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   orgIdx: index('idx_event_bus_queue_org').on(table.orgId),
   topicIdx: index('idx_event_bus_queue_topic').on(table.topic),
   statusIdx: index('idx_event_bus_queue_status').on(table.status),
   scheduledIdx: index('idx_event_bus_queue_scheduled').on(table.scheduledFor),
+  processAfterIdx: index('idx_event_bus_queue_process_after').on(table.processAfter),
+  deduplicationIdx: uniqueIndex('idx_event_bus_queue_deduplication').on(table.deduplicationKey),
   eventIdUnique: uniqueIndex('idx_event_bus_queue_event_id').on(table.eventId),
 }));
 

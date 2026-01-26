@@ -4,6 +4,7 @@ import { NotFoundError, ValidationError, AppError } from '../middleware/errorHan
 import * as complianceService from './compliance.service.js';
 import { randomUUID } from 'crypto';
 import { withSerializableTransaction, withRetryableTransaction } from '../utils/transaction.js';
+import { logger } from '../middleware/logger.js';
 
 const { transfers, settlements, tokens, investors, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
 
@@ -301,7 +302,7 @@ export async function approveTransfer(id: string, orgId: string, approvedBy?: st
     metadata: {
       ...(transfer.metadata as Record<string, unknown> || {}),
       approvedBy,
-      approvedAt: new Date().toISOString(),
+      approvedAt: new Date(),
     },
   });
 
@@ -463,7 +464,7 @@ export async function submitTransfer(id: string, orgId: string, txHash: string):
       topic: 'transfer.submitted',
       eventId: `evt_${randomUUID().replace(/-/g, '')}`,
       payload: { transferId: id, txHash } as any,
-      trace: { transferId: id, timestamp: new Date().toISOString() } as any,
+      trace: { transferId: id, timestamp: new Date() } as any,
       status: 'pending',
     });
 
@@ -524,7 +525,7 @@ export async function confirmTransfer(id: string, orgId: string, blockNumber: nu
       topic: 'transfer.confirmed',
       eventId: `evt_${randomUUID().replace(/-/g, '')}`,
       payload: { transferId: id, blockNumber } as any,
-      trace: { transferId: id, timestamp: new Date().toISOString() } as any,
+      trace: { transferId: id, timestamp: new Date() } as any,
       status: 'pending',
     });
 
@@ -612,7 +613,7 @@ export async function settleTransfer(id: string, orgId: string): Promise<Transfe
       topic: 'transfer.settled',
       eventId: `evt_${randomUUID().replace(/-/g, '')}`,
       payload: { transferId: id } as any,
-      trace: { transferId: id, timestamp: new Date().toISOString() } as any,
+      trace: { transferId: id, timestamp: new Date() } as any,
       status: 'pending',
     });
 
@@ -810,7 +811,7 @@ async function emitTransferEvent(transferId: string, orgId: string, topic: strin
     topic,
     eventId: `evt_${randomUUID().replace(/-/g, '')}`,
     payload: payload as any,
-    trace: { transferId, timestamp: new Date().toISOString() } as any,
+    trace: { transferId, timestamp: new Date() } as any,
     status: 'pending',
   });
 }
@@ -848,7 +849,7 @@ export async function expireStaleTransfers(): Promise<number> {
       });
       expiredCount++;
     } catch (error) {
-      console.error(`Failed to expire transfer ${transfer.id}:`, error);
+      logger.error(`Failed to expire transfer ${transfer.id}`, { error: error as Error });
     }
   }
 
@@ -902,7 +903,7 @@ export async function checkTransferCompliance(
     };
   } catch (error) {
     // If compliance service fails, return a safe default
-    console.error('Compliance check failed:', error);
+    logger.error('Compliance check failed', { error: error as Error });
     return {
       allowed: false,
       decision: 'deny',

@@ -64,8 +64,21 @@ dldRouter.post('/titles', apiKeyMiddleware, async (req: ApiKeyRequest, res: Resp
 
     const input = registerTitleSchema.parse(req.body);
     const title = await dldService.registerTitle({
-      ...input,
       orgId: req.apiKey.orgId,
+      assetId: input.projectId, // projectId maps to assetId
+      externalTitleDeedId: input.dldTitleNumber,
+      data: {
+        externalTitleDeedId: input.dldTitleNumber,
+        propertyType: input.propertyType,
+        location: {
+          emirate: input.emirate,
+          community: input.area,
+          plotNumber: input.plotNumber,
+          building: input.buildingName,
+          unit: input.unitNumber,
+        },
+      },
+      metadata: input.propertyDetails,
     });
 
     res.status(201).json(title);
@@ -141,7 +154,8 @@ dldRouter.post('/titles/:id/verify', apiKeyMiddleware, async (req: ApiKeyRequest
       throw new ValidationError('API key required');
     }
 
-    const result = await dldService.verifyTitle(req.params.id, req.apiKey.orgId);
+    const verifiedBy = req.body?.verifiedBy || `api_key:${req.apiKey.keyId}`;
+    const result = await dldService.verifyTitle(req.params.id, req.apiKey.orgId, verifiedBy);
     res.json(result);
   } catch (error) {
     next(error);
@@ -181,10 +195,12 @@ dldRouter.post('/events', apiKeyMiddleware, async (req: ApiKeyRequest, res: Resp
 
     const input = ingestEventSchema.parse(req.body);
     const event = await dldService.ingestEvent({
-      ...input,
-      orgId: req.apiKey.orgId,
-      occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
-    });
+      externalEventId: input.dldEventId || `evt_${Date.now()}`,
+      titleDeedExternalId: input.dldTitleId,
+      type: input.eventType,
+      payload: input.eventData,
+      receivedAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
+    }, req.apiKey.orgId);
 
     res.status(201).json(event);
   } catch (error) {
@@ -207,7 +223,7 @@ dldRouter.get('/events', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respo
 
     const events = await dldService.listEvents(req.apiKey.orgId, {
       titleId: titleId as string | undefined,
-      eventType: eventType as string | undefined,
+      type: eventType as string | undefined, // Map eventType to type
       processed: processed === 'true' ? true : processed === 'false' ? false : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
       offset: offset ? parseInt(offset as string) : undefined,
@@ -245,9 +261,11 @@ dldRouter.post('/sync-jobs', apiKeyMiddleware, async (req: ApiKeyRequest, res: R
     }
 
     const input = createSyncJobSchema.parse(req.body);
-    const job = await dldService.createSyncJob({
-      ...input,
-      orgId: req.apiKey.orgId,
+    const config = input.config || {};
+    const job = await dldService.createSyncJob(req.apiKey.orgId, input.jobType, {
+      assetId: config.assetId as string | undefined,
+      dldTitleId: config.dldTitleId as string | undefined,
+      metadata: config,
     });
 
     res.status(201).json(job);

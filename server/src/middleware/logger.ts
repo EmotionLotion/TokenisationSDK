@@ -304,8 +304,9 @@ export function requestLogger(options: {
     });
 
     // Capture response
-    const originalEnd = res.end.bind(res);
-    res.end = function (...args: Parameters<Response['end']>) {
+    const originalEnd = res.end;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res.end = function (this: Response, chunk?: any, encoding?: any, cb?: any) {
       const duration = Date.now() - startTime;
 
       const entry: LogEntry = {
@@ -328,8 +329,8 @@ export function requestLogger(options: {
         console.log(output);
       }
 
-      return originalEnd(...args);
-    };
+      return originalEnd.call(this, chunk, encoding, cb);
+    } as typeof res.end;
 
     next();
   };

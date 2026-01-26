@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware/err
 import * as auditService from './audit.service.js';
 import { emitEvent } from './domainEvents.service.js';
 import { getRequestContext, runWithContext, createSystemContext } from '../middleware/context.js';
+import { logger } from '../middleware/logger.js';
 
 const {
   offerings,
@@ -804,11 +805,11 @@ export function startChainReconciliationWorker(config: {
   const { pollIntervalMs = 15000, orgIds = [] } = config;
 
   if (reconciliationInterval) {
-    console.log('[ChainReconciliation] Worker already running');
+    logger.info('[ChainReconciliation] Worker already running');
     return;
   }
 
-  console.log('[ChainReconciliation] Starting worker with poll interval', pollIntervalMs);
+  logger.info('[ChainReconciliation] Starting worker with poll interval', { pollIntervalMs });
 
   reconciliationInterval = setInterval(async () => {
     try {
@@ -828,12 +829,12 @@ export function startChainReconciliationWorker(config: {
           ));
 
         for (const allocation of stuckAllocations) {
-          console.log(`[ChainReconciliation] Stuck allocation detected: ${allocation.id}`);
+          logger.info(`[ChainReconciliation] Stuck allocation detected: ${allocation.id}`);
           // Would check chain status and either confirm or fail
         }
       }
     } catch (error) {
-      console.error('[ChainReconciliation] Worker error:', error);
+      logger.error('[ChainReconciliation] Worker error', { error: error as Error });
     }
   }, pollIntervalMs);
 }
@@ -842,7 +843,7 @@ export function stopChainReconciliationWorker(): void {
   if (reconciliationInterval) {
     clearInterval(reconciliationInterval);
     reconciliationInterval = null;
-    console.log('[ChainReconciliation] Worker stopped');
+    logger.info('[ChainReconciliation] Worker stopped');
   }
 }
 

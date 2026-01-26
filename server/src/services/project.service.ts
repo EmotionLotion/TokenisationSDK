@@ -316,7 +316,7 @@ export async function rejectDocument(id: string, orgId: string, reason?: string)
   const metadata = {
     ...(document.metadata as Record<string, unknown> || {}),
     rejectionReason: reason,
-    rejectedAt: new Date().toISOString(),
+    rejectedAt: new Date(),
   };
 
   const [updated] = await db.update(documents)

@@ -2,6 +2,7 @@ import { db, schema } from '../config/database.js';
 import { eq, and, lt, desc } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { ConflictError, ValidationError } from '../middleware/errorHandler.js';
+import { logger } from '../middleware/logger.js';
 
 const { idempotencyKeys } = schema;
 
@@ -286,7 +287,7 @@ export function idempotencyMiddleware(operation: string) {
         const recordId = (req as any).idempotencyRecordId;
         if (recordId) {
           completeIdempotencyKey(recordId, res.statusCode, body).catch(err => {
-            console.error('Failed to save idempotency response:', err);
+            logger.error('Failed to save idempotency response', { error: err as Error });
           });
         }
         res.setHeader('Idempotency-Key', idempotencyKey);

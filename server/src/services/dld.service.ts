@@ -24,6 +24,12 @@ export interface DldTitleData {
   areaUnit?: string;
   valuationAed?: number;
   flags?: string[];
+  encumbrances?: Array<{
+    type: string;
+    amount?: number;
+    beneficiary?: string;
+    registeredDate?: string;
+  }>;
 }
 
 export interface DldEventData {
@@ -126,14 +132,16 @@ export async function getTitleByAsset(assetId: string, orgId: string) {
 export async function listTitles(orgId: string, params: {
   status?: string;
   assetId?: string;
+  projectId?: string; // Alias for assetId
   limit?: number;
   offset?: number;
 } = {}) {
-  const { status, assetId, limit = 50, offset = 0 } = params;
+  const { status, assetId, projectId, limit = 50, offset = 0 } = params;
+  const effectiveAssetId = assetId || projectId;
 
   const conditions = [eq(dldTitles.orgId, orgId)];
   if (status) conditions.push(eq(dldTitles.status, status));
-  if (assetId) conditions.push(eq(dldTitles.assetId, assetId));
+  if (effectiveAssetId) conditions.push(eq(dldTitles.assetId, effectiveAssetId));
 
   return db.select()
     .from(dldTitles)
@@ -209,7 +217,7 @@ export async function setTitleConflict(id: string, orgId: string, reason: string
       metadata: {
         ...(title.metadata as Record<string, unknown> || {}),
         conflictReason: reason,
-        conflictAt: new Date().toISOString(),
+        conflictAt: new Date(),
       },
       updatedAt: new Date(),
     })
@@ -491,7 +499,7 @@ async function freezeAssetTokens(assetId: string, orgId: string, reason: string)
           metadata: {
             ...(token.metadata as Record<string, unknown> || {}),
             frozenReason: reason,
-            frozenAt: new Date().toISOString(),
+            frozenAt: new Date(),
           },
           updatedAt: new Date(),
         })
@@ -508,15 +516,17 @@ async function freezeAssetTokens(assetId: string, orgId: string, reason: string)
 
 export async function listEvents(orgId: string, params: {
   titleDeedExternalId?: string;
+  titleId?: string; // Alias for titleDeedExternalId
   type?: string;
   processed?: boolean;
   limit?: number;
   offset?: number;
 } = {}) {
-  const { titleDeedExternalId, type, processed, limit = 50, offset = 0 } = params;
+  const { titleDeedExternalId, titleId, type, processed, limit = 50, offset = 0 } = params;
+  const effectiveTitleId = titleDeedExternalId || titleId;
 
   const conditions = [eq(dldEvents.orgId, orgId)];
-  if (titleDeedExternalId) conditions.push(eq(dldEvents.titleDeedExternalId, titleDeedExternalId));
+  if (effectiveTitleId) conditions.push(eq(dldEvents.titleDeedExternalId, effectiveTitleId));
   if (type) conditions.push(eq(dldEvents.type, type));
   if (processed !== undefined) conditions.push(eq(dldEvents.processed, processed));
 
@@ -696,14 +706,16 @@ async function executeManualSync(job: typeof dldSyncJobs.$inferSelect, orgId: st
 
 export async function listSyncJobs(orgId: string, params: {
   type?: string;
+  jobType?: string; // Alias for type
   status?: string;
   limit?: number;
   offset?: number;
 } = {}) {
-  const { type, status, limit = 50, offset = 0 } = params;
+  const { type, jobType, status, limit = 50, offset = 0 } = params;
+  const effectiveType = type || jobType;
 
   const conditions = [eq(dldSyncJobs.orgId, orgId)];
-  if (type) conditions.push(eq(dldSyncJobs.type, type));
+  if (effectiveType) conditions.push(eq(dldSyncJobs.type, effectiveType));
   if (status) conditions.push(eq(dldSyncJobs.status, status));
 
   return db.select()
@@ -712,6 +724,113 @@ export async function listSyncJobs(orgId: string, params: {
     .orderBy(desc(dldSyncJobs.createdAt))
     .limit(limit)
     .offset(offset);
+}
+
+// ============================================================================
+// Additional Functions (Route Compatibility)
+// ============================================================================
+
+/**
+ * Register a new title (alias for createTitle)
+ */
+export async function registerTitle(input: CreateTitleInput) {
+  return createTitle(input);
+}
+
+/**
+ * Update a title's properties
+ */
+export async function updateTitle(id: string, orgId: string, updates: {
+  status?: string;
+  currentOwnerName?: string;
+  currentOwnerAddress?: string;
+  snapshot?: DldTitleData;
+}) {
+  const title = await getTitle(id, orgId);
+  if (!title) {
+    throw new NotFoundError('Title');
+  }
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+  if (updates.status) updateData.status = updates.status;
+  if (updates.currentOwnerName) updateData.currentOwnerName = updates.currentOwnerName;
+  if (updates.currentOwnerAddress) updateData.currentOwnerAddress = updates.currentOwnerAddress;
+  if (updates.snapshot) updateData.snapshot = updates.snapshot;
+
+  const [updated] = await db.update(dldTitles)
+    .set(updateData)
+    .where(and(eq(dldTitles.id, id), eq(dldTitles.orgId, orgId)))
+    .returning();
+
+  return updated;
+}
+
+/**
+ * Get events for a specific title
+ */
+export async function getTitleEvents(titleId: string, orgId: string, params: {
+  limit?: number;
+  offset?: number;
+} = {}) {
+  const { limit = 50, offset = 0 } = params;
+
+  return db.select()
+    .from(dldEvents)
+    .where(and(
+      eq(dldEvents.titleDeedExternalId, titleId),
+      eq(dldEvents.orgId, orgId)
+    ))
+    .orderBy(desc(dldEvents.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
+ * Look up a title by DLD title number
+ */
+export async function lookupByDldTitleNumber(titleNumber: string, orgId: string) {
+  return db.select()
+    .from(dldTitles)
+    .where(and(
+      eq(dldTitles.externalTitleDeedId, titleNumber),
+      eq(dldTitles.orgId, orgId)
+    ))
+    .limit(1)
+    .then(rows => rows[0] || null);
+}
+
+/**
+ * Check if a title is clear (no encumbrances or conflicts)
+ */
+export async function checkTitleClear(titleId: string, orgId: string): Promise<{
+  isClear: boolean;
+  issues: string[];
+  lastChecked: Date;
+}> {
+  const title = await getTitle(titleId, orgId);
+  if (!title) {
+    throw new NotFoundError('Title');
+  }
+
+  const issues: string[] = [];
+
+  // Check for conflict status
+  if (title.status === 'conflict') {
+    issues.push('Title has an unresolved conflict');
+  }
+
+  // Check snapshot for encumbrances
+  const snapshot = title.snapshot as DldTitleData | null;
+  if (snapshot?.encumbrances && snapshot.encumbrances.length > 0) {
+    issues.push(`Title has ${snapshot.encumbrances.length} encumbrance(s)`);
+  }
+
+  return {
+    isClear: issues.length === 0,
+    issues,
+    lastChecked: new Date(),
+  };
 }
 
 // ============================================================================
@@ -724,7 +843,7 @@ async function emitDldEvent(orgId: string, topic: string, payload: object) {
     topic,
     eventId: `evt_${randomUUID().replace(/-/g, '')}`,
     payload: payload as any,
-    trace: { timestamp: new Date().toISOString() } as any,
+    trace: { timestamp: new Date() } as any,
     status: 'pending',
   });
 }

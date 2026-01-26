@@ -203,7 +203,7 @@ webhookRouter.post('/test', apiKeyMiddleware, async (req: ApiKeyRequest, res: Re
     const result = await webhookService.dispatchEvent(
       req.apiKey.orgId,
       eventType,
-      data || { test: true, timestamp: new Date().toISOString() }
+      data || { test: true, timestamp: new Date() }
     );
 
     res.json(result);

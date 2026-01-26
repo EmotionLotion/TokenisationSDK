@@ -111,7 +111,7 @@ export class IPFSStorageAdapter implements StorageProviderAdapter {
       name: fileName,
       keyvalues: {
         orgId,
-        uploadedAt: new Date().toISOString(),
+        uploadedAt: new Date(),
         ...metadata,
       },
     };

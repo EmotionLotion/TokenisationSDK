@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { createHash, createSign, createVerify, generateKeyPairSync } from 'crypto';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { policies, policyVersions, decisions, investors, dldTitles, tokens } = schema;
 
@@ -609,7 +610,7 @@ async function createDecision(input: CreateDecisionInput): Promise<DecisionOutpu
     reasons: input.reasons,
     inputsHash,
     decisionHash,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(),
   };
 
   const signature = signDecision(decisionPayload);
@@ -653,7 +654,7 @@ async function createDecision(input: CreateDecisionInput): Promise<DecisionOutpu
     });
   } catch (auditError) {
     // Log audit failure but don't fail the decision
-    console.error('Failed to log compliance decision to audit trail:', auditError);
+    logger.error('Failed to log compliance decision to audit trail', { error: auditError as Error });
   }
 
   return {

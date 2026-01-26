@@ -708,7 +708,7 @@ async function processUsdcPayment(payment: Payment): Promise<void> {
     });
 
     payment.txHash = txResult.hash;
-    payment.blockNumber = txResult.blockNumber;
+    payment.txBlock = txResult.txBlock;
   }
 }
 

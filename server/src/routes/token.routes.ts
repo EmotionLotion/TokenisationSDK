@@ -555,7 +555,7 @@ tokenRouter.post('/:tokenId/burn', apiKeyMiddleware, async (req: ApiKeyRequest, 
       amount,
       status: burn.status,
       reason,
-      burnedAt: new Date().toISOString(),
+      burnedAt: new Date(),
     });
   } catch (error) {
     next(error);
@@ -585,7 +585,7 @@ tokenRouter.post('/:tokenId/policies', apiKeyMiddleware, async (req: ApiKeyReque
       tokenId: req.params.tokenId,
       policyId,
       priority: priority || 0,
-      attachedAt: new Date().toISOString(),
+      attachedAt: new Date(),
       attachedBy: req.apiKey.keyId || 'system',
     };
 

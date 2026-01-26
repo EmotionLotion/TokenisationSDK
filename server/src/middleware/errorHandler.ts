@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../middleware/logger.js';
 
 export interface ApiError extends Error {
   statusCode?: number;
@@ -11,7 +12,7 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
-  console.error('Error:', err);
+  logger.error('Error:', { error: err as Error });
 
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';

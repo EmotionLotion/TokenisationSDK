@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as relayerService from './relayer.service.js';
 import * as auditService from './audit.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { tokens, transfers, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
 
@@ -188,7 +189,7 @@ export async function processTransferEvent(
   // Find the token by contract address
   const token = await db.query.tokens.findFirst({
     where: and(
-      eq(tokens.contractAddress, event.tokenAddress),
+      eq(tokens.address, event.tokenAddress),
       eq(tokens.orgId, orgId)
     ),
   });
@@ -202,7 +203,7 @@ export async function processTransferEvent(
   const existingEvent = await db.query.ledgerEvents.findFirst({
     where: and(
       eq(ledgerEvents.txHash, event.txHash),
-      eq(ledgerEvents.walletAddress, event.from) // Use 'from' as unique identifier
+      eq(ledgerEvents.fromWallet, event.from) // Use 'from' as unique identifier
     ),
   });
 
@@ -248,7 +249,7 @@ export async function processTransferEvent(
     await db.update(transfers)
       .set({
         status: 'confirmed',
-        blockNumber: event.blockNumber,
+        txBlock: event.blockNumber,
         confirmedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -294,7 +295,7 @@ async function updatePositionFromChain(
     await db.update(ledgerPositions)
       .set({
         balance: newBalance.toString(),
-        lastMovementAt: new Date(),
+        lastEventAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(ledgerPositions.id, existing.id));
@@ -306,7 +307,7 @@ async function updatePositionFromChain(
       investorId: null as any, // Will need to be linked to investor later
       walletAddress: normalizedWallet,
       balance: amount,
-      lastMovementAt: new Date(),
+      lastEventAt: new Date(),
     });
   }
 
@@ -318,7 +319,7 @@ async function updatePositionFromChain(
     walletAddress: normalizedWallet,
     amount,
     txHash,
-    blockNumber,
+    txBlock: event.blockNumber,
     metadata: { source: 'indexer' },
   });
 }
@@ -345,8 +346,8 @@ export async function indexBlocks(
   }
 
   const contractAddresses = deployedTokens
-    .filter(t => t.contractAddress)
-    .map(t => t.contractAddress!);
+    .filter(t => t.address)
+    .map(t => t.address!);
 
   // Fetch transfer events
   const events = await getLogs(
@@ -367,7 +368,7 @@ export async function indexBlocks(
 
     // Find the token's org
     const token = deployedTokens.find(
-      t => t.contractAddress?.toLowerCase() === parsed.tokenAddress
+      t => t.address?.toLowerCase() === parsed.tokenAddress
     );
 
     if (token) {
@@ -391,7 +392,7 @@ export async function startIndexer(config: IndexerConfig): Promise<void> {
     lastIndexedBlock: config.startBlock,
   });
 
-  console.log(`Starting indexer for chain ${config.chainId} from block ${config.startBlock}`);
+  logger.info(`Starting indexer for chain ${config.chainId} from block ${config.startBlock}`);
 
   // Start indexing loop
   indexLoop(config);
@@ -417,7 +418,7 @@ async function indexLoop(config: IndexerConfig): Promise<void> {
         });
 
         if (result.events > 0) {
-          console.log(
+          logger.info(
             `Chain ${config.chainId}: Indexed blocks ${fromBlock}-${toBlock}, found ${result.events} events`
           );
         }
@@ -426,7 +427,7 @@ async function indexLoop(config: IndexerConfig): Promise<void> {
       // Wait before next poll
       await new Promise(resolve => setTimeout(resolve, config.pollingInterval));
     } catch (error) {
-      console.error(`Indexer error for chain ${config.chainId}:`, error);
+      logger.error(`Indexer error for chain ${config.chainId}:`, { error: error as Error });
 
       updateIndexerState(config.chainId, {
         lastError: error instanceof Error ? error.message : 'Unknown error',
@@ -441,7 +442,7 @@ async function indexLoop(config: IndexerConfig): Promise<void> {
 
 export function stopIndexer(chainId: number): void {
   updateIndexerState(chainId, { isRunning: false });
-  console.log(`Stopping indexer for chain ${chainId}`);
+  logger.info(`Stopping indexer for chain ${chainId}`);
 }
 
 export function getIndexerStatus(chainId: number): IndexerState {
@@ -470,7 +471,7 @@ export async function reconcileToken(tokenId: string, orgId: string): Promise<{
     throw new NotFoundError('Token not found');
   }
 
-  if (!token.contractAddress) {
+  if (!token.address) {
     throw new ValidationError('Token not deployed');
   }
 
@@ -486,7 +487,7 @@ export async function reconcileToken(tokenId: string, orgId: string): Promise<{
     // Get on-chain balance
     const onChainBalance = await relayerService.getERC20Balance(
       token.chainId,
-      token.contractAddress,
+      token.address,
       position.walletAddress
     );
 
@@ -584,7 +585,7 @@ export async function reindexToken(
     throw new NotFoundError('Token not found');
   }
 
-  if (!token.contractAddress) {
+  if (!token.address) {
     throw new ValidationError('Token not deployed');
   }
 
@@ -601,7 +602,7 @@ export async function reindexToken(
       token.chainId,
       block,
       toBlock,
-      [token.contractAddress],
+      [token.address],
       [EVENT_SIGNATURES.TRANSFER]
     );
 

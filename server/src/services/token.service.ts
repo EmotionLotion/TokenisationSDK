@@ -182,7 +182,7 @@ export async function updateToken(id: string, orgId: string, input: UpdateTokenI
   const [updated] = await db.update(tokens)
     .set({
       ...input,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(and(eq(tokens.id, id), eq(tokens.orgId, orgId)))
     .returning();
@@ -205,7 +205,7 @@ export async function deployToken(id: string, orgId: string, input: DeployTokenI
   await db.update(tokens)
     .set({
       status: 'deploying',
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(tokens.id, id));
 
@@ -248,9 +248,9 @@ export async function confirmDeployment(id: string, orgId: string, contractAddre
     .set({
       status: 'deployed',
       address: contractAddress.toLowerCase(),
-      deployedAt: new Date().toISOString(),
+      deployedAt: new Date(),
       deployTxHash: txHash,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(tokens.id, id))
     .returning();
@@ -328,7 +328,7 @@ export async function pauseToken(id: string, orgId: string, reason?: string) {
   const [updated] = await db.update(tokens)
     .set({
       status: 'paused',
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(tokens.id, id))
     .returning();
@@ -354,7 +354,7 @@ export async function unpauseToken(id: string, orgId: string) {
   const [updated] = await db.update(tokens)
     .set({
       status: 'deployed',
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(tokens.id, id))
     .returning();
@@ -380,7 +380,7 @@ export async function freezeToken(id: string, orgId: string, reason: string) {
   const [updated] = await db.update(tokens)
     .set({
       status: 'frozen',
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(tokens.id, id))
     .returning();
@@ -470,8 +470,8 @@ export async function issueTokens(input: IssueTokensInput) {
     }
 
     // Check supply limits with fresh data
-    const newIssuedSupply = BigInt(currentToken.issuedSupply) + BigInt(input.amount);
-    if (newIssuedSupply > BigInt(currentToken.totalSupply)) {
+    const newIssuedSupply = BigInt(currentToken.issuedSupply || '0') + BigInt(input.amount);
+    if (newIssuedSupply > BigInt(currentToken.totalSupply || '0')) {
       throw new ValidationError('Issuance would exceed total supply');
     }
 
@@ -496,7 +496,7 @@ export async function issueTokens(input: IssueTokensInput) {
       tokenId: input.tokenId,
       trancheId: input.trancheId,
       investorId: input.investorId,
-      walletAddress: input.walletAddress.toLowerCase(),
+      toWallet: input.walletAddress.toLowerCase(),
       amount: input.amount,
       status: 'pending',
       reason: input.reason,
@@ -507,7 +507,7 @@ export async function issueTokens(input: IssueTokensInput) {
     await tx.update(tokens)
       .set({
         issuedSupply: newIssuedSupply.toString(),
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(tokens.id, input.tokenId));
 
@@ -516,7 +516,7 @@ export async function issueTokens(input: IssueTokensInput) {
       await tx.update(tokenTranches)
         .set({
           issuedSupply: (BigInt(tranche.issuedSupply) + BigInt(input.amount)).toString(),
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(eq(tokenTranches.id, input.trancheId));
     }
@@ -577,9 +577,9 @@ export async function confirmIssuance(id: string, orgId: string, txHash: string,
     .set({
       status: 'confirmed',
       txHash,
-      blockNumber,
-      confirmedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      txBlock: blockNumber,
+      confirmedAt: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(issuances.id, id))
     .returning();
@@ -589,10 +589,10 @@ export async function confirmIssuance(id: string, orgId: string, txHash: string,
     orgId,
     tokenId: issuance.tokenId,
     eventType: 'issuance',
-    walletAddress: issuance.walletAddress,
-    amount: issuance.amount,
+    toWallet: issuance.toWallet,
+    delta: issuance.amount,
     txHash,
-    blockNumber,
+    txBlock: blockNumber,
   });
 
   return updated;
@@ -643,7 +643,7 @@ export async function redeemTokens(input: RedeemTokensInput) {
       orgId: input.orgId,
       tokenId: input.tokenId,
       investorId: input.investorId,
-      walletAddress: input.walletAddress.toLowerCase(),
+      fromWallet: input.walletAddress.toLowerCase(),
       amount: input.amount,
       status: 'pending',
       reason: input.reason,
@@ -664,8 +664,8 @@ export async function redeemTokens(input: RedeemTokensInput) {
     // Update token issued supply
     await tx.update(tokens)
       .set({
-        issuedSupply: (BigInt(currentToken.issuedSupply) - BigInt(input.amount)).toString(),
-        updatedAt: new Date().toISOString(),
+        issuedSupply: (BigInt(currentToken.issuedSupply || '0') - BigInt(input.amount)).toString(),
+        updatedAt: new Date(),
       })
       .where(eq(tokens.id, input.tokenId));
 
@@ -714,9 +714,9 @@ export async function confirmRedemption(id: string, orgId: string, txHash: strin
     .set({
       status: 'confirmed',
       txHash,
-      blockNumber,
-      confirmedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      txBlock: blockNumber,
+      confirmedAt: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(redemptions.id, id))
     .returning();
@@ -726,10 +726,10 @@ export async function confirmRedemption(id: string, orgId: string, txHash: strin
     orgId,
     tokenId: redemption.tokenId,
     eventType: 'redemption',
-    walletAddress: redemption.walletAddress,
-    amount: `-${redemption.amount}`,
+    fromWallet: redemption.fromWallet,
+    delta: `-${redemption.amount}`,
     txHash,
-    blockNumber,
+    txBlock: blockNumber,
   });
 
   return updated;
@@ -846,8 +846,8 @@ export async function approveClawback(
     .set({
       status: 'approved',
       approvedBy: approverId,
-      approvedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      approvedAt: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(clawbacks.id, id))
     .returning();
@@ -919,8 +919,8 @@ export async function executeClawback(
       .set({
         status: 'executed',
         executedBy: executorId,
-        executedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        executedAt: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(clawbacks.id, id))
       .returning();
@@ -931,8 +931,8 @@ export async function executeClawback(
         orgId,
         tokenId: clawbackRecord.tokenId,
         eventType: 'clawback_debit',
-        walletAddress: clawbackRecord.fromWallet,
-        amount: `-${clawbackRecord.amount}`,
+        fromWallet: clawbackRecord.fromWallet,
+        delta: `-${clawbackRecord.amount}`,
         ref: id,
         refType: 'clawback',
       },
@@ -940,8 +940,8 @@ export async function executeClawback(
         orgId,
         tokenId: clawbackRecord.tokenId,
         eventType: 'clawback_credit',
-        walletAddress: clawbackRecord.toWallet,
-        amount: clawbackRecord.amount,
+        toWallet: clawbackRecord.toWallet,
+        delta: clawbackRecord.amount,
         ref: id,
         refType: 'clawback',
       },
@@ -1001,7 +1001,7 @@ export async function confirmClawback(
       status: 'confirmed',
       txHash,
       txBlock: blockNumber,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(clawbacks.id, id))
     .returning();
@@ -1097,8 +1097,8 @@ async function updateLedgerPositionInTx(
     await txContext.update(ledgerPositions)
       .set({
         balance: newBalance.toString(),
-        lastMovementAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        lastEventAt: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(ledgerPositions.id, existing.id));
   } else {
@@ -1112,7 +1112,7 @@ async function updateLedgerPositionInTx(
       investorId,
       walletAddress: normalizedWallet,
       balance: amount,
-      lastMovementAt: new Date().toISOString(),
+      lastEventAt: new Date(),
     });
   }
 }

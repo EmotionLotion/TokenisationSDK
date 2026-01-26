@@ -267,7 +267,7 @@ export async function generateRegulatoryPack(
 
   const pack: Omit<RegulatoryPack, 'attestation'> = {
     id: packId,
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     version: '1.0',
     type: 'token_regulatory_pack',
     subject: {
@@ -341,9 +341,9 @@ export async function reconstructStateAtTime(
     .where(and(
       eq(capTableSnapshots.tokenId, tokenId),
       eq(capTableSnapshots.orgId, orgId),
-      lte(capTableSnapshots.snapshotDate, targetDate)
+      lte(capTableSnapshots.asOf, targetDate)
     ))
-    .orderBy(desc(capTableSnapshots.snapshotDate))
+    .orderBy(desc(capTableSnapshots.asOf))
     .limit(1);
 
   let positions: Map<string, bigint>;
@@ -353,7 +353,7 @@ export async function reconstructStateAtTime(
 
   if (snapshot.length > 0) {
     // Start from snapshot
-    const snapshotData = snapshot[0].data as {
+    const snapshotData = snapshot[0].snapshot as {
       positions: Array<{ walletAddress: string; balance: string }>;
     };
 
@@ -373,9 +373,9 @@ export async function reconstructStateAtTime(
       .orderBy(asc(ledgerEvents.createdAt));
 
     // Filter events after snapshot
-    const snapshotDate = snapshot[0].snapshotDate;
+    const snapshotAsOf = snapshot[0].asOf;
     for (const event of events) {
-      if (event.createdAt && event.createdAt > snapshotDate!) {
+      if (event.createdAt && event.createdAt > snapshotAsOf) {
         applyLedgerEvent(positions, event);
         eventsApplied++;
       }
@@ -733,7 +733,7 @@ function generatePackAttestation(pack: Omit<RegulatoryPack, 'attestation'>): Pac
   return {
     contentHash,
     algorithm: 'SHA-256',
-    attestedAt: new Date().toISOString(),
+    attestedAt: new Date(),
   };
 }
 

@@ -438,7 +438,7 @@ export const ledgerPositions = sqliteTable('ledger_positions', {
   walletAddress: text('wallet_address').notNull(),
   balance: text('balance').notNull().default('0'),
   lockedBalance: text('locked_balance').default('0'),
-  lastMovementAt: text('last_movement_at'),
+  lastEventAt: text('last_event_at'),
   updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
 

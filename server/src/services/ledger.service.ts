@@ -13,40 +13,48 @@ export interface LedgerPosition {
   id: string;
   orgId: string;
   tokenId: string;
-  investorId: string;
+  investorId: string | null;
   walletAddress: string;
   balance: string;
-  lockedBalance: string;
-  lastMovementAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  frozenBalance: string;
+  lastEventRef: string | null;
+  lastEventAt: Date | null;
+  metadata: unknown;
+  createdAt: Date | null;
+  updatedAt: Date | null;
 }
 
 export interface LedgerEvent {
   id: string;
   orgId: string;
   tokenId: string;
+  investorId: string | null;
   eventType: string;
-  walletAddress: string;
-  amount: string;
+  fromWallet: string | null;
+  toWallet: string | null;
+  delta: string;
+  ref: string | null;
+  refType: string | null;
   txHash: string | null;
-  blockNumber: number | null;
-  metadata: Record<string, unknown>;
-  createdAt: Date;
+  txBlock: number | null;
+  balanceBefore: string | null;
+  balanceAfter: string | null;
+  metadata: unknown;
+  createdAt: Date | null;
 }
 
 export interface CapTableSnapshot {
   id: string;
   orgId: string;
   tokenId: string;
-  snapshotAt: Date;
+  asOf: Date;
   totalHolders: number;
   totalSupply: string;
-  circulatingSupply: string;
-  positions: Record<string, unknown>[];
-  metadata: Record<string, unknown>;
-  hash: string;
-  createdAt: Date;
+  snapshot: unknown;
+  merkleRoot: string | null;
+  generatedBy: string | null;
+  metadata: unknown;
+  createdAt: Date | null;
 }
 
 export interface PositionSummary {
@@ -189,7 +197,11 @@ export async function listLedgerEvents(orgId: string, params: {
 
   const conditions = [eq(ledgerEvents.orgId, orgId)];
   if (tokenId) conditions.push(eq(ledgerEvents.tokenId, tokenId));
-  if (walletAddress) conditions.push(eq(ledgerEvents.walletAddress, walletAddress.toLowerCase()));
+  // Check both fromWallet and toWallet for wallet filtering
+  if (walletAddress) {
+    const normalizedWallet = walletAddress.toLowerCase();
+    conditions.push(sql`(${ledgerEvents.fromWallet} = ${normalizedWallet} OR ${ledgerEvents.toWallet} = ${normalizedWallet})`);
+  }
   if (eventType) conditions.push(eq(ledgerEvents.eventType, eventType));
   if (startDate) conditions.push(gte(ledgerEvents.createdAt, startDate));
   if (endDate) conditions.push(lte(ledgerEvents.createdAt, endDate));
@@ -247,7 +259,7 @@ export async function createCapTableSnapshot(
   // Create hash of the snapshot for integrity verification
   const snapshotData = {
     tokenId,
-    snapshotAt: new Date().toISOString(),
+    snapshotAt: new Date(),
     totalHolders,
     totalSupply: token.totalSupply,
     circulatingSupply,
@@ -295,13 +307,13 @@ export async function listCapTableSnapshots(orgId: string, params: {
 
   const conditions = [eq(capTableSnapshots.orgId, orgId)];
   if (tokenId) conditions.push(eq(capTableSnapshots.tokenId, tokenId));
-  if (startDate) conditions.push(gte(capTableSnapshots.snapshotAt, startDate));
-  if (endDate) conditions.push(lte(capTableSnapshots.snapshotAt, endDate));
+  if (startDate) conditions.push(gte(capTableSnapshots.asOf, startDate));
+  if (endDate) conditions.push(lte(capTableSnapshots.asOf, endDate));
 
   const results = await db.select()
     .from(capTableSnapshots)
     .where(and(...conditions))
-    .orderBy(desc(capTableSnapshots.snapshotAt))
+    .orderBy(desc(capTableSnapshots.asOf))
     .limit(limit)
     .offset(offset);
 
@@ -317,11 +329,10 @@ export async function verifyCapTableSnapshot(id: string, orgId: string): Promise
 
   const snapshotData = {
     tokenId: snapshot.tokenId,
-    snapshotAt: snapshot.snapshotAt.toISOString(),
+    snapshotAt: snapshot.asOf.toISOString(),
     totalHolders: snapshot.totalHolders,
     totalSupply: snapshot.totalSupply,
-    circulatingSupply: snapshot.circulatingSupply,
-    positions: snapshot.positions,
+    snapshot: snapshot.snapshot,
   };
 
   const computedHash = createHash('sha256')
@@ -329,7 +340,7 @@ export async function verifyCapTableSnapshot(id: string, orgId: string): Promise
     .digest('hex');
 
   return {
-    valid: computedHash === snapshot.hash,
+    valid: computedHash === snapshot.merkleRoot,
     snapshot,
     computedHash,
   };

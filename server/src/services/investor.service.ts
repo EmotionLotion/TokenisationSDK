@@ -3,6 +3,7 @@ import { eq, and, desc, or, ilike } from 'drizzle-orm';
 import { randomBytes, createHmac } from 'crypto';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { investors, investorWallets, kycSessions, eventBusQueue } = schema;
 
@@ -487,7 +488,7 @@ export async function processKycWebhook(provider: KycProvider, payload: unknown,
   });
 
   if (!session) {
-    console.warn(`KYC webhook received for unknown session: ${result.externalSessionId}`);
+    logger.warn(`KYC webhook received for unknown session: ${result.externalSessionId}`);
     return { processed: false, reason: 'Session not found' };
   }
 

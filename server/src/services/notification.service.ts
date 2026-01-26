@@ -5,6 +5,8 @@
  * Supports email, webhooks, and push notifications.
  */
 
+import { logger } from '../middleware/logger.js';
+
 export type NotificationType =
   | 'DIVIDEND_AVAILABLE'
   | 'DIVIDEND_CLAIMED'
@@ -306,7 +308,7 @@ export class NotificationService {
       return this.sendSESEmail(recipient.email!, subject, html, text);
     } else {
       // Mock for development
-      console.log(`[Email] To: ${recipient.email}, Subject: ${subject}`);
+      logger.info(`[Email] To: ${recipient.email}, Subject: ${subject}`);
       return {
         success: true,
         channel: 'email',
@@ -368,7 +370,7 @@ export class NotificationService {
   ): Promise<NotificationResult> {
     // AWS SES implementation would go here
     // For now, return mock result
-    console.log(`[SES Email] To: ${to}, Subject: ${subject}`);
+    logger.info(`[SES Email] To: ${to}, Subject: ${subject}`);
     return {
       success: true,
       channel: 'email',
@@ -384,7 +386,7 @@ export class NotificationService {
     const { recipient, type, data, metadata } = payload;
     const webhookPayload = {
       event: type,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(),
       data,
       metadata,
     };
@@ -429,7 +431,7 @@ export class NotificationService {
    */
   private async sendPush(payload: NotificationPayload): Promise<NotificationResult> {
     // Firebase/APNS implementation would go here
-    console.log(`[Push] Token: ${payload.recipient.pushToken}, Type: ${payload.type}`);
+    logger.info(`[Push] Token: ${payload.recipient.pushToken}, Type: ${payload.type}`);
     return {
       success: true,
       channel: 'push',
@@ -443,7 +445,7 @@ export class NotificationService {
    */
   private async sendSMS(payload: NotificationPayload): Promise<NotificationResult> {
     // Twilio/other SMS implementation would go here
-    console.log(`[SMS] Phone: ${payload.recipient.phone}, Type: ${payload.type}`);
+    logger.info(`[SMS] Phone: ${payload.recipient.phone}, Type: ${payload.type}`);
     return {
       success: true,
       channel: 'sms',

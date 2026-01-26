@@ -17,6 +17,7 @@ import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import * as auditService from './audit.service.js';
 import * as truthviewService from './truthview.service.js';
 import * as reconciliationService from './reconciliation.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { tokens, ledgerPositions, transfers, investors, distributions, distributionPayouts, auditLogs, complianceDecisions } = schema;
 
@@ -99,7 +100,7 @@ export async function generateReport(request: ReportRequest): Promise<GeneratedR
   reports.set(id, report);
 
   // Generate asynchronously
-  generateReportContent(report, request).catch(console.error);
+  generateReportContent(report, request).catch(error => logger.error('Report generation failed', { error: error as Error }));
 
   await auditService.logAction({
     orgId: request.orgId,
@@ -229,7 +230,7 @@ async function generateCapTableReport(request: ReportRequest): Promise<string> {
 
       const data = {
         reportType: 'Cap Table',
-        generatedAt: new Date().toISOString(),
+        generatedAt: new Date(),
         tokenId,
         totalSupply: snapshot.totalSupply,
         circulatingSupply: snapshot.circulatingSupply,
@@ -253,7 +254,7 @@ async function generateCapTableReport(request: ReportRequest): Promise<string> {
   // Fallback mock data
   const data = {
     reportType: 'Cap Table',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     tokenId,
     totalSupply: '5000000000000000000000000',
     issuedSupply: '750000000000000000000000',
@@ -292,7 +293,7 @@ async function generateTransferHistoryReport(request: ReportRequest): Promise<st
 
   const data = {
     reportType: 'Transfer History',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     tokenId,
     dateRange: { startDate, endDate },
     transfers: [
@@ -322,7 +323,7 @@ async function generateDistributionHistoryReport(request: ReportRequest): Promis
 
   const data = {
     reportType: 'Distribution History',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     tokenId,
     dateRange: { startDate, endDate },
     distributions: [
@@ -355,7 +356,7 @@ async function generateAuditTrailReport(request: ReportRequest): Promise<string>
 
   const data = {
     reportType: 'Audit Trail',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     dateRange: { startDate, endDate },
     hashChainValid: true,
     entries: [
@@ -399,7 +400,7 @@ async function generateComplianceDecisionsReport(request: ReportRequest): Promis
 
   const data = {
     reportType: 'Compliance Decisions',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     tokenId,
     dateRange: { startDate, endDate },
     decisions: [
@@ -429,7 +430,7 @@ async function generateComplianceDecisionsReport(request: ReportRequest): Promis
 async function generateInvestorRegisterReport(request: ReportRequest): Promise<string> {
   const data = {
     reportType: 'Investor Register',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     investors: [
       {
         id: 'inv_001',
@@ -479,9 +480,9 @@ async function generateHoldingStatementReport(request: ReportRequest): Promise<s
 
   const data = {
     reportType: 'Holding Statement',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     investorId,
-    asOfDate: new Date().toISOString(),
+    asOfDate: new Date(),
     holdings: [
       {
         tokenId: 'tok_001',
@@ -511,7 +512,7 @@ async function generateHoldingStatementReport(request: ReportRequest): Promise<s
     totalValue: {
       amount: '250000',
       currency: 'AED',
-      asOfDate: new Date().toISOString(),
+      asOfDate: new Date(),
     },
   };
 
@@ -529,7 +530,7 @@ async function generateReconciliationReportContent(request: ReportRequest): Prom
 
     const data = {
       reportType: 'Reconciliation Report',
-      generatedAt: new Date().toISOString(),
+      generatedAt: new Date(),
       period: {
         from: startDate || latestReport.period.from.toISOString(),
         to: endDate || latestReport.period.to.toISOString(),
@@ -559,10 +560,10 @@ async function generateReconciliationReportContent(request: ReportRequest): Prom
   // Fallback mock data
   const data = {
     reportType: 'Reconciliation Report',
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(),
     period: {
       from: startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      to: endDate || new Date().toISOString(),
+      to: endDate || new Date(),
     },
     summary: {
       tokensReconciled: 1,
@@ -588,8 +589,8 @@ async function generateReconciliationReportContent(request: ReportRequest): Prom
     discrepancies: [],
     recommendations: ['All positions reconciled successfully. No action required.'],
     attestation: {
-      hash: createHash('sha256').update(JSON.stringify({ timestamp: new Date().toISOString() })).digest('hex'),
-      timestamp: new Date().toISOString(),
+      hash: createHash('sha256').update(JSON.stringify({ timestamp: new Date() })).digest('hex'),
+      timestamp: new Date(),
       signedBy: 'system',
     },
   };
@@ -625,7 +626,7 @@ function convertToCSV(data: unknown): string {
 
   // Add metadata header
   lines.push(`"Report Type","${obj.reportType || 'Unknown'}"`);
-  lines.push(`"Generated At","${obj.generatedAt || new Date().toISOString()}"`);
+  lines.push(`"Generated At","${obj.generatedAt || new Date()}"`);
   lines.push('');
 
   // Find the main data array
@@ -656,7 +657,7 @@ function convertToCSV(data: unknown): string {
 }
 
 function generateFilename(type: ReportType, format: ReportFormat): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().replace(/[:.]/g, '-').slice(0, 19);
   return `ahoy_${type}_${timestamp}.${format}`;
 }
 

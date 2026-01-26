@@ -3,6 +3,7 @@ import { eq, and, desc, lt, isNull, or, gte, inArray, sql } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as webhookService from './webhook.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { eventBusQueue } = schema;
 
@@ -159,7 +160,7 @@ const handlers: EventHandler[] = [];
 
 export function registerHandler(handler: EventHandler): void {
   handlers.push(handler);
-  console.log(`Event handler registered: ${handler.name} for topic ${handler.topic}`);
+  logger.info(`Event handler registered: ${handler.name} for topic ${handler.topic}`);
 }
 
 export function unregisterHandler(name: string): void {
@@ -201,7 +202,7 @@ async function processEvent(event: EventMessage): Promise<void> {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       errors.push(`${handler.name}: ${errorMsg}`);
-      console.error(`Event handler ${handler.name} failed:`, error);
+      logger.error(`Event handler ${handler.name} failed`, { error: error as Error });
     }
   }
 
@@ -227,7 +228,7 @@ export async function startProcessing(config: {
   }
 
   processingActive = true;
-  console.log('Event bus processing started');
+  logger.info('Event bus processing started');
 
   while (processingActive) {
     try {
@@ -237,7 +238,7 @@ export async function startProcessing(config: {
         await new Promise(resolve => setTimeout(resolve, pollingInterval));
       }
     } catch (error) {
-      console.error('Event processing error:', error);
+      logger.error('Event processing error', { error: error as Error });
       await new Promise(resolve => setTimeout(resolve, pollingInterval * 3));
     }
   }
@@ -245,7 +246,7 @@ export async function startProcessing(config: {
 
 export function stopProcessing(): void {
   processingActive = false;
-  console.log('Event bus processing stopped');
+  logger.info('Event bus processing stopped');
 }
 
 export function isProcessing(): boolean {
@@ -334,7 +335,7 @@ async function dispatchToWebhooks(event: EventMessage): Promise<void> {
   try {
     await webhookService.dispatchEvent(event.orgId, event.topic, event.payload);
   } catch (error) {
-    console.error(`Failed to dispatch webhook for event ${event.id}:`, error);
+    logger.error(`Failed to dispatch webhook for event ${event.id}`, { error: error as Error });
   }
 }
 

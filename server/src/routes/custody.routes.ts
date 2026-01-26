@@ -9,6 +9,7 @@ import {
   CustodyProviderAdapter,
   CustodyProvider,
 } from '../services/custody/index.js';
+import { logger } from '../middleware/logger.js';
 
 export const custodyRouter = Router();
 
@@ -297,7 +298,7 @@ custodyRouter.post('/webhooks/fireblocks', async (req, res, next) => {
     }
 
     const event = adapter.parseWebhookEvent(payload);
-    console.log('Fireblocks webhook event:', event.type, event.data);
+    logger.info('Fireblocks webhook event', { metadata: { type: event.type, data: event.data } });
 
     // Process webhook event (update transaction status, emit internal events, etc.)
 
@@ -316,7 +317,7 @@ custodyRouter.post('/webhooks/bitgo', async (req, res, next) => {
     }
 
     const event = adapter.parseWebhookEvent(payload);
-    console.log('BitGo webhook event:', event.type, event.data);
+    logger.info('BitGo webhook event', { metadata: { type: event.type, data: event.data } });
 
     // Process webhook event
 

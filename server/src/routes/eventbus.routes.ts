@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as eventbusService from '../services/eventbus.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { logger } from '../middleware/logger.js';
 
 export const eventbusRouter = Router();
 
@@ -197,7 +198,7 @@ eventbusRouter.post('/processing/start', apiKeyMiddleware, async (req: ApiKeyReq
 
     // Start processing in background
     eventbusService.startProcessing(config).catch(err => {
-      console.error('Event processing stopped with error:', err);
+      logger.error('Event processing stopped with error:', { error: err as Error });
     });
 
     res.json({

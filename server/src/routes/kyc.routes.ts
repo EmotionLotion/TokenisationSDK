@@ -17,6 +17,7 @@ import {
 } from '../services/kyc/index.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { logger } from '../middleware/logger.js';
 
 export const kycRouter = Router();
 
@@ -387,13 +388,13 @@ kycRouter.post('/webhooks/sumsub', async (req: Request, res: Response, next: Nex
 
     // Validate webhook signature
     if (!kycProvider.validateWebhook(payload, signature)) {
-      console.warn('Invalid SumSub webhook signature');
+      logger.warn('Invalid SumSub webhook signature');
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
     // Parse and process the event
     const event = kycProvider.parseWebhookEvent(payload);
-    console.log('SumSub webhook received:', event.type, event.applicantId);
+    logger.info('SumSub webhook received', { metadata: { type: event.type, applicantId: event.applicantId } });
 
     // Handle different event types
     switch (event.type) {
@@ -401,10 +402,10 @@ kycRouter.post('/webhooks/sumsub', async (req: Request, res: Response, next: Nex
       case 'applicantPending':
       case 'applicantOnHold':
         // Update investor KYC status in database
-        console.log(`Applicant ${event.applicantId} status: ${event.type}`);
+        logger.info(`Applicant ${event.applicantId} status: ${event.type}`);
         break;
       default:
-        console.log(`Unhandled SumSub event type: ${event.type}`);
+        logger.info(`Unhandled SumSub event type: ${event.type}`);
     }
 
     res.json({ received: true });
@@ -437,23 +438,23 @@ kycRouter.post('/webhooks/onfido', async (req: Request, res: Response, next: Nex
 
     // Validate webhook signature
     if (!kycProvider.validateWebhook(payload, signature)) {
-      console.warn('Invalid Onfido webhook signature');
+      logger.warn('Invalid Onfido webhook signature');
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
     // Parse and process the event
     const event = kycProvider.parseWebhookEvent(payload);
-    console.log('Onfido webhook received:', event.type, event.applicantId);
+    logger.info('Onfido webhook received', { metadata: { type: event.type, applicantId: event.applicantId } });
 
     // Handle different event types
     switch (event.type) {
       case 'check.completed':
       case 'check.started':
       case 'check.form_opened':
-        console.log(`Onfido check event: ${event.type}`);
+        logger.info(`Onfido check event: ${event.type}`);
         break;
       default:
-        console.log(`Unhandled Onfido event type: ${event.type}`);
+        logger.info(`Unhandled Onfido event type: ${event.type}`);
     }
 
     res.json({ received: true });

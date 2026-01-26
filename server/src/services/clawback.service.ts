@@ -259,7 +259,7 @@ export async function approveClawback(
           .set({
             approvals: [...existingApprovals, {
               userId: approverId,
-              timestamp: new Date().toISOString(),
+              timestamp: new Date(),
               comment,
             }],
             status: 'approved',
@@ -337,7 +337,7 @@ export async function rejectClawback(
           .set({
             rejections: [...existingRejections, {
               userId: rejectorId,
-              timestamp: new Date().toISOString(),
+              timestamp: new Date(),
               reason,
             }],
             status: 'rejected',
@@ -584,7 +584,7 @@ export async function cancelClawback(
         metadata: {
           ...(clawback.metadata as Record<string, unknown> || {}),
           cancelledBy,
-          cancelledAt: new Date().toISOString(),
+          cancelledAt: new Date(),
           cancellationReason: reason,
         },
         updatedAt: new Date(),

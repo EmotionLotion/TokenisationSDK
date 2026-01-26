@@ -344,7 +344,7 @@ function createMutationRecord(params: {
   diff?: MutationDiff[];
   ctx?: ReturnType<typeof getRequestContext>;
 }): MutationRecord {
-  const timestamp = new Date().toISOString();
+  const timestamp = new Date();
   const id = `mut_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
   const record: MutationRecord = {

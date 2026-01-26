@@ -657,7 +657,7 @@ transferRouter.post('/redemption', apiKeyMiddleware, async (req: ApiKeyRequest, 
       paymentDetails: paymentDetails || {},
       status: 'pending',
       metadata: metadata || {},
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     };
 
     res.status(201).json(redemption);

@@ -12,6 +12,7 @@
 import { createHash } from 'crypto';
 import { db, schema } from '../config/database.js';
 import * as auditService from './audit.service.js';
+import { logger } from '../middleware/logger.js';
 
 const { eventBusQueue } = schema;
 
@@ -772,7 +773,7 @@ export function startPolling(
     try {
       await fetchFn();
     } catch (error) {
-      console.error(`Polling error for source ${sourceId}:`, error);
+      logger.error(`Polling error for source ${sourceId}`, { error: error as Error });
     }
   }, intervalMs);
 

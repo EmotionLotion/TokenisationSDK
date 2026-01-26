@@ -354,7 +354,7 @@ export async function completeMilestone(
   const [updated] = await db.update(vestingMilestones)
     .set({
       status: 'completed',
-      completedAt: new Date().toISOString(),
+      completedAt: new Date(),
       completedBy,
     })
     .where(eq(vestingMilestones.id, milestoneId))
@@ -418,7 +418,7 @@ export async function releaseVestedTokens(scheduleId: string, orgId: string) {
         claimedAmount: newClaimedAmount.toString(),
         vestedAmount: calculation.vestedAmount,
         status: newClaimedAmount >= BigInt(schedule.totalAmount) ? 'fully_vested' : 'active',
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(vestingSchedules.id, scheduleId));
 
@@ -435,8 +435,8 @@ export async function releaseVestedTokens(scheduleId: string, orgId: string) {
       await tx.update(ledgerPositions)
         .set({
           balance: newBalance.toString(),
-          lastMovementAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          lastEventAt: new Date(),
+          updatedAt: new Date(),
         })
         .where(eq(ledgerPositions.id, existingPosition.id));
     } else {
@@ -446,7 +446,7 @@ export async function releaseVestedTokens(scheduleId: string, orgId: string) {
         investorId: schedule.investorId,
         walletAddress: schedule.walletAddress.toLowerCase(),
         balance: availableToClaim.toString(),
-        lastMovementAt: new Date().toISOString(),
+        lastEventAt: new Date(),
       });
     }
 
@@ -499,10 +499,10 @@ export async function terminateSchedule(
   const [updated] = await db.update(vestingSchedules)
     .set({
       status: 'terminated',
-      terminationDate: new Date().toISOString(),
+      terminationDate: new Date(),
       terminationType,
       vestedAmount: calculation.vestedAmount,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(vestingSchedules.id, scheduleId))
     .returning();
@@ -555,7 +555,7 @@ export async function accelerateVesting(
     .set({
       status: newVestedAmount >= totalAmount ? 'fully_vested' : 'accelerated',
       vestedAmount: newVestedAmount.toString(),
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     })
     .where(eq(vestingSchedules.id, scheduleId))
     .returning();

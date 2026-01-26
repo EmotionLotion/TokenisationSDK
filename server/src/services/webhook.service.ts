@@ -2,6 +2,7 @@ import { db, schema } from '../config/database.js';
 import { eq, and, desc, lt, or } from 'drizzle-orm';
 import { createHmac, randomBytes } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { logger } from '../middleware/logger.js';
 
 const { webhookEndpoints, webhookDeliveries, eventBusQueue } = schema;
 
@@ -193,7 +194,7 @@ export async function dispatchEvent(orgId: string, eventType: string, payload: o
   const webhookPayload: WebhookPayload = {
     id: eventId,
     type: eventType,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
     data: payload,
   };
 
@@ -386,7 +387,7 @@ export async function processPendingDeliveries(batchSize: number = 100): Promise
       const result = await deliverWebhook(delivery.id);
       if (result.success) successCount++;
     } catch (error) {
-      console.error(`Failed to deliver webhook ${delivery.id}:`, error);
+      logger.error(`Failed to deliver webhook ${delivery.id}`, { error: error as Error });
     }
   }
 
@@ -414,7 +415,7 @@ export async function retryFailedDeliveries(batchSize: number = 50): Promise<num
       const result = await deliverWebhook(delivery.id);
       if (result.success) successCount++;
     } catch (error) {
-      console.error(`Failed to retry webhook ${delivery.id}:`, error);
+      logger.error(`Failed to retry webhook ${delivery.id}`, { error: error as Error });
     }
   }
 

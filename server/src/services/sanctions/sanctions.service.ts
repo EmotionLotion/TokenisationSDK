@@ -6,6 +6,7 @@
  */
 
 import crypto from 'crypto';
+import { logger } from '../../middleware/logger.js';
 
 export interface SanctionsEntry {
   id: string;
@@ -245,9 +246,9 @@ export class SanctionsService {
         this.ofacEntries.set(entry.id, entry);
       }
 
-      console.log(`Loaded ${this.ofacEntries.size} OFAC entries`);
+      logger.info(`Loaded ${this.ofacEntries.size} OFAC entries`);
     } catch (error) {
-      console.error('Failed to refresh OFAC list:', error);
+      logger.error('Failed to refresh OFAC list', { error: error as Error });
     }
   }
 
@@ -344,9 +345,9 @@ export class SanctionsService {
         this.unEntries.set(entry.id, entry);
       }
 
-      console.log(`Loaded ${this.unEntries.size} UN entries`);
+      logger.info(`Loaded ${this.unEntries.size} UN entries`);
     } catch (error) {
-      console.error('Failed to refresh UN list:', error);
+      logger.error('Failed to refresh UN list', { error: error as Error });
     }
   }
 

@@ -385,7 +385,7 @@ export async function getTransactionReceipt(
 
   return {
     transactionHash: receipt.transactionHash,
-    blockNumber: parseInt(receipt.blockNumber, 16),
+    blockNumber: parseInt(receipt.txBlock, 16),
     blockHash: receipt.blockHash,
     status: receipt.status === '0x1' ? 'success' : 'failed',
     gasUsed: BigInt(receipt.gasUsed).toString(),
@@ -411,7 +411,7 @@ export async function waitForTransaction(
       // Check confirmations
       const currentBlock = await jsonRpcCall(chain.rpcUrl, 'eth_blockNumber', []);
       const currentBlockNum = parseInt(currentBlock, 16);
-      const txBlockNum = receipt.blockNumber;
+      const txBlockNum = receipt.txBlock;
 
       if (currentBlockNum - txBlockNum >= confirmations) {
         return receipt;

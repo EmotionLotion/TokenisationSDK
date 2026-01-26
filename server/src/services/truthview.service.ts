@@ -169,7 +169,7 @@ export async function getHistoricalBalance(
     walletAddress: normalizedWallet,
     balance: balance.toString(),
     asOf,
-    blockNumber: lastEvent?.blockNumber ?? undefined,
+    blockNumber: lastEvent?.txBlock ?? undefined,
     lastEventId: lastEvent?.id,
     investorId: position?.investorId ?? undefined,
   };
@@ -406,7 +406,7 @@ export async function getStateChanges(
     changes.push({
       eventId: event.id,
       timestamp: event.createdAt,
-      blockNumber: event.blockNumber ?? undefined,
+      blockNumber: event.txBlock ?? undefined,
       eventType: event.eventType,
       walletAddress,
       previousBalance: previousBalance.toString(),

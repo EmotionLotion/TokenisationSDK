@@ -6,6 +6,7 @@
  */
 
 import crypto from 'crypto';
+import { logger } from '../../middleware/logger.js';
 import {
   KYCProviderAdapter,
   KYCApplicant,
@@ -281,7 +282,7 @@ export class JumioAdapter implements KYCProviderAdapter {
 
   async resetApplicant(applicantId: string): Promise<void> {
     // Jumio doesn't support resetting - would need to create new workflow
-    console.log(`Jumio: Cannot reset applicant ${applicantId}, create new workflow instead`);
+    logger.info(`Jumio: Cannot reset applicant ${applicantId}, create new workflow instead`);
   }
 
   async healthCheck(): Promise<{ healthy: boolean; latencyMs: number }> {
