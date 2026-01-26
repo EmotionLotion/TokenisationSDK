@@ -90,10 +90,11 @@ export class SIWEAuthPlugin {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
     };
 
-    // Notify listeners
-    this.onSessionChange?.(this.session);
+    // Notify listeners with frozen clone
+    this.onSessionChange?.(Object.freeze({ ...this.session }));
 
-    return this.session;
+    // Return frozen clone to prevent external mutation
+    return Object.freeze({ ...this.session });
   }
 
   async signOut(): Promise<void> {
@@ -124,8 +125,10 @@ export class SIWEAuthPlugin {
         expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       };
 
-      this.onSessionChange?.(this.session);
-      return this.session;
+      // Notify listeners with frozen clone
+      this.onSessionChange?.(Object.freeze({ ...this.session }));
+      // Return frozen clone to prevent external mutation
+      return Object.freeze({ ...this.session });
     } catch {
       // Refresh failed, clear session
       this.session = null;
@@ -135,7 +138,9 @@ export class SIWEAuthPlugin {
   }
 
   getSession(): AuthSession | null {
-    return this.session;
+    if (!this.session) return null;
+    // Return frozen clone to prevent external mutation
+    return Object.freeze({ ...this.session });
   }
 
   getToken(): string | null {
@@ -153,15 +158,18 @@ export class SIWEAuthPlugin {
 
   // Restore session from storage
   restoreSession(session: AuthSession): void {
-    this.session = session;
-    this.onSessionChange?.(this.session);
+    // Clone input to prevent external mutation of internal state
+    this.session = { ...session };
+    // Notify listeners with frozen clone
+    this.onSessionChange?.(Object.freeze({ ...this.session }));
   }
 
   // Get session for storage (without sensitive data)
-  getSessionForStorage(): Omit<AuthSession, 'token'> | null {
+  getSessionForStorage(): Omit<AuthSession, 'token' | 'refreshToken'> | null {
     if (!this.session) return null;
-    const { token, ...rest } = this.session;
-    return rest;
+    // Filter both token and refreshToken - both are sensitive credentials
+    const { token, refreshToken, ...rest } = this.session;
+    return Object.freeze(rest);
   }
 
   // Build SIWE message without signing (for display)

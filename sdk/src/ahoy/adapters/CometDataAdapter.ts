@@ -419,12 +419,38 @@ export function createCometAdapter(config: CometConfig): CometDataAdapter {
   return new CometDataAdapter(config);
 }
 
-// Development adapter with mock API
+/**
+ * Create a development adapter using environment variables.
+ *
+ * Required environment variables:
+ * - COMET_API_KEY: API key for COMET service
+ * - COMET_WEBHOOK_SECRET: Secret for webhook signature verification
+ * - COMET_API_URL (optional): API URL, defaults to dev environment
+ *
+ * @throws Error if required environment variables are not set
+ */
 export function createDevCometAdapter(): CometDataAdapter {
+  const apiKey = process.env.COMET_API_KEY;
+  const webhookSecret = process.env.COMET_WEBHOOK_SECRET;
+
+  if (!apiKey) {
+    throw new Error(
+      'COMET_API_KEY environment variable is required. ' +
+      'Set it to your COMET API key for development.'
+    );
+  }
+
+  if (!webhookSecret) {
+    throw new Error(
+      'COMET_WEBHOOK_SECRET environment variable is required. ' +
+      'Set it to your COMET webhook secret for development.'
+    );
+  }
+
   return new CometDataAdapter({
-    apiUrl: 'https://api.dev.comet.ahoy.dev',
-    apiKey: 'dev-api-key',
-    webhookSecret: 'dev-webhook-secret',
+    apiUrl: process.env.COMET_API_URL || 'https://api.dev.comet.ahoy.dev',
+    apiKey,
+    webhookSecret,
     environment: 'development',
   });
 }
