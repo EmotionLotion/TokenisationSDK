@@ -23,6 +23,7 @@
 export * from './CashFlow.js';
 export * from './Governance.js';
 export * from './Escrow.js';
+export * from './Vesting.js';
 
 // API Client Modules
 export { ProjectsModule } from './projects.js';

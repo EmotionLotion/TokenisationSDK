@@ -22,3 +22,12 @@ export * from './PhysicalAsset.js';
 
 // Pack E: Verification Credentials (Education/IP) - VERIFICATION Right
 export * from './VerificationCredential.js';
+
+// Pack F: Loyalty Points - BEHAVIOR (fungible rewards)
+export * from './LoyaltyPoints.js';
+
+// Pack G: Warehouse Receipts - OWNERSHIP (supply chain)
+export * from './WarehouseReceipt.js';
+
+// Pack H: Airline Tickets - ACCESS (conditional transfer)
+export * from './AirlineTicket.js';
