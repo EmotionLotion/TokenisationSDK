@@ -33,7 +33,12 @@ import paymentRailsRouter from './routes/payment-rails.routes.js';
 import reportsRouter from './routes/reports.routes.js';
 import { kycRouter } from './routes/kyc.routes.js';
 import { custodyRouter } from './routes/custody.routes.js';
+import { truthviewRouter } from './routes/truthview.routes.js';
+import { reconciliationRouter } from './routes/reconciliation.routes.js';
+import { datasourcesRouter } from './routes/datasources.routes.js';
 import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
+import { issuanceRouter } from './routes/issuance.routes.js';
+import { exportRouter } from './routes/export.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
@@ -132,6 +137,11 @@ app.use('/api/v1/payment-rails', paymentRailsRouter); // Payment rails (USDC, Ba
 app.use('/api/v1/reports', reportsRouter); // Report exports (cap table, audit, etc.)
 app.use('/api/v1/kyc', kycRouter); // KYC provider integration (SumSub, Onfido)
 app.use('/api/v1/custody', custodyRouter); // Custody integration (Fireblocks, BitGo)
+app.use('/api/v1/truthview', truthviewRouter); // Point-in-time queries & historical state
+app.use('/api/v1/reconciliation', reconciliationRouter); // Chain vs books reconciliation
+app.use('/api/v1/datasources', datasourcesRouter); // External data feeds (price oracles, NAV)
+app.use('/api/v1/issuance', issuanceRouter); // Token offerings & allocations
+app.use('/api/v1/export', exportRouter); // Evidence packs & regulatory exports
 app.use('/api/v1/parties', authMiddleware, partyRouter);
 app.use('/api/v1/assets', apiKeyMiddleware, assetRouter);
 app.use('/api/v1/events', authMiddleware, eventRouter);
