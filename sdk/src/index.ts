@@ -1,8 +1,17 @@
 /**
  * Tokenisation SDK
  *
- * A programmable factory that turns real-world rights, assets, or actions
- * into verifiable, rule-based digital tokens.
+ * A modular tokenisation infrastructure that abstracts compliance, issuance, and
+ * asset lifecycle management. Enables partners to deploy tokenized real-world assets
+ * without rebuilding financial infrastructure.
+ *
+ * Key capabilities:
+ * - Asset tokenisation without blockchain knowledge (no ERC standards exposed)
+ * - Built-in compliance engine with KYC/AML verification
+ * - Full asset lifecycle management (draft → active → frozen → redeemed)
+ * - Custody & recovery mechanisms (multi-sig, lost keys, regulatory overrides)
+ * - Real-time indexing and regulatory reporting
+ * - Pre-built asset packs for common use cases (PE funds, real estate, bonds)
  *
  * @packageDocumentation
  */
@@ -146,6 +155,43 @@ export {
 export type {
   AssetIssuanceServiceOptions,
 } from './services/AssetIssuanceService.js';
+
+// Custody & Recovery
+export {
+  CustodyManager,
+  custodyManager,
+  CustodyType,
+  RecoveryReason,
+  OverrideType,
+  ApprovalStatus,
+} from './core/CustodyManager.js';
+export type {
+  CustodyArrangement,
+  RecoveryRequest,
+  RecoveryApproval,
+  OverrideRequest,
+  OverrideApproval,
+  Delegation as CustodyDelegation,
+  DelegatedPermission,
+  DelegationConstraint,
+} from './core/CustodyManager.js';
+
+// Indexing & Reporting
+export {
+  IndexingEngine,
+  indexingEngine,
+  IndexedEventType,
+} from './core/IndexingEngine.js';
+export type {
+  IndexedEvent,
+  BalanceRecord,
+  TransferRecord,
+  HolderStats,
+  AssetStats,
+  ComplianceReport,
+  TransferQueryOptions,
+  IndexerEventQueryOptions,
+} from './core/IndexingEngine.js';
 
 // Contracts (adapters)
 export * from './contracts/index.js';

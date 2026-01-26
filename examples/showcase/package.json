@@ -1,10 +1,11 @@
 {
   "name": "tokenisation-sdk-showcase",
   "version": "1.0.0",
+  "type": "module",
   "description": "Complete feature showcase for the Tokenisation SDK",
   "main": "demo.ts",
   "scripts": {
-    "demo": "npx ts-node demo.ts",
+    "demo": "npx tsx demo.ts",
     "demo:assets": "npx ts-node demo.ts | grep -A 100 'DEMO 1'",
     "demo:workflow": "npx ts-node demo.ts | grep -A 100 'DEMO 2'",
     "demo:custody": "npx ts-node demo.ts | grep -A 100 'DEMO 3'",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
 }

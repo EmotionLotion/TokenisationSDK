@@ -29,17 +29,20 @@ import {
   arbitrumSepolia,
 } from 'viem/chains';
 
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+
 import { abis } from '../contracts/abis/index.js';
 
-// Import bytecodes
-import ComplianceTokenBytecode from '../contracts/abis/ComplianceToken.bytecode.json' with { type: 'json' };
-import IdentityRegistryBytecode from '../contracts/abis/IdentityRegistry.bytecode.json' with { type: 'json' };
-import DividendDistributorBytecode from '../contracts/abis/DividendDistributor.bytecode.json' with { type: 'json' };
-import ModularComplianceBytecode from '../contracts/abis/ModularCompliance.bytecode.json' with { type: 'json' };
-import ClaimTopicsRegistryBytecode from '../contracts/abis/ClaimTopicsRegistry.bytecode.json' with { type: 'json' };
-import TrustedIssuersRegistryBytecode from '../contracts/abis/TrustedIssuersRegistry.bytecode.json' with { type: 'json' };
-import OracleRegistryBytecode from '../contracts/abis/OracleRegistry.bytecode.json' with { type: 'json' };
-import ChainlinkPriceFeedBytecode from '../contracts/abis/ChainlinkPriceFeed.bytecode.json' with { type: 'json' };
+// Import bytecodes (using createRequire for Node 18 compatibility)
+const ComplianceTokenBytecode = require('../contracts/abis/ComplianceToken.bytecode.json');
+const IdentityRegistryBytecode = require('../contracts/abis/IdentityRegistry.bytecode.json');
+const DividendDistributorBytecode = require('../contracts/abis/DividendDistributor.bytecode.json');
+const ModularComplianceBytecode = require('../contracts/abis/ModularCompliance.bytecode.json');
+const ClaimTopicsRegistryBytecode = require('../contracts/abis/ClaimTopicsRegistry.bytecode.json');
+const TrustedIssuersRegistryBytecode = require('../contracts/abis/TrustedIssuersRegistry.bytecode.json');
+const OracleRegistryBytecode = require('../contracts/abis/OracleRegistry.bytecode.json');
+const ChainlinkPriceFeedBytecode = require('../contracts/abis/ChainlinkPriceFeed.bytecode.json');
 
 const bytecodes = {
   ComplianceToken: ComplianceTokenBytecode as Hex,

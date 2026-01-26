@@ -5,14 +5,17 @@
  * ABIs are extracted from the compiled Solidity contracts.
  */
 
-import ComplianceTokenAbi from './ComplianceToken.json' with { type: 'json' };
-import IdentityRegistryAbi from './IdentityRegistry.json' with { type: 'json' };
-import DividendDistributorAbi from './DividendDistributor.json' with { type: 'json' };
-import ModularComplianceAbi from './ModularCompliance.json' with { type: 'json' };
-import ClaimTopicsRegistryAbi from './ClaimTopicsRegistry.json' with { type: 'json' };
-import TrustedIssuersRegistryAbi from './TrustedIssuersRegistry.json' with { type: 'json' };
-import OracleRegistryAbi from './OracleRegistry.json' with { type: 'json' };
-import ChainlinkPriceFeedAbi from './ChainlinkPriceFeed.json' with { type: 'json' };
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+
+const ComplianceTokenAbi = require('./ComplianceToken.json');
+const IdentityRegistryAbi = require('./IdentityRegistry.json');
+const DividendDistributorAbi = require('./DividendDistributor.json');
+const ModularComplianceAbi = require('./ModularCompliance.json');
+const ClaimTopicsRegistryAbi = require('./ClaimTopicsRegistry.json');
+const TrustedIssuersRegistryAbi = require('./TrustedIssuersRegistry.json');
+const OracleRegistryAbi = require('./OracleRegistry.json');
+const ChainlinkPriceFeedAbi = require('./ChainlinkPriceFeed.json');
 
 export const abis = {
   ComplianceToken: ComplianceTokenAbi as readonly unknown[],

@@ -420,13 +420,18 @@ export class CustodyManager {
     const approvedCount = request.approvals.filter(a => a.approved).length;
     const rejectedCount = request.approvals.filter(a => !a.approved).length;
 
+    // Get total possible approvers from custody arrangement
+    const arrangement = this.getCustodyArrangement(request.assetId);
+    const totalPossibleApprovers = arrangement?.custodians?.length ?? request.requiredApprovals;
+    const remainingVotes = totalPossibleApprovers - request.approvals.length;
+
     if (approvedCount >= request.requiredApprovals) {
       request.status = ApprovalStatus.APPROVED;
       request.executableAfter = new Date(
         Date.now() + request.timeLockSeconds * 1000
       ).toISOString();
-    } else if (rejectedCount > request.approvals.length - request.requiredApprovals) {
-      // Cannot reach threshold anymore
+    } else if (approvedCount + remainingVotes < request.requiredApprovals) {
+      // Cannot reach threshold anymore - not enough remaining approvers
       request.status = ApprovalStatus.REJECTED;
     }
 

@@ -177,8 +177,7 @@ async function demo2_FullWorkflow() {
     name: 'Premium Office Space - DIFC',
     rightType: RightType.OWNERSHIP,
     issuerId: issuer.id,
-    jurisdiction: { countryCode: 'AE' },
-    transferMode: 'COMPLIANCE_GATED',
+    jurisdiction: { countryCode: 'AE', accreditedOnly: false, blockedJurisdictions: [] },
     metadata: {
       propertyType: 'COMMERCIAL',
       areaSqm: 500,
@@ -263,25 +262,34 @@ async function demo3_CustodyRecovery() {
 
   // Approve Recovery
   log('\nApproving Recovery (Custodian 1)...');
-  custody.approveRecovery({
+  const afterFirst = custody.approveRecovery({
     requestId: recovery.id,
     approverId: 'custodian-1',
     approverRole: 'CUSTODIAN',
     approved: true,
   });
+  log('After 1st approval:', {
+    status: afterFirst.status,
+    approvals: afterFirst.approvals.length,
+  });
 
-  log('Approving Recovery (Custodian 2)...');
-  const approved = custody.approveRecovery({
-    requestId: recovery.id,
-    approverId: 'custodian-2',
-    approverRole: 'CUSTODIAN',
-    approved: true,
-  });
-  log('Recovery Status:', {
-    status: approved.status,
-    approvals: approved.approvals.length,
-    executableAfter: approved.executableAfter,
-  });
+  // Only attempt second approval if still pending
+  if (afterFirst.status === 'PENDING') {
+    log('Approving Recovery (Custodian 2)...');
+    const approved = custody.approveRecovery({
+      requestId: recovery.id,
+      approverId: 'custodian-2',
+      approverRole: 'CUSTODIAN',
+      approved: true,
+    });
+    log('Recovery Status:', {
+      status: approved.status,
+      approvals: approved.approvals.length,
+      executableAfter: approved.executableAfter,
+    });
+  } else {
+    log('Recovery already approved after first custodian');
+  }
 
   // Regulatory Override
   log('\nRequesting Regulatory Freeze...');
@@ -364,12 +372,12 @@ async function demo4_IndexingReporting() {
   // Query Balances
   log('\nQuerying Balances...');
   const balances = indexer.getAssetBalances('asset-123');
-  log('Balances:', balances.map(b => ({ holder: b.holder, balance: b.balance })));
+  log('Balances:', balances.map((b: { holder: string; balance: string }) => ({ holder: b.holder, balance: b.balance })));
 
   // Query Transfers
   log('\nQuerying Transfers...');
   const transfers = indexer.queryTransfers({ assetId: 'asset-123' });
-  log('Transfers:', transfers.map(t => ({
+  log('Transfers:', transfers.map((t: { type: string; from: string; to: string; amount: string }) => ({
     type: t.type,
     from: t.from.substring(0, 10) + '...',
     to: t.to.substring(0, 10) + '...',
