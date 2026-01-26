@@ -24,7 +24,7 @@ import {
   ComplianceService,
   RuleConditionType,
 } from '../src/services/ComplianceService.js';
-import { OracleService, createOracleService } from '../src/services/OracleService.js';
+import { OracleService, createOracleService, createDevelopmentOracleService } from '../src/services/OracleService.js';
 import { TaxWithholdingService, DistributionTaxType } from '../src/services/TaxWithholdingService.js';
 
 // Models
@@ -672,7 +672,12 @@ describe('4. Oracle & Chainlink Integrations', () => {
   let oracleService: OracleService;
 
   beforeEach(() => {
-    oracleService = createOracleService();
+    // Use development oracle for these tests (less strict, has mock data)
+    oracleService = createDevelopmentOracleService();
+  });
+
+  afterEach(() => {
+    oracleService.clear();
   });
 
   it('4.1 - Chainlink Data Feed read: fetch price → value matches expected', async () => {
@@ -714,15 +719,16 @@ describe('4. Oracle & Chainlink Integrations', () => {
     subscription.unsubscribe();
   });
 
-  it('4.4 - Mock oracle failure: returns error gracefully', async () => {
+  it('4.4 - Oracle failure: returns error gracefully for unknown types', async () => {
     const result = await oracleService.fetchData({
       dataType: 'UNKNOWN_TYPE',
       parameters: {},
     });
 
-    expect(result.success).toBe(true); // Mock returns mock data
-    if (result.success) {
-      expect(result.data.confidence).toBeLessThan(1); // Lower confidence for mock
+    // Unknown data types should fail gracefully with an error result
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain('No provider for data type');
     }
   });
 

@@ -18,6 +18,7 @@ import {
 } from '../src/services/IndexingService.js';
 import {
   OracleService,
+  createDevelopmentOracleService,
 } from '../src/services/OracleService.js';
 
 describe('DeploymentService', () => {
@@ -124,12 +125,17 @@ describe('OracleService', () => {
   let service: OracleService;
 
   beforeEach(() => {
-    service = new OracleService();
+    // Use development oracle for backward-compatible mock behavior
+    service = createDevelopmentOracleService();
+  });
+
+  afterEach(() => {
+    service.clear();
   });
 
   it('should create oracle service', () => {
     expect(service).toBeDefined();
-    expect(service.pluginId).toBe('mock-oracle');
+    expect(service.pluginId).toBe('production-oracle');
   });
 
   it('should set and fetch NAV data', async () => {
@@ -165,31 +171,30 @@ describe('OracleService', () => {
     }
   });
 
-  it('should return mock NAV for unknown asset', async () => {
+  it('should return mock NAV for unknown asset in non-strict mode', async () => {
     const result = await service.fetchData({
       dataType: 'NAV',
-      source: 'mock',
       parameters: { assetId: 'unknown-asset' },
     });
 
-    // Returns mock data for unknown assets
+    // In development mode (non-strict), returns mock data for unknown assets
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.source).toBe('mock-oracle');
+      expect(result.data.confidence).toBeLessThan(1.0); // Lower confidence for mock
     }
   });
 
-  it('should return mock price for unknown pair', async () => {
+  it('should handle unknown price pairs gracefully', async () => {
     const result = await service.fetchData({
       dataType: 'PRICE',
-      source: 'mock',
       parameters: { pair: 'UNKNOWN/USD' },
     });
 
-    // Returns mock data for unknown pairs
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.source).toBe('mock-oracle');
+    // Unknown pairs should fail (no mock data configured)
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain('No price data available');
     }
   });
 

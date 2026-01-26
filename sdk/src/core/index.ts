@@ -55,3 +55,6 @@ export * from './Observability.js';
 
 // Retry & Error Handling
 export * from './Retry.js';
+
+// Disaster Recovery & Safe-Fail
+export * from './DisasterRecovery.js';
