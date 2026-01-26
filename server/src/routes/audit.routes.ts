@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as auditService from '../services/audit.service.js';
+import * as evidenceService from '../services/evidence.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
 
@@ -147,6 +148,66 @@ auditRouter.post('/export', apiKeyMiddleware, async (req: ApiKeyRequest, res: Re
     });
 
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================================================
+// Evidence Pack Routes
+// ============================================================================
+
+// Generate investor evidence pack
+auditRouter.get('/evidence/investor/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const pack = await evidenceService.generateInvestorPack(req.params.investorId, req.apiKey.orgId);
+    res.json(pack);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate transfer evidence pack
+auditRouter.get('/evidence/transfer/:transferId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const pack = await evidenceService.generateTransferPack(req.params.transferId, req.apiKey.orgId);
+    res.json(pack);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate token evidence pack
+auditRouter.get('/evidence/token/:tokenId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const pack = await evidenceService.generateTokenPack(req.params.tokenId, req.apiKey.orgId);
+    res.json(pack);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate KYC evidence pack
+auditRouter.get('/evidence/kyc/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const pack = await evidenceService.generateKycPack(req.params.investorId, req.apiKey.orgId);
+    res.json(pack);
   } catch (error) {
     next(error);
   }

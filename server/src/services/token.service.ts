@@ -5,7 +5,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware/err
 import * as auditService from './audit.service.js';
 import { withSerializableTransaction, withRetryableTransaction } from '../utils/transaction.js';
 
-const { tokens, tokenTranches, issuances, redemptions, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
+const { tokens, tokenTranches, issuances, redemptions, clawbacks, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
 
 // ============================================================================
 // Types & Interfaces
@@ -71,6 +71,19 @@ export interface RedeemTokensInput {
   walletAddress: string;
   amount: string;
   reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ClawbackInput {
+  orgId: string;
+  tokenId: string;
+  fromWallet: string;
+  toWallet: string;
+  fromInvestorId?: string;
+  toInvestorId?: string;
+  amount: string;
+  reason: string; // Required - regulatory requirement
+  idempotencyKey: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -720,6 +733,326 @@ export async function confirmRedemption(id: string, orgId: string, txHash: strin
   });
 
   return updated;
+}
+
+// ============================================================================
+// Clawback (Administrative Token Recovery)
+// ============================================================================
+
+/**
+ * Initiates a clawback of tokens from one address to another.
+ * This is an administrative action that bypasses normal transfer compliance checks.
+ *
+ * Regulatory Note: Clawbacks must always include a documented reason.
+ * The reason is stored permanently in the audit trail and cannot be modified.
+ */
+export async function initiateClawback(input: ClawbackInput) {
+  const token = await getToken(input.tokenId, input.orgId);
+
+  if (token.status !== 'deployed') {
+    throw new ValidationError(`Cannot clawback from ${token.status} token`);
+  }
+
+  // Validate amount
+  if (!/^\d+$/.test(input.amount) || BigInt(input.amount) <= 0n) {
+    throw new ValidationError('Amount must be a positive integer string');
+  }
+
+  // Validate reason is provided and substantial
+  if (!input.reason || input.reason.trim().length < 10) {
+    throw new ValidationError('Clawback reason must be at least 10 characters');
+  }
+
+  const clawback = await withRetryableTransaction(async (tx) => {
+    // Check source has sufficient balance
+    const sourcePosition = await tx.query.ledgerPositions.findFirst({
+      where: and(
+        eq(ledgerPositions.tokenId, input.tokenId),
+        eq(ledgerPositions.walletAddress, input.fromWallet.toLowerCase())
+      ),
+    });
+
+    if (!sourcePosition || BigInt(sourcePosition.balance) < BigInt(input.amount)) {
+      throw new ValidationError('Source wallet has insufficient balance for clawback');
+    }
+
+    // Create clawback record
+    const [newClawback] = await tx.insert(clawbacks).values({
+      orgId: input.orgId,
+      tokenId: input.tokenId,
+      fromWallet: input.fromWallet.toLowerCase(),
+      toWallet: input.toWallet.toLowerCase(),
+      fromInvestorId: input.fromInvestorId || sourcePosition.investorId,
+      toInvestorId: input.toInvestorId,
+      amount: input.amount,
+      reason: input.reason,
+      status: 'pending',
+      idempotencyKey: input.idempotencyKey,
+      metadata: input.metadata || {},
+    }).returning();
+
+    // Create event
+    await tx.insert(eventBusQueue).values({
+      orgId: input.orgId,
+      topic: 'token.clawback.initiated',
+      payload: {
+        clawbackId: newClawback.id,
+        tokenId: input.tokenId,
+        fromWallet: input.fromWallet,
+        toWallet: input.toWallet,
+        amount: input.amount,
+        reason: input.reason,
+      },
+    });
+
+    return newClawback;
+  }, 3, 100);
+
+  // Audit log
+  await auditService.logSystemAction(
+    input.orgId,
+    'clawback_initiated',
+    'clawback',
+    clawback.id,
+    `Clawback of ${input.amount} tokens initiated from ${input.fromWallet}: ${input.reason}`,
+    { tokenId: input.tokenId, fromWallet: input.fromWallet, toWallet: input.toWallet }
+  );
+
+  return clawback;
+}
+
+/**
+ * Approves a clawback for execution.
+ * In production, this should require multi-sig or compliance officer approval.
+ */
+export async function approveClawback(
+  id: string,
+  orgId: string,
+  approverId: string
+) {
+  const clawback = await db.query.clawbacks.findFirst({
+    where: and(eq(clawbacks.id, id), eq(clawbacks.orgId, orgId)),
+  });
+
+  if (!clawback) {
+    throw new NotFoundError('Clawback not found');
+  }
+
+  if (clawback.status !== 'pending') {
+    throw new ValidationError(`Cannot approve clawback in ${clawback.status} status`);
+  }
+
+  const [updated] = await db.update(clawbacks)
+    .set({
+      status: 'approved',
+      approvedBy: approverId,
+      approvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(clawbacks.id, id))
+    .returning();
+
+  await db.insert(eventBusQueue).values({
+    orgId,
+    topic: 'token.clawback.approved',
+    payload: { clawbackId: id },
+  });
+
+  await auditService.logSystemAction(
+    orgId,
+    'clawback_approved',
+    'clawback',
+    id,
+    `Clawback approved by ${approverId}`,
+    { approverId }
+  );
+
+  return updated;
+}
+
+/**
+ * Executes an approved clawback.
+ * This performs the actual token movement and updates ledger positions.
+ */
+export async function executeClawback(
+  id: string,
+  orgId: string,
+  executorId: string
+) {
+  const clawbackRecord = await db.query.clawbacks.findFirst({
+    where: and(eq(clawbacks.id, id), eq(clawbacks.orgId, orgId)),
+  });
+
+  if (!clawbackRecord) {
+    throw new NotFoundError('Clawback not found');
+  }
+
+  if (clawbackRecord.status !== 'approved') {
+    throw new ValidationError(`Cannot execute clawback in ${clawbackRecord.status} status (must be approved first)`);
+  }
+
+  const result = await withRetryableTransaction(async (tx) => {
+    // Debit from source
+    await updateLedgerPositionInTx(
+      tx,
+      orgId,
+      clawbackRecord.tokenId,
+      clawbackRecord.fromInvestorId || 'UNKNOWN',
+      clawbackRecord.fromWallet,
+      clawbackRecord.amount,
+      'debit'
+    );
+
+    // Credit to destination
+    await updateLedgerPositionInTx(
+      tx,
+      orgId,
+      clawbackRecord.tokenId,
+      clawbackRecord.toInvestorId || 'TREASURY',
+      clawbackRecord.toWallet,
+      clawbackRecord.amount,
+      'credit'
+    );
+
+    // Update clawback status
+    const [updated] = await tx.update(clawbacks)
+      .set({
+        status: 'executed',
+        executedBy: executorId,
+        executedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(clawbacks.id, id))
+      .returning();
+
+    // Create ledger events for audit trail
+    await tx.insert(ledgerEvents).values([
+      {
+        orgId,
+        tokenId: clawbackRecord.tokenId,
+        eventType: 'clawback_debit',
+        walletAddress: clawbackRecord.fromWallet,
+        amount: `-${clawbackRecord.amount}`,
+        ref: id,
+        refType: 'clawback',
+      },
+      {
+        orgId,
+        tokenId: clawbackRecord.tokenId,
+        eventType: 'clawback_credit',
+        walletAddress: clawbackRecord.toWallet,
+        amount: clawbackRecord.amount,
+        ref: id,
+        refType: 'clawback',
+      },
+    ]);
+
+    // Emit event
+    await tx.insert(eventBusQueue).values({
+      orgId,
+      topic: 'token.clawback.executed',
+      payload: {
+        clawbackId: id,
+        tokenId: clawbackRecord.tokenId,
+        fromWallet: clawbackRecord.fromWallet,
+        toWallet: clawbackRecord.toWallet,
+        amount: clawbackRecord.amount,
+      },
+    });
+
+    return updated;
+  }, 3, 100);
+
+  await auditService.logSystemAction(
+    orgId,
+    'clawback_executed',
+    'clawback',
+    id,
+    `Clawback executed: ${clawbackRecord.amount} tokens moved from ${clawbackRecord.fromWallet} to ${clawbackRecord.toWallet}. Reason: ${clawbackRecord.reason}`,
+    { executorId, fromWallet: clawbackRecord.fromWallet, toWallet: clawbackRecord.toWallet }
+  );
+
+  return result;
+}
+
+/**
+ * Confirms a clawback after on-chain execution.
+ */
+export async function confirmClawback(
+  id: string,
+  orgId: string,
+  txHash: string,
+  blockNumber: number
+) {
+  const clawback = await db.query.clawbacks.findFirst({
+    where: and(eq(clawbacks.id, id), eq(clawbacks.orgId, orgId)),
+  });
+
+  if (!clawback) {
+    throw new NotFoundError('Clawback not found');
+  }
+
+  if (clawback.status !== 'executed') {
+    throw new ValidationError(`Cannot confirm clawback in ${clawback.status} status`);
+  }
+
+  const [updated] = await db.update(clawbacks)
+    .set({
+      status: 'confirmed',
+      txHash,
+      txBlock: blockNumber,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(clawbacks.id, id))
+    .returning();
+
+  await db.insert(eventBusQueue).values({
+    orgId,
+    topic: 'token.clawback.confirmed',
+    payload: { clawbackId: id, txHash, blockNumber },
+  });
+
+  return updated;
+}
+
+/**
+ * Retrieves a clawback by ID.
+ */
+export async function getClawback(id: string, orgId: string) {
+  const clawback = await db.query.clawbacks.findFirst({
+    where: and(eq(clawbacks.id, id), eq(clawbacks.orgId, orgId)),
+  });
+
+  if (!clawback) {
+    throw new NotFoundError('Clawback not found');
+  }
+
+  return clawback;
+}
+
+/**
+ * Lists clawbacks with optional filters.
+ */
+export async function listClawbacks(orgId: string, params: {
+  tokenId?: string;
+  status?: string;
+  fromWallet?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  const { tokenId, status, fromWallet, limit = 50, offset = 0 } = params;
+
+  const conditions = [eq(clawbacks.orgId, orgId)];
+  if (tokenId) conditions.push(eq(clawbacks.tokenId, tokenId));
+  if (status) conditions.push(eq(clawbacks.status, status));
+  if (fromWallet) conditions.push(eq(clawbacks.fromWallet, fromWallet.toLowerCase()));
+
+  return db.select()
+    .from(clawbacks)
+    .where(and(...conditions))
+    .orderBy(desc(clawbacks.createdAt))
+    .limit(limit)
+    .offset(offset);
 }
 
 // ============================================================================

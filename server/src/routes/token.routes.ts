@@ -594,3 +594,144 @@ tokenRouter.post('/:tokenId/policies', apiKeyMiddleware, async (req: ApiKeyReque
     next(error);
   }
 });
+
+// ============================================================================
+// Clawback Routes
+// ============================================================================
+
+const initiateClawbackSchema = z.object({
+  fromWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid from address'),
+  toWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid to address'),
+  fromInvestorId: z.string().uuid().optional(),
+  toInvestorId: z.string().uuid().optional(),
+  amount: z.string().regex(/^\d+$/, 'Must be a positive integer string'),
+  reason: z.string().min(10, 'Reason must be at least 10 characters'),
+  idempotencyKey: z.string().min(1).max(64),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+// Initiate a clawback
+tokenRouter.post('/:tokenId/clawback', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const input = initiateClawbackSchema.parse(req.body);
+
+    const clawback = await tokenService.initiateClawback({
+      ...input,
+      orgId: req.apiKey.orgId,
+      tokenId: req.params.tokenId,
+    });
+
+    res.status(201).json(clawback);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+    } else {
+      next(error);
+    }
+  }
+});
+
+// List clawbacks for a token
+tokenRouter.get('/:tokenId/clawbacks', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const { status, fromWallet, limit, offset } = req.query;
+
+    const clawbacks = await tokenService.listClawbacks(req.apiKey.orgId, {
+      tokenId: req.params.tokenId,
+      status: status as string | undefined,
+      fromWallet: fromWallet as string | undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+      offset: offset ? parseInt(offset as string) : undefined,
+    });
+
+    res.json({ data: clawbacks, count: clawbacks.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get a specific clawback
+tokenRouter.get('/:tokenId/clawbacks/:clawbackId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const clawback = await tokenService.getClawback(req.params.clawbackId, req.apiKey.orgId);
+    res.json(clawback);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Approve a clawback
+tokenRouter.post('/:tokenId/clawbacks/:clawbackId/approve', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const clawback = await tokenService.approveClawback(
+      req.params.clawbackId,
+      req.apiKey.orgId,
+      req.apiKey.keyId || 'system'
+    );
+
+    res.json(clawback);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Execute a clawback
+tokenRouter.post('/:tokenId/clawbacks/:clawbackId/execute', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const clawback = await tokenService.executeClawback(
+      req.params.clawbackId,
+      req.apiKey.orgId,
+      req.apiKey.keyId || 'system'
+    );
+
+    res.json(clawback);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Confirm a clawback (after on-chain execution)
+tokenRouter.post('/:tokenId/clawbacks/:clawbackId/confirm', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const { txHash, blockNumber } = req.body;
+
+    if (!txHash || !blockNumber) {
+      throw new ValidationError('txHash and blockNumber are required');
+    }
+
+    const clawback = await tokenService.confirmClawback(
+      req.params.clawbackId,
+      req.apiKey.orgId,
+      txHash,
+      blockNumber
+    );
+
+    res.json(clawback);
+  } catch (error) {
+    next(error);
+  }
+});

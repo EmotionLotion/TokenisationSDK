@@ -14,8 +14,11 @@ Complete reference for the Tokenisation SDK.
 6. [Tokens Module](#tokens-module)
 7. [Transfers Module](#transfers-module)
 8. [Compliance Module](#compliance-module)
-9. [Error Handling](#error-handling)
-10. [TypeScript Types](#typescript-types)
+9. [Events Module](#events-module)
+10. [Webhooks Module](#webhooks-module)
+11. [Audit Module](#audit-module)
+12. [Error Handling](#error-handling)
+13. [TypeScript Types](#typescript-types)
 
 ---
 
@@ -62,6 +65,9 @@ client.investors   // Investor onboarding
 client.tokens      // Token lifecycle
 client.transfers   // Token transfers
 client.compliance  // Compliance policies
+client.events      // Event bus and querying
+client.webhooks    // Webhook management
+client.audit       // Audit logs and evidence packs
 ```
 
 ---
@@ -928,6 +934,428 @@ Get available rule types and parameters.
 const ruleTypes = await client.compliance.getRuleTypes();
 
 // Returns array of rule definitions with parameter schemas
+```
+
+---
+
+## Events Module
+
+Manage the internal event bus for async operations.
+
+### publish
+
+Publish an event to the event bus.
+
+```typescript
+const event = await client.events.publish({
+  topic: 'custom.notification',
+  payload: { userId: 'user_123', message: 'Hello' },
+  deduplicationKey: 'notification-123'  // Prevents duplicates
+});
+```
+
+### publishBatch
+
+Publish multiple events at once (max 100).
+
+```typescript
+const result = await client.events.publishBatch([
+  { topic: 'notification.sent', payload: { userId: '1' } },
+  { topic: 'notification.sent', payload: { userId: '2' } }
+]);
+```
+
+### list
+
+List events with filters.
+
+```typescript
+const events = await client.events.list({
+  topic: 'transfer.*',
+  status: 'pending',
+  startDate: '2024-01-01T00:00:00Z',
+  limit: 50
+});
+```
+
+### get
+
+Get a specific event by ID.
+
+```typescript
+const event = await client.events.get('event_123');
+```
+
+### getDeadLetterQueue
+
+Get events that failed after max retries.
+
+```typescript
+const dlqEvents = await client.events.getDeadLetterQueue(100);
+```
+
+### retry
+
+Retry a failed event.
+
+```typescript
+const retriedEvent = await client.events.retry('event_123');
+```
+
+### retryAllDlq
+
+Retry all events in the dead letter queue.
+
+```typescript
+const result = await client.events.retryAllDlq();
+console.log(`Retried ${result.retried} events`);
+```
+
+### getStats
+
+Get event statistics.
+
+```typescript
+const stats = await client.events.getStats();
+console.log(`Pending: ${stats.pending}, Failed: ${stats.failed}`);
+```
+
+### getTopics
+
+Get available event topics.
+
+```typescript
+const { topics } = await client.events.getTopics();
+```
+
+### purge
+
+Delete old processed events.
+
+```typescript
+const result = await client.events.purge(30); // Older than 30 days
+console.log(`Deleted ${result.deleted} events`);
+```
+
+---
+
+## Webhooks Module
+
+Manage webhook endpoints for real-time notifications.
+
+### create
+
+Create a webhook endpoint.
+
+```typescript
+const endpoint = await client.webhooks.create({
+  url: 'https://api.example.com/webhooks',
+  events: ['transfer.*', 'token.deployed'],
+  description: 'Production webhook'
+});
+
+// IMPORTANT: Save the secret securely - it won't be shown again
+console.log('Webhook secret:', endpoint.secret);
+```
+
+**Event Patterns:**
+
+| Pattern | Matches |
+|---------|---------|
+| `transfer.*` | All transfer events |
+| `token.deployed` | Only token.deployed |
+| `investor.kyc.*` | All KYC events |
+
+### get
+
+Get a webhook endpoint by ID.
+
+```typescript
+const endpoint = await client.webhooks.get('endpoint_123');
+```
+
+### list
+
+List all webhook endpoints.
+
+```typescript
+const endpoints = await client.webhooks.list({
+  status: 'active',
+  limit: 50
+});
+```
+
+### update
+
+Update a webhook endpoint.
+
+```typescript
+// Disable an endpoint
+await client.webhooks.update('endpoint_123', { status: 'disabled' });
+
+// Change subscribed events
+await client.webhooks.update('endpoint_123', {
+  events: ['transfer.confirmed', 'transfer.settled']
+});
+```
+
+### delete
+
+Delete a webhook endpoint.
+
+```typescript
+await client.webhooks.delete('endpoint_123');
+```
+
+### rotateSecret
+
+Rotate the signing secret.
+
+```typescript
+const result = await client.webhooks.rotateSecret('endpoint_123');
+console.log('New secret:', result.secret);
+// Update your webhook receiver with the new secret
+```
+
+### listDeliveries
+
+List webhook deliveries.
+
+```typescript
+const deliveries = await client.webhooks.listDeliveries({
+  endpointId: 'endpoint_123',
+  status: 'failed'
+});
+```
+
+### retryDelivery
+
+Retry a failed delivery.
+
+```typescript
+const result = await client.webhooks.retryDelivery('delivery_123');
+```
+
+### sendTestEvent
+
+Send a test event to verify configuration.
+
+```typescript
+const result = await client.webhooks.sendTestEvent('test.event', {
+  message: 'This is a test'
+});
+console.log(`Sent to ${result.deliveryCount} endpoints`);
+```
+
+### verifySignature (Static)
+
+Verify a webhook signature in your receiver.
+
+```typescript
+import { WebhooksModule } from '@tokenisation/sdk';
+
+app.post('/webhook', (req, res) => {
+  const isValid = WebhooksModule.verifySignature(
+    JSON.stringify(req.body),
+    req.headers['x-webhook-signature'],
+    process.env.WEBHOOK_SECRET,
+    parseInt(req.headers['x-webhook-timestamp'])
+  );
+
+  if (!isValid) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Process webhook...
+  res.status(200).send('OK');
+});
+```
+
+---
+
+## Audit Module
+
+Access tamper-evident audit logs and generate evidence packs.
+
+### list
+
+List audit log entries.
+
+```typescript
+const logs = await client.audit.list({
+  resourceType: 'investor',
+  resourceId: 'investor_123',
+  limit: 100
+});
+```
+
+### get
+
+Get a specific audit entry.
+
+```typescript
+const entry = await client.audit.get('audit_123');
+```
+
+### getResourceHistory
+
+Get audit history for a specific resource.
+
+```typescript
+const history = await client.audit.getResourceHistory('transfer', 'transfer_123');
+```
+
+### verifyEntry
+
+Verify integrity of a single entry.
+
+```typescript
+const result = await client.audit.verifyEntry('audit_123');
+if (!result.valid) {
+  console.error('Entry has been tampered with!');
+}
+```
+
+### verifyChain
+
+Verify integrity of the entire audit chain.
+
+```typescript
+const result = await client.audit.verifyChain();
+if (result.valid) {
+  console.log(`Verified ${result.verifiedEntries} entries`);
+} else {
+  console.error('Chain broken at:', result.brokenAt?.entryId);
+}
+```
+
+### getStats
+
+Get audit statistics.
+
+```typescript
+const stats = await client.audit.getStats({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31'
+});
+console.log('Total entries:', stats.totalEntries);
+console.log('By action:', stats.byAction);
+```
+
+### export
+
+Export audit log entries.
+
+```typescript
+const exportData = await client.audit.export({
+  startDate: '2024-01-01',
+  endDate: '2024-03-31',
+  format: 'json'
+});
+```
+
+### generateInvestorEvidencePack
+
+Generate comprehensive evidence pack for an investor.
+
+```typescript
+const pack = await client.audit.generateInvestorEvidencePack('investor_123');
+
+// Contains: investor data, wallets, KYC history, holdings, transfers, audit trail
+console.log('Content hash:', pack.attestation.contentHash);
+```
+
+### generateTransferEvidencePack
+
+Generate evidence pack for a transfer.
+
+```typescript
+const pack = await client.audit.generateTransferEvidencePack('transfer_123');
+
+// Contains: transfer details, compliance decisions, parties, timeline
+```
+
+### generateTokenEvidencePack
+
+Generate evidence pack for a token.
+
+```typescript
+const pack = await client.audit.generateTokenEvidencePack('token_123');
+
+// Contains: token details, cap table, issuances, redemptions, transfers
+```
+
+### generateKycEvidencePack
+
+Generate KYC-focused evidence pack.
+
+```typescript
+const pack = await client.audit.generateKycEvidencePack('investor_123');
+
+// Contains: investor status, KYC sessions, verified wallets, timeline
+```
+
+---
+
+## Tokens Module - Clawback
+
+Administrative token recovery (in addition to standard token operations).
+
+### initiateClawback
+
+Initiate a clawback of tokens.
+
+```typescript
+const clawback = await client.tokens.initiateClawback(tokenId, {
+  fromWallet: '0x1234...',
+  toWallet: '0x5678...',  // Treasury address
+  amount: '1000000000000000000',  // 1 token (18 decimals)
+  reason: 'Court order #12345 - asset recovery',
+  idempotencyKey: 'clawback-court-12345'
+});
+```
+
+### approveClawback
+
+Approve a pending clawback.
+
+```typescript
+await client.tokens.approveClawback(tokenId, clawbackId);
+```
+
+### executeClawback
+
+Execute an approved clawback.
+
+```typescript
+await client.tokens.executeClawback(tokenId, clawbackId);
+```
+
+### confirmClawback
+
+Confirm after on-chain execution.
+
+```typescript
+await client.tokens.confirmClawback(tokenId, clawbackId, txHash, blockNumber);
+```
+
+### getClawback
+
+Get a clawback by ID.
+
+```typescript
+const clawback = await client.tokens.getClawback(tokenId, clawbackId);
+```
+
+### listClawbacks
+
+List clawbacks for a token.
+
+```typescript
+const clawbacks = await client.tokens.listClawbacks(tokenId, {
+  status: 'pending',
+  fromWallet: '0x1234...'
+});
 ```
 
 ---

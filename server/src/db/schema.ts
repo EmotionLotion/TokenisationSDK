@@ -472,6 +472,38 @@ export const redemptions = pgTable('redemptions', {
   idempotencyUnique: uniqueIndex('idx_redemptions_idempotency').on(table.orgId, table.idempotencyKey),
 }));
 
+// Clawbacks - Administrative token recovery
+export const clawbacks = pgTable('clawbacks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').notNull().references(() => tokens.id, { onDelete: 'cascade' }),
+  fromWallet: varchar('from_wallet', { length: 42 }).notNull(),
+  toWallet: varchar('to_wallet', { length: 42 }).notNull(),
+  fromInvestorId: uuid('from_investor_id').references(() => investors.id),
+  toInvestorId: uuid('to_investor_id').references(() => investors.id),
+  amount: varchar('amount', { length: 78 }).notNull(),
+  reason: text('reason').notNull(), // Regulatory requirement - reason must be documented
+  status: varchar('status', { length: 32 }).notNull().default('pending'),
+  decisionId: uuid('decision_id').references(() => decisions.id), // Compliance approval
+  approvedBy: uuid('approved_by'), // User/API key that approved
+  executedBy: uuid('executed_by'), // User/API key that executed
+  txHash: varchar('tx_hash', { length: 66 }),
+  txBlock: integer('tx_block'),
+  idempotencyKey: varchar('idempotency_key', { length: 64 }),
+  error: text('error'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  executedAt: timestamp('executed_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_clawbacks_org').on(table.orgId),
+  tokenIdx: index('idx_clawbacks_token').on(table.tokenId),
+  statusIdx: index('idx_clawbacks_status').on(table.status),
+  fromWalletIdx: index('idx_clawbacks_from_wallet').on(table.fromWallet),
+  idempotencyUnique: uniqueIndex('idx_clawbacks_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
 // ============================================================================
 // SECTION 8: Transfers & Settlement
 // ============================================================================
