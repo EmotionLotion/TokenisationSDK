@@ -583,8 +583,28 @@ TokenisationSDK/
     ├── GLOSSARY.md               # Term definitions (80+ terms)
     ├── API_REFERENCE.md          # Complete SDK API documentation
     ├── ARCHITECTURE.md           # System design, security, production
-    └── getting-started/
-        └── QUICKSTART.md         # Step-by-step tutorial
+    ├── README.md                 # Documentation hub
+    ├── getting-started/          # Onboarding guides
+    │   ├── QUICKSTART.md
+    │   ├── INSTALLATION.md
+    │   └── FIRST_PROJECT.md
+    ├── guides/                   # How-to guides
+    │   ├── SDK_USAGE.md
+    │   ├── COMPLIANCE_SETUP.md
+    │   ├── SERVER_SETUP.md
+    │   └── CHAINLINK_INTEGRATION.md
+    ├── architecture/             # Technical deep-dives
+    │   ├── OVERVIEW.md
+    │   ├── LIFECYCLE.md
+    │   ├── PLUGINS.md
+    │   └── SECURITY.md
+    ├── api/                      # API references
+    │   ├── SDK_API.md
+    │   ├── REST_API.md
+    │   └── CONTRACTS.md
+    └── deployment/               # Operations
+        ├── DEPLOYMENT_RUNBOOK.md
+        └── OPERATIONS_MANUAL.md
 ```
 
 ---
@@ -641,27 +661,49 @@ npm test --workspace=@tokenisation/conformance-suite
 
 ## Documentation
 
-### For New Users
+Full documentation is in the [`docs/`](docs/) folder.
+
+### Start Here
 
 | Document | Description |
 |----------|-------------|
-| [Core Concepts](docs/CONCEPTS.md) | What is tokenization? Domain model, business case, end-to-end flow |
+| [Core Concepts](docs/CONCEPTS.md) | What is tokenization? Business case, domain model, end-to-end flow |
 | [Glossary](docs/GLOSSARY.md) | 80+ terms defined (KYC, AML, UUPS, ERC-3643, idempotency, etc.) |
-
-### For Developers
-
-| Document | Description |
-|----------|-------------|
 | [Quick Start](docs/getting-started/QUICKSTART.md) | Tokenize your first asset in minutes |
-| [API Reference](docs/API_REFERENCE.md) | Complete SDK documentation - all methods, parameters, examples |
-| [Architecture](docs/ARCHITECTURE.md) | System design, security features, production requirements |
 
-### Configuration & Deployment
+### Developer Guides
 
 | Document | Description |
 |----------|-------------|
+| [API Reference](docs/API_REFERENCE.md) | Complete SDK documentation - all methods, parameters, examples |
+| [SDK Usage Guide](docs/guides/SDK_USAGE.md) | In-depth SDK patterns and examples |
+| [Compliance Setup](docs/guides/COMPLIANCE_SETUP.md) | Configure KYC, AML, and transfer restrictions |
+| [Server Setup](docs/guides/SERVER_SETUP.md) | Deploy and configure the API server |
+
+### Architecture
+
+| Document | Description |
+|----------|-------------|
+| [Architecture Overview](docs/ARCHITECTURE.md) | System design, security features, production requirements |
+| [Lifecycle Engine](docs/architecture/LIFECYCLE.md) | Asset state machine and transitions |
+| [Plugin System](docs/architecture/PLUGINS.md) | Extensibility via plugins |
+| [Security](docs/architecture/SECURITY.md) | Security considerations and best practices |
+
+### API Reference
+
+| Document | Description |
+|----------|-------------|
+| [SDK API](docs/api/SDK_API.md) | TypeScript SDK reference |
+| [REST API](docs/api/REST_API.md) | HTTP endpoints reference |
+| [Smart Contracts](docs/api/CONTRACTS.md) | Solidity contract reference |
+
+### Deployment & Operations
+
+| Document | Description |
+|----------|-------------|
+| [Deployment Runbook](docs/deployment/DEPLOYMENT_RUNBOOK.md) | Step-by-step production deployment |
+| [Operations Manual](docs/deployment/OPERATIONS_MANUAL.md) | Day-to-day operations guide |
 | [Server Config](server/.env.example) | Environment variables reference |
-| [Contract Deployment](contracts/script/DeployUpgradeable.s.sol) | Deploy upgradeable tokens with governance |
 
 ---
 
