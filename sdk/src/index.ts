@@ -208,6 +208,14 @@ export * from './modules/index.js';
 // Provider Implementations (Mock/Reference)
 export * from './providers/index.js';
 
+// Production Infrastructure
+export * from './middleware/index.js';
+export * from './storage/index.js';
+export * from './secrets/index.js';
+export * from './queue/index.js';
+export * from './audit/index.js';
+export * from './api/index.js';
+
 // Re-export commonly used types from SDK
 export {
   // Core enums
