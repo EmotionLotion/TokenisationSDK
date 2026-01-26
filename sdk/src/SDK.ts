@@ -128,6 +128,25 @@ import {
   EscrowStatus,
   ReleaseConditionType,
 } from './modules/Escrow.js';
+import {
+  OfferingsEngine,
+  type Offering,
+  type Subscription,
+  type OfferingConfig,
+  type SubscriptionRequest,
+  type OfferingSummary,
+  OfferingStatus,
+  OfferingType,
+  SubscriptionStatus,
+  PaymentMethod,
+  InvestorTier,
+} from './modules/Offerings.js';
+import {
+  RegulatoryReporter,
+  type RegulatoryReport,
+  type ReportOptions,
+  ReportFramework,
+} from './modules/RegulatoryReports.js';
 
 /**
  * Production API configuration for real backend integration
@@ -241,6 +260,8 @@ export class TokenisationSDK {
   private _cashFlowEngine: CashFlowEngine;
   private _governanceEngine: GovernanceEngine;
   private _escrowEngine: EscrowEngine;
+  private _offeringsEngine: OfferingsEngine;
+  private _regulatoryReporter: RegulatoryReporter;
 
   // Services
   private complianceService: ComplianceService;
@@ -288,6 +309,8 @@ export class TokenisationSDK {
     this._cashFlowEngine = new CashFlowEngine();
     this._governanceEngine = new GovernanceEngine();
     this._escrowEngine = new EscrowEngine();
+    this._offeringsEngine = new OfferingsEngine(this as any);
+    this._regulatoryReporter = new RegulatoryReporter(this as any);
 
     // Initialize services
     this.complianceService = createComplianceService();
@@ -862,6 +885,16 @@ export class TokenisationSDK {
     return this._escrowEngine;
   }
 
+  /** Get the offerings engine for token offerings and subscriptions */
+  get offerings(): OfferingsEngine {
+    return this._offeringsEngine;
+  }
+
+  /** Get the regulatory reporter for compliance reports */
+  get reports(): RegulatoryReporter {
+    return this._regulatoryReporter;
+  }
+
   // ============================================================================
   // CONVENIENCE METHODS FOR EXTENSION MODULES
   // ============================================================================
@@ -903,6 +936,16 @@ export {
   EscrowType,
   EscrowStatus,
   ReleaseConditionType,
+
+  // Offerings
+  OfferingStatus,
+  OfferingType,
+  SubscriptionStatus,
+  PaymentMethod,
+  InvestorTier,
+
+  // Regulatory Reports
+  ReportFramework,
 };
 
 export type {
@@ -944,6 +987,17 @@ export type {
   Escrow,
   Milestone,
 
+  // Offerings types
+  Offering,
+  Subscription,
+  OfferingConfig,
+  SubscriptionRequest,
+  OfferingSummary,
+
+  // Regulatory Reports types
+  RegulatoryReport,
+  ReportOptions,
+
   // Production configuration types
   JurisdictionPluginConfig,
   KYCCompliancePluginConfig,
@@ -959,6 +1013,8 @@ export {
   CashFlowEngine,
   GovernanceEngine,
   EscrowEngine,
+  OfferingsEngine,
+  RegulatoryReporter,
   // Compliance-first classes
   ComplianceEngine,
   // Provider registry

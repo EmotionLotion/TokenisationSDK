@@ -102,6 +102,51 @@ export interface Redemption {
   createdAt: string;
 }
 
+export interface ClawbackInput {
+  /** Address to clawback tokens from */
+  fromWallet: string;
+  /** Address to send tokens to (typically treasury or compliance address) */
+  toWallet: string;
+  /** Investor ID of the source (optional, will be looked up if not provided) */
+  fromInvestorId?: string;
+  /** Investor ID of the destination (optional) */
+  toInvestorId?: string;
+  /** Amount to clawback (in smallest unit) */
+  amount: string;
+  /** Reason for the clawback (required, minimum 10 characters) */
+  reason: string;
+  /** Required idempotency key to prevent duplicate clawbacks */
+  idempotencyKey: string;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+export interface Clawback {
+  id: string;
+  tokenId: string;
+  fromWallet: string;
+  toWallet: string;
+  fromInvestorId: string | null;
+  toInvestorId: string | null;
+  amount: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'executed' | 'confirmed' | 'failed';
+  approvedBy: string | null;
+  executedBy: string | null;
+  txHash: string | null;
+  txBlock: number | null;
+  createdAt: string;
+  approvedAt: string | null;
+  executedAt: string | null;
+}
+
+export interface ListClawbacksParams {
+  status?: Clawback['status'];
+  fromWallet?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export class TokensModule {
   constructor(private http: HttpClient) {}
 
@@ -308,5 +353,128 @@ export class TokensModule {
       availableBalance: string;
     }>(`/api/v1/tokens/${validatedTokenId}/balances/${validatedAddress}`);
     return response.data;
+  }
+
+  // ============================================================================
+  // Clawback (Administrative Token Recovery)
+  // ============================================================================
+
+  /**
+   * Initiates a clawback of tokens from one address to another.
+   *
+   * Clawback is an administrative action that bypasses normal transfer compliance
+   * checks. It is used for regulatory enforcement, court orders, or recovery
+   * of tokens from compromised accounts.
+   *
+   * **Regulatory Note**: The reason field is required and permanently recorded
+   * in the audit trail. It cannot be modified after creation.
+   *
+   * @example
+   * ```typescript
+   * // Initiate a clawback
+   * const clawback = await client.tokens.initiateClawback(tokenId, {
+   *   fromWallet: '0x1234...',
+   *   toWallet: '0x5678...',  // Treasury address
+   *   amount: '1000000000000000000',  // 1 token (18 decimals)
+   *   reason: 'Court order #12345 - asset recovery',
+   *   idempotencyKey: 'clawback-court-order-12345'
+   * });
+   *
+   * // Approve and execute
+   * await client.tokens.approveClawback(tokenId, clawback.id);
+   * await client.tokens.executeClawback(tokenId, clawback.id);
+   * ```
+   */
+  async initiateClawback(tokenId: string, input: ClawbackInput): Promise<Clawback> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const response = await this.http.post<Clawback>(
+      `/api/v1/tokens/${validatedTokenId}/clawback`,
+      input,
+      { idempotencyKey: input.idempotencyKey }
+    );
+    return response.data;
+  }
+
+  /**
+   * Approves a pending clawback for execution.
+   * In production, this typically requires compliance officer approval.
+   */
+  async approveClawback(tokenId: string, clawbackId: string): Promise<Clawback> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validatedClawbackId = validate(UUIDSchema, clawbackId);
+    const response = await this.http.post<Clawback>(
+      `/api/v1/tokens/${validatedTokenId}/clawbacks/${validatedClawbackId}/approve`
+    );
+    return response.data;
+  }
+
+  /**
+   * Executes an approved clawback.
+   * This moves the tokens and updates the ledger positions.
+   */
+  async executeClawback(tokenId: string, clawbackId: string): Promise<Clawback> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validatedClawbackId = validate(UUIDSchema, clawbackId);
+    const response = await this.http.post<Clawback>(
+      `/api/v1/tokens/${validatedTokenId}/clawbacks/${validatedClawbackId}/execute`
+    );
+    return response.data;
+  }
+
+  /**
+   * Confirms a clawback after on-chain transaction is confirmed.
+   */
+  async confirmClawback(
+    tokenId: string,
+    clawbackId: string,
+    txHash: string,
+    blockNumber: number
+  ): Promise<Clawback> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validatedClawbackId = validate(UUIDSchema, clawbackId);
+    const response = await this.http.post<Clawback>(
+      `/api/v1/tokens/${validatedTokenId}/clawbacks/${validatedClawbackId}/confirm`,
+      { txHash, blockNumber }
+    );
+    return response.data;
+  }
+
+  /**
+   * Gets a clawback by ID.
+   */
+  async getClawback(tokenId: string, clawbackId: string): Promise<Clawback> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validatedClawbackId = validate(UUIDSchema, clawbackId);
+    const response = await this.http.get<Clawback>(
+      `/api/v1/tokens/${validatedTokenId}/clawbacks/${validatedClawbackId}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Lists clawbacks for a token.
+   *
+   * @example
+   * ```typescript
+   * // Get all pending clawbacks
+   * const pending = await client.tokens.listClawbacks(tokenId, {
+   *   status: 'pending'
+   * });
+   *
+   * // Get clawbacks from a specific address
+   * const fromAddress = await client.tokens.listClawbacks(tokenId, {
+   *   fromWallet: '0x1234...'
+   * });
+   * ```
+   */
+  async listClawbacks(
+    tokenId: string,
+    params?: ListClawbacksParams
+  ): Promise<PaginatedResponse<Clawback>> {
+    const validatedTokenId = validate(UUIDSchema, tokenId);
+    return this.http.list<Clawback>(
+      `/api/v1/tokens/${validatedTokenId}/clawbacks`,
+      params as Record<string, string | number | boolean | undefined>
+    );
   }
 }

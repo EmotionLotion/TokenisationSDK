@@ -24,6 +24,8 @@ export * from './CashFlow.js';
 export * from './Governance.js';
 export * from './Escrow.js';
 export * from './Vesting.js';
+export * from './Offerings.js';
+export * from './RegulatoryReports.js';
 
 // API Client Modules
 export { ProjectsModule } from './projects.js';
@@ -32,6 +34,9 @@ export { TokensModule } from './tokens.js';
 export { TransfersModule } from './transfers.js';
 export { ComplianceModule } from './compliance.js';
 export { AssetsModule } from './assets.js';
+export { EventsModule } from './events.js';
+export { WebhooksModule } from './webhooks.js';
+export { AuditModule } from './audit.js';
 
 // Validation utilities
 export {

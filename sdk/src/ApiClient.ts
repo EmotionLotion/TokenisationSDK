@@ -44,6 +44,9 @@ import { TokensModule } from './modules/tokens.js';
 import { TransfersModule } from './modules/transfers.js';
 import { ComplianceModule } from './modules/compliance.js';
 import { AssetsModule } from './modules/assets.js';
+import { EventsModule } from './modules/events.js';
+import { WebhooksModule } from './modules/webhooks.js';
+import { AuditModule } from './modules/audit.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -70,6 +73,15 @@ export class ApiClient {
 
   /** Compliance policies and checks */
   public readonly compliance: ComplianceModule;
+
+  /** Event bus for publishing and querying events */
+  public readonly events: EventsModule;
+
+  /** Webhook endpoints for real-time notifications */
+  public readonly webhooks: WebhooksModule;
+
+  /** Audit logs and evidence pack generation */
+  public readonly audit: AuditModule;
 
   constructor(config: TokenizationSDKConfig) {
     // Validate API key format
@@ -104,6 +116,9 @@ export class ApiClient {
     this.tokens = new TokensModule(this.http);
     this.transfers = new TransfersModule(this.http);
     this.compliance = new ComplianceModule(this.http);
+    this.events = new EventsModule(this.http);
+    this.webhooks = new WebhooksModule(this.http);
+    this.audit = new AuditModule(this.http);
   }
 
   /**
