@@ -50,6 +50,36 @@ export async function createOrg(input: CreateOrgInput) {
   return org;
 }
 
+/**
+ * Ensures the dev org exists in the database (for dev mode testing).
+ * Creates it if it doesn't exist.
+ */
+export async function ensureDevOrg(orgId: string): Promise<void> {
+  const existing = await db.query.orgs.findFirst({
+    where: eq(orgs.id, orgId),
+  });
+
+  if (!existing) {
+    // Create the dev org with the specified ID
+    await db.insert(orgs).values({
+      id: orgId,
+      name: `Dev Org (${orgId})`,
+      slug: orgId.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      status: 'active',
+      settings: {},
+      riskProfile: {},
+      metadata: { devMode: true },
+    }).onConflictDoNothing();
+
+    // Create default roles for the dev org
+    try {
+      await createDefaultRoles(orgId);
+    } catch {
+      // Ignore errors if roles already exist
+    }
+  }
+}
+
 export async function getOrg(id: string) {
   const org = await db.query.orgs.findFirst({
     where: eq(orgs.id, id),

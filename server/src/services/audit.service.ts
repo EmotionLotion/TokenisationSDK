@@ -60,7 +60,7 @@ export interface AuditLogEntry {
   entryHash: string;
   ipAddress: string | null;
   userAgent: string | null;
-  createdAt: Date;
+  createdAt: Date | string; // Date for PostgreSQL, string for SQLite
 }
 
 // ============================================================================
@@ -83,8 +83,13 @@ function computeEntryHash(entry: {
   description: string | null;
   metadata: Record<string, unknown>;
   prevHash: string;
-  createdAt: Date;
+  createdAt: Date | string;
 }): string {
+  // Handle both Date objects (PostgreSQL) and strings (SQLite)
+  const createdAtStr = typeof entry.createdAt === 'string'
+    ? entry.createdAt
+    : entry.createdAt.toISOString();
+
   const payload = JSON.stringify({
     id: entry.id,
     orgId: entry.orgId,
@@ -96,7 +101,7 @@ function computeEntryHash(entry: {
     description: entry.description,
     metadata: entry.metadata,
     prevHash: entry.prevHash,
-    createdAt: entry.createdAt.toISOString(),
+    createdAt: createdAtStr,
   });
 
   return createHash('sha256').update(payload).digest('hex');

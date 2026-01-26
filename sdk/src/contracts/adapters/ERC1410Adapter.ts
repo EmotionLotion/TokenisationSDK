@@ -19,6 +19,14 @@ import type {
 } from '../../core/interfaces.js';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import { ContractError, ValidationError, ErrorCode } from '../../errors/index.js';
+import {
+  ERC1410AdapterConfigSchema,
+  EthereumAddressSchema,
+  TokenAmountSchema,
+  Bytes32Schema,
+  validateOrThrow,
+} from '../validation.js';
 
 /**
  * ERC-1410 Partially Fungible Token ABI
@@ -200,50 +208,77 @@ export class ERC1410Adapter implements ITokenAdapter {
 
   /**
    * Create and initialize an ERC1410Adapter
+   *
+   * @param config - Adapter configuration
+   * @returns Initialized ERC1410Adapter
+   * @throws ValidationError if config is invalid
+   * @throws ContractError if contract initialization fails
    */
   static async create(config: ERC1410AdapterConfig): Promise<ERC1410Adapter> {
-    const provider = new ethers.JsonRpcProvider(config.providerUrl);
-    const abi = config.abi || ERC1410_ABI;
+    // Validate configuration
+    const validatedConfig = validateOrThrow(
+      ERC1410AdapterConfigSchema,
+      config,
+      'ERC1410Adapter config'
+    );
 
-    let signer: ethers.Wallet | null = null;
-    let contract: ethers.Contract;
+    const provider = new ethers.JsonRpcProvider(validatedConfig.providerUrl);
+    const abi = validatedConfig.abi || ERC1410_ABI;
 
-    if (config.privateKey) {
-      signer = new ethers.Wallet(config.privateKey, provider);
-      contract = new ethers.Contract(config.contractAddress, abi, signer);
-    } else {
-      contract = new ethers.Contract(config.contractAddress, abi, provider);
+    try {
+      let signer: ethers.Wallet | null = null;
+      let contract: ethers.Contract;
+
+      if (validatedConfig.privateKey) {
+        signer = new ethers.Wallet(validatedConfig.privateKey, provider);
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, signer);
+      } else {
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, provider);
+      }
+
+      // Fetch token info
+      const [name, symbol, decimals, totalSupply] = await Promise.all([
+        contract.name() as Promise<string>,
+        contract.symbol() as Promise<string>,
+        contract.decimals() as Promise<number>,
+        contract.totalSupply() as Promise<bigint>,
+      ]);
+
+      const tokenInfo: TokenInfo = {
+        address: validatedConfig.contractAddress,
+        name,
+        symbol,
+        decimals: Number(decimals),
+        totalSupply: totalSupply.toString(),
+        tokenType: 'ERC1410',
+      };
+
+      // Build partition name map
+      const partitionNames = new Map<string, string>();
+      Object.entries(STANDARD_PARTITIONS).forEach(([name, hash]) => {
+        partitionNames.set(hash, name);
+      });
+      config.partitions?.forEach((p) => {
+        partitionNames.set(p.bytes32, p.name);
+      });
+
+      const pluginId = `erc1410-${validatedConfig.contractAddress.toLowerCase().slice(0, 8)}`;
+
+      return new ERC1410Adapter(pluginId, tokenInfo, provider, contract, signer, partitionNames);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ContractError(
+        `Failed to initialize ERC1410 adapter: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          code: ErrorCode.CONTRACT_NOT_DEPLOYED,
+          contractAddress: validatedConfig.contractAddress,
+          method: 'create',
+          cause: error instanceof Error ? error : undefined,
+        }
+      );
     }
-
-    // Fetch token info
-    const [name, symbol, decimals, totalSupply] = await Promise.all([
-      contract.name() as Promise<string>,
-      contract.symbol() as Promise<string>,
-      contract.decimals() as Promise<number>,
-      contract.totalSupply() as Promise<bigint>,
-    ]);
-
-    const tokenInfo: TokenInfo = {
-      address: config.contractAddress,
-      name,
-      symbol,
-      decimals: Number(decimals),
-      totalSupply: totalSupply.toString(),
-      tokenType: 'ERC1410',
-    };
-
-    // Build partition name map
-    const partitionNames = new Map<string, string>();
-    Object.entries(STANDARD_PARTITIONS).forEach(([name, hash]) => {
-      partitionNames.set(hash, name);
-    });
-    config.partitions?.forEach((p) => {
-      partitionNames.set(p.bytes32, p.name);
-    });
-
-    const pluginId = `erc1410-${config.contractAddress.toLowerCase().slice(0, 8)}`;
-
-    return new ERC1410Adapter(pluginId, tokenInfo, provider, contract, signer, partitionNames);
   }
 
   // ============================================================================

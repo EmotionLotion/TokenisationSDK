@@ -123,8 +123,14 @@ export async function apiKeyMiddleware(
     // In dev mode, allow bypass FIRST (before any other auth checks)
     const DEV_MODE_LOCAL = process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_MODE === 'true';
     if (DEV_MODE_LOCAL && req.headers['x-dev-org-id']) {
+      const devOrgId = req.headers['x-dev-org-id'] as string;
+
+      // Ensure the dev org exists in the database
+      const { ensureDevOrg } = await import('../services/iam.service.js');
+      await ensureDevOrg(devOrgId);
+
       req.apiKey = {
-        orgId: req.headers['x-dev-org-id'] as string,
+        orgId: devOrgId,
         scopes: ['admin'],
         keyId: 'dev-key',
       };

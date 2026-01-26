@@ -162,7 +162,7 @@ assetRouter.post('/', async (req: AuthRequest, res, next) => {
     }
 
     const assetId = randomUUID();
-    const now = new Date();
+    const now = new Date().toISOString();
 
     const [asset] = await db.insert(assets).values({
       id: assetId,

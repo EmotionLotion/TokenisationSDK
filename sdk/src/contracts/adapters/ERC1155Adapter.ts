@@ -13,6 +13,17 @@ import type {
 } from '../../core/interfaces.js';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import { ContractError, ValidationError, ErrorCode } from '../../errors/index.js';
+import {
+  ERC1155AdapterConfigSchema,
+  EthereumAddressSchema,
+  TokenIdSchema,
+  TokenAmountSchema,
+  TokenUriSchema,
+  BatchMintParamsSchema,
+  BatchTransferParamsSchema,
+  validateOrThrow,
+} from '../validation.js';
 
 /**
  * ComplianceMultiToken ABI
@@ -143,50 +154,77 @@ export class ERC1155Adapter implements ITokenAdapter {
 
   /**
    * Create and initialize an ERC1155Adapter
+   *
+   * @param config - Adapter configuration
+   * @returns Initialized ERC1155Adapter
+   * @throws ValidationError if config is invalid
+   * @throws ContractError if contract initialization fails
    */
   static async create(config: ERC1155AdapterConfig): Promise<ERC1155Adapter> {
-    const provider = new ethers.JsonRpcProvider(config.providerUrl);
-    const abi = config.abi || COMPLIANCE_MULTI_TOKEN_ABI;
+    // Validate configuration
+    const validatedConfig = validateOrThrow(
+      ERC1155AdapterConfigSchema,
+      config,
+      'ERC1155Adapter config'
+    );
 
-    let signer: ethers.Wallet | null = null;
-    let contract: ethers.Contract;
+    const provider = new ethers.JsonRpcProvider(validatedConfig.providerUrl);
+    const abi = validatedConfig.abi || COMPLIANCE_MULTI_TOKEN_ABI;
 
-    if (config.privateKey) {
-      signer = new ethers.Wallet(config.privateKey, provider);
-      contract = new ethers.Contract(config.contractAddress, abi, signer);
-    } else {
-      contract = new ethers.Contract(config.contractAddress, abi, provider);
-    }
-
-    // Get token IDs to determine basic info
-    let tokenIds: bigint[] = [];
     try {
-      tokenIds = await contract.getTokenIds() as bigint[];
-    } catch {
-      // Contract might be new with no token types yet
-    }
+      let signer: ethers.Wallet | null = null;
+      let contract: ethers.Contract;
 
-    // Build aggregate token info
-    let totalSupply = BigInt(0);
-    if (tokenIds.length > 0) {
-      for (const id of tokenIds) {
-        const supply = await contract.totalSupply(id) as bigint;
-        totalSupply += supply;
+      if (validatedConfig.privateKey) {
+        signer = new ethers.Wallet(validatedConfig.privateKey, provider);
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, signer);
+      } else {
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, provider);
       }
+
+      // Get token IDs to determine basic info
+      let tokenIds: bigint[] = [];
+      try {
+        tokenIds = await contract.getTokenIds() as bigint[];
+      } catch {
+        // Contract might be new with no token types yet
+      }
+
+      // Build aggregate token info
+      let totalSupply = BigInt(0);
+      if (tokenIds.length > 0) {
+        for (const id of tokenIds) {
+          const supply = await contract.totalSupply(id) as bigint;
+          totalSupply += supply;
+        }
+      }
+
+      const tokenInfo: TokenInfo = {
+        address: validatedConfig.contractAddress,
+        name: 'ComplianceMultiToken',
+        symbol: 'MULTI',
+        decimals: 0, // ERC-1155 typically doesn't use decimals
+        totalSupply: totalSupply.toString(),
+        tokenType: 'ERC1155',
+      };
+
+      const pluginId = `erc1155-${validatedConfig.contractAddress.toLowerCase().slice(0, 8)}`;
+
+      return new ERC1155Adapter(pluginId, tokenInfo, provider, contract, signer);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ContractError(
+        `Failed to initialize ERC1155 adapter: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          code: ErrorCode.CONTRACT_NOT_DEPLOYED,
+          contractAddress: validatedConfig.contractAddress,
+          method: 'create',
+          cause: error instanceof Error ? error : undefined,
+        }
+      );
     }
-
-    const tokenInfo: TokenInfo = {
-      address: config.contractAddress,
-      name: 'ComplianceMultiToken',
-      symbol: 'MULTI',
-      decimals: 0, // ERC-1155 typically doesn't use decimals
-      totalSupply: totalSupply.toString(),
-      tokenType: 'ERC1155',
-    };
-
-    const pluginId = `erc1155-${config.contractAddress.toLowerCase().slice(0, 8)}`;
-
-    return new ERC1155Adapter(pluginId, tokenInfo, provider, contract, signer);
   }
 
   // ============================================================================
@@ -276,26 +314,46 @@ export class ERC1155Adapter implements ITokenAdapter {
 
   /**
    * Mint tokens to an address
+   *
+   * @param to - Recipient address
+   * @param amount - Amount to mint
+   * @param tokenId - Token type ID to mint
+   * @returns Transaction receipt or error
    */
   async mint(
     to: string,
     amount: string,
     tokenId?: string
   ): Promise<Result<TransactionReceipt, string>> {
-    if (!this.signer) {
-      return err('No signer configured - cannot mint');
+    const toValidation = EthereumAddressSchema.safeParse(to);
+    if (!toValidation.success) {
+      return err(`Invalid recipient address: ${toValidation.error.errors[0].message}`);
+    }
+
+    const amountValidation = TokenAmountSchema.safeParse(amount);
+    if (!amountValidation.success) {
+      return err(`Invalid amount: ${amountValidation.error.errors[0].message}`);
     }
 
     if (!tokenId) {
       return err('Token ID required for ERC-1155 mint');
     }
 
+    const tokenIdValidation = TokenIdSchema.safeParse(tokenId);
+    if (!tokenIdValidation.success) {
+      return err(`Invalid token ID: ${tokenIdValidation.error.errors[0].message}`);
+    }
+
+    if (!this.signer) {
+      return err('No signer configured - cannot mint');
+    }
+
     try {
-      const tx = await this.contract.mint(to, tokenId, amount);
+      const tx = await this.contract.mint(toValidation.data, tokenIdValidation.data, amountValidation.data);
       const receipt = await tx.wait();
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Mint failed: ${error}`);
+      return err(`Mint failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

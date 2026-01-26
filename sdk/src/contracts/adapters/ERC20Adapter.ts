@@ -13,6 +13,14 @@ import type {
 } from '../../core/interfaces.js';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import { ContractError, ValidationError, ErrorCode } from '../../errors/index.js';
+import {
+  ERC20AdapterConfigSchema,
+  EthereumAddressSchema,
+  TokenAmountSchema,
+  TokenAmountOrZeroSchema,
+  validateOrThrow,
+} from '../validation.js';
 
 /**
  * Standard ERC20 ABI with additional permissioned functions
@@ -91,72 +99,135 @@ export class ERC20Adapter implements ITokenAdapter {
 
   /**
    * Create and initialize an ERC20Adapter
+   *
+   * @param config - Adapter configuration
+   * @returns Initialized ERC20Adapter
+   * @throws ValidationError if config is invalid
+   * @throws ContractError if contract initialization fails
    */
   static async create(config: ERC20AdapterConfig): Promise<ERC20Adapter> {
-    const provider = new ethers.JsonRpcProvider(config.providerUrl);
-    const abi = config.abi || PERMISSIONED_ERC20_ABI;
+    // Validate configuration
+    const validatedConfig = validateOrThrow(
+      ERC20AdapterConfigSchema,
+      config,
+      'ERC20Adapter config'
+    );
+
+    const provider = new ethers.JsonRpcProvider(validatedConfig.providerUrl);
+    const abi = validatedConfig.abi || PERMISSIONED_ERC20_ABI;
 
     let signer: ethers.Wallet | null = null;
     let contract: ethers.Contract;
 
-    if (config.privateKey) {
-      signer = new ethers.Wallet(config.privateKey, provider);
-      contract = new ethers.Contract(config.contractAddress, abi, signer);
-    } else {
-      contract = new ethers.Contract(config.contractAddress, abi, provider);
+    try {
+      if (validatedConfig.privateKey) {
+        signer = new ethers.Wallet(validatedConfig.privateKey, provider);
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, signer);
+      } else {
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, provider);
+      }
+
+      // Fetch token info
+      const [name, symbol, decimals, totalSupply] = await Promise.all([
+        contract.name() as Promise<string>,
+        contract.symbol() as Promise<string>,
+        contract.decimals() as Promise<number>,
+        contract.totalSupply() as Promise<bigint>,
+      ]);
+
+      const tokenInfo: TokenInfo = {
+        address: validatedConfig.contractAddress,
+        name,
+        symbol,
+        decimals: Number(decimals),
+        totalSupply: totalSupply.toString(),
+        tokenType: 'ERC20',
+      };
+
+      const pluginId = `erc20-${validatedConfig.contractAddress.toLowerCase().slice(0, 8)}`;
+
+      return new ERC20Adapter(pluginId, tokenInfo, provider, contract, signer);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ContractError(
+        `Failed to initialize ERC20 adapter: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          code: ErrorCode.CONTRACT_NOT_DEPLOYED,
+          contractAddress: validatedConfig.contractAddress,
+          method: 'create',
+          cause: error instanceof Error ? error : undefined,
+        }
+      );
     }
-
-    // Fetch token info
-    const [name, symbol, decimals, totalSupply] = await Promise.all([
-      contract.name() as Promise<string>,
-      contract.symbol() as Promise<string>,
-      contract.decimals() as Promise<number>,
-      contract.totalSupply() as Promise<bigint>,
-    ]);
-
-    const tokenInfo: TokenInfo = {
-      address: config.contractAddress,
-      name,
-      symbol,
-      decimals: Number(decimals),
-      totalSupply: totalSupply.toString(),
-      tokenType: 'ERC20',
-    };
-
-    const pluginId = `erc20-${config.contractAddress.toLowerCase().slice(0, 8)}`;
-
-    return new ERC20Adapter(pluginId, tokenInfo, provider, contract, signer);
   }
 
   /**
    * Mint tokens to an address
+   *
+   * @param to - Recipient address
+   * @param amount - Amount to mint (in base units)
+   * @returns Transaction receipt or error
    */
   async mint(
     to: string,
     amount: string
   ): Promise<Result<TransactionReceipt, string>> {
+    // Validate inputs
+    const toValidation = EthereumAddressSchema.safeParse(to);
+    if (!toValidation.success) {
+      return err(`Invalid recipient address: ${toValidation.error.errors[0].message}`);
+    }
+
+    const amountValidation = TokenAmountSchema.safeParse(amount);
+    if (!amountValidation.success) {
+      return err(`Invalid amount: ${amountValidation.error.errors[0].message}`);
+    }
+
     if (!this.signer) {
       return err('No signer configured - cannot mint');
     }
 
     try {
-      const tx = await this.contract.mint(to, amount);
+      const tx = await this.contract.mint(toValidation.data, amountValidation.data);
       const receipt = await tx.wait();
 
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Mint failed: ${error}`);
+      return err(`Mint failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
    * Transfer tokens between addresses
+   *
+   * @param from - Sender address
+   * @param to - Recipient address
+   * @param amount - Amount to transfer (in base units)
+   * @returns Transaction receipt or error
    */
   async transfer(
     from: string,
     to: string,
     amount: string
   ): Promise<Result<TransactionReceipt, string>> {
+    // Validate inputs
+    const fromValidation = EthereumAddressSchema.safeParse(from);
+    if (!fromValidation.success) {
+      return err(`Invalid sender address: ${fromValidation.error.errors[0].message}`);
+    }
+
+    const toValidation = EthereumAddressSchema.safeParse(to);
+    if (!toValidation.success) {
+      return err(`Invalid recipient address: ${toValidation.error.errors[0].message}`);
+    }
+
+    const amountValidation = TokenAmountSchema.safeParse(amount);
+    if (!amountValidation.success) {
+      return err(`Invalid amount: ${amountValidation.error.errors[0].message}`);
+    }
+
     if (!this.signer) {
       return err('No signer configured - cannot transfer');
     }
@@ -166,26 +237,41 @@ export class ERC20Adapter implements ITokenAdapter {
       const signerAddress = await this.signer.getAddress();
 
       let tx;
-      if (from.toLowerCase() === signerAddress.toLowerCase()) {
-        tx = await this.contract.transfer(to, amount);
+      if (fromValidation.data === signerAddress.toLowerCase()) {
+        tx = await this.contract.transfer(toValidation.data, amountValidation.data);
       } else {
-        tx = await this.contract.transferFrom(from, to, amount);
+        tx = await this.contract.transferFrom(fromValidation.data, toValidation.data, amountValidation.data);
       }
 
       const receipt = await tx.wait();
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Transfer failed: ${error}`);
+      return err(`Transfer failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
    * Burn tokens
+   *
+   * @param from - Address to burn from
+   * @param amount - Amount to burn (in base units)
+   * @returns Transaction receipt or error
    */
   async burn(
     from: string,
     amount: string
   ): Promise<Result<TransactionReceipt, string>> {
+    // Validate inputs
+    const fromValidation = EthereumAddressSchema.safeParse(from);
+    if (!fromValidation.success) {
+      return err(`Invalid address: ${fromValidation.error.errors[0].message}`);
+    }
+
+    const amountValidation = TokenAmountSchema.safeParse(amount);
+    if (!amountValidation.success) {
+      return err(`Invalid amount: ${amountValidation.error.errors[0].message}`);
+    }
+
     if (!this.signer) {
       return err('No signer configured - cannot burn');
     }
@@ -194,67 +280,104 @@ export class ERC20Adapter implements ITokenAdapter {
       const signerAddress = await this.signer.getAddress();
 
       let tx;
-      if (from.toLowerCase() === signerAddress.toLowerCase()) {
-        tx = await this.contract.burn(amount);
+      if (fromValidation.data === signerAddress.toLowerCase()) {
+        tx = await this.contract.burn(amountValidation.data);
       } else {
-        tx = await this.contract.burnFrom(from, amount);
+        tx = await this.contract.burnFrom(fromValidation.data, amountValidation.data);
       }
 
       const receipt = await tx.wait();
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Burn failed: ${error}`);
+      return err(`Burn failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
    * Freeze an account
+   *
+   * @param target - Address to freeze
+   * @returns Transaction receipt or error
    */
   async freeze(target: string): Promise<Result<TransactionReceipt, string>> {
+    const targetValidation = EthereumAddressSchema.safeParse(target);
+    if (!targetValidation.success) {
+      return err(`Invalid address: ${targetValidation.error.errors[0].message}`);
+    }
+
     if (!this.signer) {
       return err('No signer configured - cannot freeze');
     }
 
     try {
-      const tx = await this.contract.freeze(target);
+      const tx = await this.contract.freeze(targetValidation.data);
       const receipt = await tx.wait();
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Freeze failed: ${error}`);
+      return err(`Freeze failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
    * Unfreeze an account
+   *
+   * @param target - Address to unfreeze
+   * @returns Transaction receipt or error
    */
   async unfreeze(target: string): Promise<Result<TransactionReceipt, string>> {
+    const targetValidation = EthereumAddressSchema.safeParse(target);
+    if (!targetValidation.success) {
+      return err(`Invalid address: ${targetValidation.error.errors[0].message}`);
+    }
+
     if (!this.signer) {
       return err('No signer configured - cannot unfreeze');
     }
 
     try {
-      const tx = await this.contract.unfreeze(target);
+      const tx = await this.contract.unfreeze(targetValidation.data);
       const receipt = await tx.wait();
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Unfreeze failed: ${error}`);
+      return err(`Unfreeze failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
    * Get balance for an address
+   *
+   * @param address - Address to query
+   * @returns Token balance as string
+   * @throws ValidationError if address is invalid
    */
   async balanceOf(address: string): Promise<string> {
-    const balance = await this.contract.balanceOf(address) as bigint;
+    const validation = EthereumAddressSchema.safeParse(address);
+    if (!validation.success) {
+      throw new ValidationError(`Invalid address: ${validation.error.errors[0].message}`, {
+        field: 'address',
+      });
+    }
+
+    const balance = await this.contract.balanceOf(validation.data) as bigint;
     return balance.toString();
   }
 
   /**
    * Check if an address is frozen
+   *
+   * @param address - Address to check
+   * @returns True if frozen, false otherwise
    */
   async isFrozen(address: string): Promise<boolean> {
+    const validation = EthereumAddressSchema.safeParse(address);
+    if (!validation.success) {
+      throw new ValidationError(`Invalid address: ${validation.error.errors[0].message}`, {
+        field: 'address',
+      });
+    }
+
     try {
-      return await this.contract.isFrozen(address) as boolean;
+      return await this.contract.isFrozen(validation.data) as boolean;
     } catch {
       // Contract might not have isFrozen function
       return false;
@@ -263,29 +386,62 @@ export class ERC20Adapter implements ITokenAdapter {
 
   /**
    * Get allowance
+   *
+   * @param owner - Token owner address
+   * @param spender - Spender address
+   * @returns Allowance amount as string
+   * @throws ValidationError if addresses are invalid
    */
   async allowance(owner: string, spender: string): Promise<string> {
-    const allowance = await this.contract.allowance(owner, spender) as bigint;
+    const ownerValidation = EthereumAddressSchema.safeParse(owner);
+    if (!ownerValidation.success) {
+      throw new ValidationError(`Invalid owner address: ${ownerValidation.error.errors[0].message}`, {
+        field: 'owner',
+      });
+    }
+
+    const spenderValidation = EthereumAddressSchema.safeParse(spender);
+    if (!spenderValidation.success) {
+      throw new ValidationError(`Invalid spender address: ${spenderValidation.error.errors[0].message}`, {
+        field: 'spender',
+      });
+    }
+
+    const allowance = await this.contract.allowance(ownerValidation.data, spenderValidation.data) as bigint;
     return allowance.toString();
   }
 
   /**
    * Approve spender
+   *
+   * @param spender - Address to approve
+   * @param amount - Amount to approve (can be 0 to revoke)
+   * @returns Transaction receipt or error
    */
   async approve(
     spender: string,
     amount: string
   ): Promise<Result<TransactionReceipt, string>> {
+    const spenderValidation = EthereumAddressSchema.safeParse(spender);
+    if (!spenderValidation.success) {
+      return err(`Invalid spender address: ${spenderValidation.error.errors[0].message}`);
+    }
+
+    const amountValidation = TokenAmountOrZeroSchema.safeParse(amount);
+    if (!amountValidation.success) {
+      return err(`Invalid amount: ${amountValidation.error.errors[0].message}`);
+    }
+
     if (!this.signer) {
       return err('No signer configured - cannot approve');
     }
 
     try {
-      const tx = await this.contract.approve(spender, amount);
+      const tx = await this.contract.approve(spenderValidation.data, amountValidation.data);
       const receipt = await tx.wait();
       return ok(this.formatReceipt(receipt));
     } catch (error) {
-      return err(`Approve failed: ${error}`);
+      return err(`Approve failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

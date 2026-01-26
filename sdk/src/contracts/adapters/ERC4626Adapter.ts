@@ -20,6 +20,13 @@ import type {
 } from '../../core/interfaces.js';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import { ContractError, ValidationError, ErrorCode } from '../../errors/index.js';
+import {
+  ERC4626AdapterConfigSchema,
+  EthereumAddressSchema,
+  TokenAmountSchema,
+  validateOrThrow,
+} from '../validation.js';
 
 /**
  * ERC-4626 Tokenized Vault ABI
@@ -207,59 +214,86 @@ export class ERC4626Adapter implements ITokenAdapter {
 
   /**
    * Create and initialize an ERC4626Adapter
+   *
+   * @param config - Adapter configuration
+   * @returns Initialized ERC4626Adapter
+   * @throws ValidationError if config is invalid
+   * @throws ContractError if contract initialization fails
    */
   static async create(config: ERC4626AdapterConfig): Promise<ERC4626Adapter> {
-    const provider = new ethers.JsonRpcProvider(config.providerUrl);
-    const abi = config.abi || ERC4626_ABI;
+    // Validate configuration
+    const validatedConfig = validateOrThrow(
+      ERC4626AdapterConfigSchema,
+      config,
+      'ERC4626Adapter config'
+    );
 
-    let signer: ethers.Wallet | null = null;
-    let contract: ethers.Contract;
+    const provider = new ethers.JsonRpcProvider(validatedConfig.providerUrl);
+    const abi = validatedConfig.abi || ERC4626_ABI;
 
-    if (config.privateKey) {
-      signer = new ethers.Wallet(config.privateKey, provider);
-      contract = new ethers.Contract(config.contractAddress, abi, signer);
-    } else {
-      contract = new ethers.Contract(config.contractAddress, abi, provider);
+    try {
+      let signer: ethers.Wallet | null = null;
+      let contract: ethers.Contract;
+
+      if (validatedConfig.privateKey) {
+        signer = new ethers.Wallet(validatedConfig.privateKey, provider);
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, signer);
+      } else {
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, provider);
+      }
+
+      // Fetch vault token info
+      const [name, symbol, decimals, totalSupply, assetAddress] = await Promise.all([
+        contract.name() as Promise<string>,
+        contract.symbol() as Promise<string>,
+        contract.decimals() as Promise<number>,
+        contract.totalSupply() as Promise<bigint>,
+        contract.asset() as Promise<string>,
+      ]);
+
+      // Get underlying asset info
+      const assetContractInstance = new ethers.Contract(
+        assetAddress,
+        ERC20_ABI,
+        signer || provider
+      );
+      const assetDecimals = (await assetContractInstance.decimals()) as number;
+
+      const tokenInfo: TokenInfo = {
+        address: validatedConfig.contractAddress,
+        name,
+        symbol,
+        decimals: Number(decimals),
+        totalSupply: totalSupply.toString(),
+        tokenType: 'ERC4626',
+      };
+
+      const pluginId = `erc4626-${validatedConfig.contractAddress.toLowerCase().slice(0, 8)}`;
+
+      return new ERC4626Adapter(
+        pluginId,
+        tokenInfo,
+        provider,
+        contract,
+        signer,
+        assetContractInstance,
+        assetAddress,
+        Number(assetDecimals)
+      );
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ContractError(
+        `Failed to initialize ERC4626 adapter: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          code: ErrorCode.CONTRACT_NOT_DEPLOYED,
+          contractAddress: validatedConfig.contractAddress,
+          method: 'create',
+          cause: error instanceof Error ? error : undefined,
+        }
+      );
     }
-
-    // Fetch vault token info
-    const [name, symbol, decimals, totalSupply, assetAddress] = await Promise.all([
-      contract.name() as Promise<string>,
-      contract.symbol() as Promise<string>,
-      contract.decimals() as Promise<number>,
-      contract.totalSupply() as Promise<bigint>,
-      contract.asset() as Promise<string>,
-    ]);
-
-    // Get underlying asset info
-    const assetContractInstance = new ethers.Contract(
-      assetAddress,
-      ERC20_ABI,
-      signer || provider
-    );
-    const assetDecimals = (await assetContractInstance.decimals()) as number;
-
-    const tokenInfo: TokenInfo = {
-      address: config.contractAddress,
-      name,
-      symbol,
-      decimals: Number(decimals),
-      totalSupply: totalSupply.toString(),
-      tokenType: 'ERC4626',
-    };
-
-    const pluginId = `erc4626-${config.contractAddress.toLowerCase().slice(0, 8)}`;
-
-    return new ERC4626Adapter(
-      pluginId,
-      tokenInfo,
-      provider,
-      contract,
-      signer,
-      assetContractInstance,
-      assetAddress,
-      Number(assetDecimals)
-    );
   }
 
   // ============================================================================

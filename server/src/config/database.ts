@@ -25,7 +25,9 @@ let sqliteDb: Database.Database | null = null;
 let db: ReturnType<typeof drizzlePg<typeof pgSchema>> | ReturnType<typeof drizzleSqlite<typeof sqliteSchema>>;
 
 // Re-export schema tables (use SQLite or PostgreSQL based on mode)
-// For PostgreSQL mode, export all tables from pgSchema
+// Cast to any for SQLite to avoid type conflicts at runtime
+const activeSchema = DB_MODE === 'postgresql' ? pgSchema : (sqliteSchema as typeof pgSchema);
+
 export const {
   // IAM
   orgs, users, roles, userRoles, apiKeys, oauthClients,
@@ -55,7 +57,7 @@ export const {
   sessions, chainDeployments, tokenBalances,
   // Idempotency & Event Bus
   idempotencyKeys, eventBusQueue,
-} = DB_MODE === 'postgresql' ? pgSchema : (pgSchema as any); // SQLite schema needs updating
+} = activeSchema;
 
 // Get schema based on mode
 export const schema = DB_MODE === 'postgresql' ? pgSchema : sqliteSchema;
@@ -257,6 +259,352 @@ function initSqliteSchema(database: Database.Database) {
       created_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      settings TEXT DEFAULT '{}',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT,
+      hash TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      name TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      permissions TEXT DEFAULT '[]',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS user_roles (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      client_id TEXT NOT NULL UNIQUE,
+      client_secret_hash TEXT NOT NULL,
+      redirect_uris TEXT DEFAULT '[]',
+      scopes TEXT DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS investors (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      external_id TEXT,
+      type TEXT NOT NULL DEFAULT 'individual',
+      name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      jurisdiction TEXT,
+      kyc_status TEXT NOT NULL DEFAULT 'pending',
+      kyc_verified_at TEXT,
+      kyc_expires_at TEXT,
+      accreditation_status TEXT DEFAULT 'none',
+      accreditation_verified_at TEXT,
+      risk_score INTEGER,
+      tax_id TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS investor_wallets (
+      id TEXT PRIMARY KEY,
+      investor_id TEXT NOT NULL REFERENCES investors(id) ON DELETE CASCADE,
+      address TEXT NOT NULL,
+      chain_id INTEGER NOT NULL,
+      is_primary INTEGER DEFAULT 0,
+      verified INTEGER DEFAULT 0,
+      verified_at TEXT,
+      label TEXT,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS kyc_sessions (
+      id TEXT PRIMARY KEY,
+      investor_id TEXT NOT NULL REFERENCES investors(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL,
+      external_session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS policies (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS policy_versions (
+      id TEXT PRIMARY KEY,
+      policy_id TEXT NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL DEFAULT 1,
+      rules TEXT NOT NULL,
+      hash TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      activated_at TEXT,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS decisions (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      policy_version_id TEXT REFERENCES policy_versions(id),
+      type TEXT NOT NULL,
+      subject_type TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      result TEXT NOT NULL,
+      reasons TEXT DEFAULT '[]',
+      inputs_hash TEXT,
+      decision_hash TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS token_tranches (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      supply TEXT NOT NULL DEFAULT '0',
+      issued_supply TEXT DEFAULT '0',
+      locked_until TEXT,
+      restrictions TEXT DEFAULT '{}',
+      vesting_schedule TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS issuances (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      tranche_id TEXT REFERENCES token_tranches(id),
+      investor_id TEXT NOT NULL REFERENCES investors(id),
+      wallet_address TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      tx_hash TEXT,
+      block_number INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reason TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      confirmed_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS redemptions (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      investor_id TEXT NOT NULL REFERENCES investors(id),
+      wallet_address TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      tx_hash TEXT,
+      block_number INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reason TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT,
+      confirmed_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS transfers (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      from_address TEXT NOT NULL,
+      to_address TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      tx_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS settlements (
+      id TEXT PRIMARY KEY,
+      transfer_id TEXT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      settled_at TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS dld_titles (
+      id TEXT PRIMARY KEY,
+      external_id TEXT NOT NULL,
+      asset_id TEXT REFERENCES assets(id),
+      status TEXT NOT NULL DEFAULT 'pending',
+      data TEXT DEFAULT '{}',
+      created_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS dld_events (
+      id TEXT PRIMARY KEY,
+      title_id TEXT NOT NULL REFERENCES dld_titles(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      data TEXT DEFAULT '{}',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS dld_sync_jobs (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'pending',
+      started_at TEXT,
+      completed_at TEXT,
+      error TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS ledger_positions (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      investor_id TEXT NOT NULL REFERENCES investors(id),
+      wallet_address TEXT NOT NULL,
+      balance TEXT NOT NULL DEFAULT '0',
+      locked_balance TEXT DEFAULT '0',
+      last_movement_at TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS ledger_events (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      from_address TEXT,
+      to_address TEXT,
+      wallet_address TEXT,
+      amount TEXT NOT NULL,
+      tx_hash TEXT,
+      block_number INTEGER,
+      log_index INTEGER,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS cap_table_snapshots (
+      id TEXT PRIMARY KEY,
+      token_id TEXT NOT NULL REFERENCES tokens(id) ON DELETE CASCADE,
+      snapshot_at TEXT NOT NULL,
+      data TEXT NOT NULL,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS webhook_endpoints (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      events TEXT DEFAULT '[]',
+      secret TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id TEXT PRIMARY KEY,
+      endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER DEFAULT 0,
+      last_attempt_at TEXT,
+      response TEXT,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      org_id TEXT REFERENCES orgs(id) ON DELETE SET NULL,
+      actor_id TEXT,
+      actor_type TEXT NOT NULL,
+      action TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      description TEXT,
+      metadata TEXT DEFAULT '{}',
+      prev_hash TEXT,
+      entry_hash TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      id TEXT PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      org_id TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      response TEXT,
+      status_code INTEGER,
+      expires_at TEXT NOT NULL,
+      created_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS event_bus_queue (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      topic TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      retries INTEGER DEFAULT 0,
+      max_retries INTEGER DEFAULT 3,
+      process_after TEXT,
+      processed_at TEXT,
+      error TEXT,
+      created_at TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_api_keys_org ON api_keys(org_id);
     CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix);
     CREATE INDEX IF NOT EXISTS idx_tokens_org ON tokens(org_id);
@@ -268,6 +616,20 @@ function initSqliteSchema(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_assets_issuer ON assets(issuer_id);
     CREATE INDEX IF NOT EXISTS idx_events_asset ON events(asset_id);
     CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+    CREATE INDEX IF NOT EXISTS idx_investors_org ON investors(org_id);
+    CREATE INDEX IF NOT EXISTS idx_investors_kyc ON investors(kyc_status);
+    CREATE INDEX IF NOT EXISTS idx_issuances_token ON issuances(token_id);
+    CREATE INDEX IF NOT EXISTS idx_redemptions_token ON redemptions(token_id);
+    CREATE INDEX IF NOT EXISTS idx_transfers_token ON transfers(token_id);
+    CREATE INDEX IF NOT EXISTS idx_ledger_positions_token ON ledger_positions(token_id);
+    CREATE INDEX IF NOT EXISTS idx_ledger_events_token ON ledger_events(token_id);
+
+    -- Seed test data for dev mode
+    INSERT OR IGNORE INTO orgs (id, name, slug, status, settings, risk_profile, metadata, created_at, updated_at)
+    VALUES ('test-org', 'Test Organization', 'test-org', 'active', '{}', '{}', '{}', datetime('now'), datetime('now'));
+
+    INSERT OR IGNORE INTO parties (id, name, type, roles, jurisdiction, verification_level, kyc_verified, metadata, created_at, updated_at)
+    VALUES ('test-party', 'Test Party', 'INSTITUTION', '[]', 'US', 'BASIC', 1, '{}', datetime('now'), datetime('now'));
   `);
 }
 
