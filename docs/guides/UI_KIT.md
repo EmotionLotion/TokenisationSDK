@@ -357,4 +357,4 @@ interface MyComponentProps {
 ## Related Documents
 
 - [SDK Usage](./SDK_USAGE.md) - SDK API guide
-- [Installation](./INSTALLATION.md) - Setup instructions
+- [Installation](../getting-started/INSTALLATION.md) - Setup instructions

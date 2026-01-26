@@ -213,5 +213,5 @@ ls server/dev.db
 ## Next Steps
 
 - [Quick Start](./QUICKSTART.md) - Tokenize your first asset
-- [SDK Usage](./SDK_USAGE.md) - Complete API guide
-- [Server Setup](./SERVER_SETUP.md) - Configure the API server
+- [SDK Usage](../guides/SDK_USAGE.md) - Complete API guide
+- [Server Setup](../guides/SERVER_SETUP.md) - Configure the API server

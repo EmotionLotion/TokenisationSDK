@@ -97,10 +97,9 @@ npm run demo:carbon    # Carbon credits
 npm run demo:loyalty   # Loyalty points
 ```
 
-## Documentation
+## Next Steps
 
-- [Full MVP Showcase](./MVP_SHOWCASE.md) - Complete feature demonstration
 - [First Project Tutorial](./FIRST_PROJECT.md) - Step-by-step walkthrough
-- [SDK Usage Guide](./SDK_USAGE.md) - Complete API guide
+- [MVP Showcase](../guides/MVP_SHOWCASE.md) - Complete feature demonstration
+- [SDK Usage Guide](../guides/SDK_USAGE.md) - Complete API guide
 - [Architecture Overview](../architecture/OVERVIEW.md) - System design
-- [Executive Summary](../business/EXECUTIVE_SUMMARY.md) - Business overview

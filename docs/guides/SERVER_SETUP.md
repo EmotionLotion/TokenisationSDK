@@ -326,6 +326,6 @@ CORS_ORIGIN=http://localhost:5173,http://localhost:3000
 
 ## Related Documents
 
-- [REST API Reference](../reference/REST_API.md) - Full endpoint documentation
-- [Installation](./INSTALLATION.md) - Initial setup
+- [REST API Reference](../api/REST_API.md) - Full endpoint documentation
+- [Installation](../getting-started/INSTALLATION.md) - Initial setup
 - [Architecture](../architecture/OVERVIEW.md) - System design

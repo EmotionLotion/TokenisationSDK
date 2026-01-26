@@ -228,4 +228,4 @@ describe('Transfer', () => {
 ## Related Documents
 
 - [Architecture Overview](./OVERVIEW.md) - System design
-- [SDK API Reference](../reference/SDK_API.md) - Full API docs
+- [SDK API Reference](../api/SDK_API.md) - Full API docs

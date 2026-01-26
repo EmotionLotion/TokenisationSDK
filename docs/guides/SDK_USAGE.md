@@ -496,7 +496,7 @@ function RewardTracker() {
 
 ## Related Documents
 
-- [SDK API Reference](../reference/SDK_API.md) - Full API documentation
+- [SDK API Reference](../api/SDK_API.md) - Full API documentation
 - [Plugin System](../architecture/PLUGINS.md) - Custom plugins
 - [Lifecycle Engine](../architecture/LIFECYCLE.md) - State machine details
 - [UI Kit Guide](./UI_KIT.md) - React component library

@@ -325,9 +325,9 @@ Events: 7
 
 ## Next Steps
 
-- [SDK Usage Guide](./SDK_USAGE.md) - Complete API reference
-- [UI Kit Guide](./UI_KIT.md) - Build a React interface
-- [Server Setup](./SERVER_SETUP.md) - Add persistence
+- [SDK Usage Guide](../guides/SDK_USAGE.md) - Complete API reference
+- [UI Kit Guide](../guides/UI_KIT.md) - Build a React interface
+- [Server Setup](../guides/SERVER_SETUP.md) - Add persistence
 - [Architecture](../architecture/OVERVIEW.md) - System design
 
 ## Challenge: Try These Extensions
