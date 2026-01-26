@@ -53,8 +53,43 @@ export * from './AssetAbstraction.js';
 // Observability (Logging, Metrics, Tracing)
 export * from './Observability.js';
 
-// Retry & Error Handling
-export * from './Retry.js';
+// Retry & Error Handling (base utilities)
+export {
+  retry,
+  retryWithResult,
+  isRetryableError,
+  CircuitOpenError,
+  withRetry,
+  debounceAsync,
+  throttleAsync,
+  type RetryOptions,
+  type RetryResult,
+  type CircuitBreakerOptions,
+} from './Retry.js';
 
 // Disaster Recovery & Safe-Fail
 export * from './DisasterRecovery.js';
+
+// Production Infrastructure - Provider Resilience
+// Note: These are more specialized than the base Retry.js utilities
+export {
+  // Circuit Breaker with provider-specific features
+  CircuitBreaker,
+  type CircuitState,
+  type CircuitBreakerConfig,
+  // Resilient HTTP client with fetch support
+  ResilientClient,
+  type ResilientClientConfig,
+  type RetryConfig,
+  type ExecuteOptions,
+  // Factory functions for specific provider types
+  createPaymentResilientClient,
+  createKYCResilientClient,
+  createBlockchainResilientClient,
+} from './Resilience.js';
+
+// Idempotency Layer
+export * from './Idempotency.js';
+
+// Saga/Transaction Coordinator
+export * from './Saga.js';

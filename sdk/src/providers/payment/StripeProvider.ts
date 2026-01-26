@@ -28,6 +28,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import {
+  ResilientClient,
+  createPaymentResilientClient,
+} from '../../core/Resilience.js';
+import { verifyStripeSignature } from '../../utils/crypto.js';
 import type {
   IPaymentProvider,
   PaymentMethodType,
@@ -164,6 +169,7 @@ export class StripeProvider implements IPaymentProvider {
   private readonly baseUrl: string;
   private readonly platformFeeBps: number;
   private readonly connectedAccountId?: string;
+  private readonly resilient: ResilientClient;
 
   constructor(config: StripeProviderConfig) {
     this.secretKey = config.secretKey;
@@ -172,6 +178,7 @@ export class StripeProvider implements IPaymentProvider {
     this.baseUrl = config.baseUrl || 'https://api.stripe.com/v1';
     this.platformFeeBps = config.platformFeeBps || 0;
     this.connectedAccountId = config.connectedAccountId;
+    this.resilient = createPaymentResilientClient('stripe');
   }
 
   // ============================================================================
@@ -551,12 +558,22 @@ export class StripeProvider implements IPaymentProvider {
       headers['Stripe-Account'] = this.connectedAccountId;
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body?.toString(),
-    });
+    // Use resilient client with retry, circuit breaker, and timeout
+    const fetchResult = await this.resilient.fetch(
+      url,
+      {
+        method,
+        headers,
+        body: body?.toString(),
+      },
+      { operationName: `stripe:${method}:${path}` }
+    );
 
+    if (!fetchResult.success) {
+      return err(fetchResult.error);
+    }
+
+    const response = fetchResult.data;
     const data = await response.json();
 
     if (!response.ok) {
@@ -568,45 +585,14 @@ export class StripeProvider implements IPaymentProvider {
   }
 
   private async verifyWebhookSignature(payload: string, signature: string): Promise<boolean> {
-    // Stripe webhook signature verification
-    // Format: t=timestamp,v1=signature
-    const parts = signature.split(',');
-    const timestamp = parts.find(p => p.startsWith('t='))?.slice(2);
-    const sig = parts.find(p => p.startsWith('v1='))?.slice(3);
-
-    if (!timestamp || !sig) {
-      return false;
-    }
-
-    // Check timestamp is within 5 minutes
-    const eventTime = parseInt(timestamp, 10);
-    const now = Math.floor(Date.now() / 1000);
-    if (Math.abs(now - eventTime) > 300) {
-      return false;
-    }
-
-    // Compute expected signature
-    const signedPayload = `${timestamp}.${payload}`;
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(this.webhookSecret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-
-    const signatureBytes = await crypto.subtle.sign(
-      'HMAC',
-      key,
-      encoder.encode(signedPayload)
-    );
-
-    const expectedSig = Array.from(new Uint8Array(signatureBytes))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    return sig === expectedSig;
+    // Use cross-platform crypto utility for webhook verification
+    // Works in both Node.js and browser environments
+    return verifyStripeSignature({
+      payload,
+      signature,
+      secret: this.webhookSecret,
+      maxAgeSeconds: 300, // 5 minutes
+    });
   }
 
   private mapPaymentMethods(methods: PaymentMethodType[]): string[] {

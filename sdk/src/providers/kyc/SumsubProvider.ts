@@ -11,6 +11,10 @@ import { createHmac } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import {
+  ResilientClient,
+  createKYCResilientClient,
+} from '../../core/Resilience.js';
 import type {
   IKYCProvider,
   KYCLevel,
@@ -148,6 +152,7 @@ export class SumsubProvider implements IKYCProvider {
   private config: Required<Pick<SumsubProviderConfig, 'appToken' | 'secretKey' | 'baseUrl' | 'timeout'>> &
     SumsubProviderConfig;
   private levelMapping: Record<KYCLevel, string>;
+  private resilient: ResilientClient;
 
   constructor(config: SumsubProviderConfig) {
     if (!config.appToken || !config.secretKey) {
@@ -161,6 +166,7 @@ export class SumsubProvider implements IKYCProvider {
     };
 
     this.levelMapping = config.levelMapping || DEFAULT_LEVEL_MAPPING;
+    this.resilient = createKYCResilientClient('sumsub');
   }
 
   // ==========================================================================
@@ -482,11 +488,10 @@ export class SumsubProvider implements IKYCProvider {
 
     const url = `${this.config.baseUrl}${path}`;
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
-
-      const response = await fetch(url, {
+    // Use resilient client with retry, circuit breaker, and timeout
+    const fetchResult = await this.resilient.fetch(
+      url,
+      {
         method,
         headers: {
           'Accept': 'application/json',
@@ -496,24 +501,23 @@ export class SumsubProvider implements IKYCProvider {
           'X-App-Access-Ts': timestamp,
         },
         body: bodyString || undefined,
-        signal: controller.signal,
-      });
+      },
+      { operationName: `sumsub:${method}:${path}` }
+    );
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        return err(`Sumsub API error ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json() as T;
-      return ok(data);
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return err('Request timeout');
-      }
-      return err(`Request failed: ${error instanceof Error ? error.message : String(error)}`);
+    if (!fetchResult.success) {
+      return err(fetchResult.error);
     }
+
+    const response = fetchResult.data;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return err(`Sumsub API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json() as T;
+    return ok(data);
   }
 
   /**

@@ -27,6 +27,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import {
+  ResilientClient,
+  createPaymentResilientClient,
+} from '../../core/Resilience.js';
 import type {
   IPaymentProvider,
   PaymentMethodType,
@@ -199,6 +203,7 @@ export class CircleProvider implements IPaymentProvider {
   private readonly walletId?: string;
   private readonly supportedChains: CircleChain[];
   private readonly defaultChain: CircleChain;
+  private readonly resilient: ResilientClient;
 
   // In-memory storage for demo (production would use database)
   private intents = new Map<string, PaymentIntent>();
@@ -213,6 +218,7 @@ export class CircleProvider implements IPaymentProvider {
     this.walletId = config.walletId;
     this.supportedChains = config.supportedChains || ['ETH', 'MATIC', 'ARB', 'BASE'];
     this.defaultChain = config.defaultChain || 'ETH';
+    this.resilient = createPaymentResilientClient('circle');
   }
 
   // ============================================================================
@@ -645,12 +651,22 @@ export class CircleProvider implements IPaymentProvider {
       'Content-Type': 'application/json',
     };
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    // Use resilient client with retry, circuit breaker, and timeout
+    const fetchResult = await this.resilient.fetch(
+      url,
+      {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      },
+      { operationName: `circle:${method}:${path}` }
+    );
 
+    if (!fetchResult.success) {
+      return err(fetchResult.error);
+    }
+
+    const response = fetchResult.data;
     const data = await response.json();
 
     if (!response.ok) {
