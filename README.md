@@ -8,32 +8,140 @@
 ![Solidity](https://img.shields.io/badge/Solidity-0.8.22-363636.svg)
 ![ERC-3643](https://img.shields.io/badge/ERC--3643-Compliant-green.svg)
 
-**Enterprise-grade SDK for tokenizing real-world assets with built-in regulatory compliance.**
+**The Stripe of Real-World Asset Tokenization**
 
 [Quick Start](#quick-start) |
 [SDK Usage](#sdk-usage) |
 [API Server](#api-server) |
 [Smart Contracts](#smart-contracts) |
-[Architecture](#architecture)
+[Documentation](#documentation)
 
 </div>
 
 ---
 
-## What is This?
+## The Problem
 
-The Tokenisation SDK is a complete toolkit for building compliant tokenized asset platforms. It implements the **ERC-3643 (T-REX)** standard for security tokens, providing institutional-grade compliance out of the box.
+Building a compliant tokenized asset platform traditionally requires:
 
-> **New to tokenization?** Start with [Core Concepts](docs/CONCEPTS.md) to understand what asset tokenization is and why it matters. See the [Glossary](docs/GLOSSARY.md) for term definitions.
+| Component | Cost | Time |
+|-----------|------|------|
+| Compliance infrastructure (KYC/AML) | $200K - $500K | 3-6 months |
+| Smart contract development | $100K - $300K | 2-4 months |
+| Multi-sig & governance | $50K - $100K | 1-2 months |
+| Backend API & database | $100K - $200K | 2-3 months |
+| **Total** | **$450K - $1.1M** | **8-15 months** |
 
-### Key Capabilities
+## The Solution
 
-- **ERC-3643 Compliant** - Full T-REX implementation with identity registry, compliance modules, and claim-based verification
-- **Multi-Standard Support** - ERC-20, ERC-721, ERC-1155, ERC-1410, ERC-4626, Soulbound Tokens
-- **Regulatory Ready** - KYC/AML verification, jurisdiction rules, investor accreditation, transfer restrictions
-- **Full-Stack Solution** - TypeScript SDK + REST API Server + React UI + Smart Contracts
-- **Multi-Chain** - Ethereum, Polygon, Base, Arbitrum, and testnets
-- **Production Ready** - UUPS upgradeable proxies, multi-sig governance, rate limiting, idempotency
+This SDK gives you everything out of the box:
+
+```typescript
+import { ApiClient, RightType } from '@tokenisation/sdk';
+
+const client = new ApiClient({ apiKey: 'sk_live_xxx' });
+
+// 1. Create an asset (real estate, securities, commodities, etc.)
+const asset = await client.assets.create({
+  name: 'Marina Heights Tower',
+  rightType: RightType.OWNERSHIP,
+  jurisdiction: { countryCode: 'AE' }
+});
+
+// 2. Onboard an investor (KYC, wallet linking)
+const investor = await client.investors.create({ email: 'investor@example.com', jurisdiction: 'US' });
+await client.investors.approveKyc(investor.id);
+
+// 3. Create & deploy a compliant token
+const token = await client.tokens.create({ name: 'MHT', symbol: 'MHT', chainId: 8453, assetId: asset.id });
+await client.tokens.deploy(token.id);
+
+// 4. Issue tokens (with duplicate prevention)
+await client.tokens.issue(token.id, { investorId: investor.id, amount: '1000', idempotencyKey: 'issue-001' });
+
+// 5. Transfer with automatic compliance checks
+await client.transfers.create({ tokenId: token.id, fromWallet: '0x...', toWallet: '0x...', amount: '100', idempotencyKey: 'txfr-001' });
+```
+
+**Time to first token: Hours, not months.**
+
+---
+
+## What's Included
+
+### TypeScript SDK — Stripe-like Developer Experience
+
+```
+client.projects    → Project management
+client.assets      → Asset tokenization (real estate, securities, commodities)
+client.investors   → Investor onboarding, KYC, wallet management
+client.tokens      → Token lifecycle (create, deploy, issue, redeem, pause, freeze)
+client.transfers   → Compliant transfers with automatic validation
+client.compliance  → Policy engine (country rules, holder limits, lockups)
+```
+
+- **Zod validation** on all inputs — catch errors before they hit the server
+- **Idempotency keys** on critical operations — no duplicate issuances or transfers
+- **Full TypeScript** — autocomplete everything, catch bugs at compile time
+
+### REST API Server — Production-Ready Backend
+
+- **25 route files** covering the complete tokenization lifecycle
+- **PostgreSQL + SQLite** — production and development databases
+- **Drizzle ORM** — type-safe database queries with transaction support
+- **Redis rate limiting** — distributed rate limiting across server instances
+- **JWT authentication** — secure API access with refresh tokens
+- **Dev mode bypass** — rapid development without auth complexity
+
+### Smart Contracts — Upgradeable & Governed
+
+| Contract | Purpose |
+|----------|---------|
+| `ComplianceTokenUpgradeable` | ERC-3643 token with UUPS proxy — upgrade without redeploying |
+| `TokenGovernor` | Multi-sig + timelock — no single key can upgrade contracts |
+| `IdentityRegistry` | On-chain investor identity — required for compliant transfers |
+| `ModularCompliance` | Pluggable rules — country whitelist, holder limits, lockups |
+
+**Governance parameters:**
+- 2-of-N multi-sig required for upgrades
+- 2-day timelock before execution
+- 7-day grace period for execution
+
+### React UI — Ready-to-Use Dashboard
+
+- Wallet connection (MetaMask, WalletConnect)
+- Asset management interface
+- Investor onboarding flows
+- Token issuance & transfer UI
+- Cap table visualization
+
+---
+
+## Why This Architecture?
+
+| Feature | Why It Matters |
+|---------|----------------|
+| **ERC-3643 (T-REX)** | The standard for compliant security tokens — transfers validate against identity registry |
+| **UUPS Proxy** | Fix bugs and add features without migrating tokens or losing state |
+| **Multi-sig Governance** | No single compromised key can upgrade contracts — requires 2+ approvals |
+| **Timelock** | 2-day delay gives stakeholders time to review and veto malicious upgrades |
+| **Idempotency** | Network retries won't cause duplicate token issuances or transfers |
+| **Redis Rate Limiting** | Distributed rate limiting works across multiple server instances |
+| **Zod Validation** | Invalid data rejected at SDK level before hitting the server |
+| **Database Transactions** | Multi-step operations (issue tokens + update supply) are atomic |
+
+---
+
+## Who Is This For?
+
+| User | Use Case |
+|------|----------|
+| **Developers** | Add tokenization to your app with a few API calls |
+| **Startups** | Launch a tokenization platform without $1M+ infrastructure |
+| **Enterprises** | Tokenize real estate, funds, or securities with built-in compliance |
+| **Fund Managers** | Issue fund tokens with automatic investor verification |
+
+> **New to tokenization?** Read [Core Concepts](docs/CONCEPTS.md) to understand what asset tokenization is, why it matters, and how the pieces fit together. See the [Glossary](docs/GLOSSARY.md) for term definitions.
 
 ---
 
