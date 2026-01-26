@@ -11,8 +11,10 @@ import {
   LifecycleState,
   VALID_TRANSITIONS,
   EventType,
+  ComplianceAction,
   type RightModel,
   type BaseEvent,
+  type PolicyDecision,
 } from './types.js';
 import type {
   ILifecycleEngine,
@@ -23,6 +25,8 @@ import type {
 } from './interfaces.js';
 import { EventStore } from './EventStore.js';
 import { PolicyEvaluator } from './PolicyEvaluator.js';
+import type { ComplianceEngine } from './ComplianceEngine.js';
+import type { DecisionReceipt } from './DecisionReceipt.js';
 
 /**
  * Asset state record stored by the engine
@@ -35,6 +39,16 @@ interface AssetStateRecord {
 }
 
 /**
+ * Extended state transition result with compliance receipt
+ */
+export interface ExtendedStateTransitionResult extends StateTransitionResult {
+  /** Compliance decision receipt (always present for audit trail) */
+  receipt?: DecisionReceipt;
+  /** The policy decision that was made */
+  decision?: PolicyDecision;
+}
+
+/**
  * LifecycleEngine implementation
  *
  * The core state machine that manages asset lifecycle transitions.
@@ -43,6 +57,7 @@ interface AssetStateRecord {
 export class LifecycleEngine implements ILifecycleEngine {
   private eventStore: IEventStore;
   private policyEvaluator: PolicyEvaluator;
+  private complianceEngine?: ComplianceEngine;
   private assetStates: Map<string, AssetStateRecord> = new Map();
   private guards: Map<string, TransitionGuard[]> = new Map();
 
@@ -52,6 +67,20 @@ export class LifecycleEngine implements ILifecycleEngine {
   ) {
     this.eventStore = eventStore || new EventStore();
     this.policyEvaluator = policyEvaluator || new PolicyEvaluator();
+  }
+
+  /**
+   * Set the compliance engine for mandatory compliance checks
+   */
+  setComplianceEngine(engine: ComplianceEngine): void {
+    this.complianceEngine = engine;
+  }
+
+  /**
+   * Get the compliance engine
+   */
+  getComplianceEngine(): ComplianceEngine | undefined {
+    return this.complianceEngine;
   }
 
   /**
@@ -167,10 +196,11 @@ export class LifecycleEngine implements ILifecycleEngine {
    * Request a state transition
    *
    * This is the main entry point for changing asset state.
+   * COMPLIANCE-FIRST: All transitions must pass compliance checks first.
    */
   async transition(
     request: StateTransitionRequest
-  ): Promise<StateTransitionResult> {
+  ): Promise<ExtendedStateTransitionResult> {
     const record = this.assetStates.get(request.assetId);
 
     // Check if asset exists
@@ -203,6 +233,29 @@ export class LifecycleEngine implements ILifecycleEngine {
       };
     }
 
+    // COMPLIANCE-FIRST: Evaluate compliance BEFORE any other checks
+    if (this.complianceEngine) {
+      const action = this.stateToComplianceAction(request.toState);
+      const { decision, receipt } = await this.complianceEngine.evaluate(action, {
+        assetId: request.assetId,
+        asset: record.asset,
+        actorId: request.actorId,
+        metadata: request.metadata,
+      });
+
+      // If compliance denied, return immediately with receipt
+      if (decision.result === 'DENY') {
+        return {
+          success: false,
+          previousState: request.fromState,
+          newState: request.fromState,
+          error: `Compliance denied: ${decision.violations.map((v) => v.message).join(', ')}`,
+          receipt,
+          decision,
+        };
+      }
+    }
+
     // Run transition guards
     const guardKey = `${request.fromState}->${request.toState}`;
     const guards = this.guards.get(guardKey) || [];
@@ -219,7 +272,7 @@ export class LifecycleEngine implements ILifecycleEngine {
       }
     }
 
-    // Evaluate policies
+    // Evaluate policies (legacy policy evaluator for backward compatibility)
     const policyResult = await this.policyEvaluator.evaluateStateRules(
       record.asset,
       request.toState
@@ -266,6 +319,23 @@ export class LifecycleEngine implements ILifecycleEngine {
       newState: request.toState,
       event,
     };
+  }
+
+  /**
+   * Map lifecycle state to compliance action
+   */
+  private stateToComplianceAction(state: LifecycleState): ComplianceAction {
+    switch (state) {
+      case LifecycleState.PENDING_VERIFICATION:
+        return ComplianceAction.ASSET_CREATE;
+      case LifecycleState.VERIFIED:
+        return ComplianceAction.ASSET_VERIFY;
+      case LifecycleState.ACTIVE:
+        return ComplianceAction.ASSET_ACTIVATE;
+      default:
+        // For other transitions, use a generic action
+        return ComplianceAction.ASSET_VERIFY;
+    }
   }
 
   /**

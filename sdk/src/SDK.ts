@@ -28,9 +28,12 @@ import {
   LifecycleState,
   RightType,
   TransferabilityMode,
+  ComplianceAction,
   type IEventStore,
   type RightModel,
   type Result,
+  type PolicyDecision,
+  type ComplianceContext,
   ok,
   err,
   // New extensibility modules
@@ -47,6 +50,11 @@ import {
   HookPriority,
   ChainService,
   type ChainConnectionConfig,
+  // Compliance-first architecture
+  ComplianceEngine,
+  type ComplianceEngineConfig,
+  type ComplianceResult,
+  type DecisionReceipt,
 } from './core/index.js';
 import {
   PluginRegistry,
@@ -216,6 +224,7 @@ export class TokenisationSDK {
   private eventStore: EventStore;
   private policyEvaluator: PolicyEvaluator;
   private chainService?: ChainService;
+  private _complianceEngine: ComplianceEngine;
 
   // Extension modules
   private _rightTypeRegistry: RightTypeRegistry;
@@ -292,6 +301,21 @@ export class TokenisationSDK {
     if (this.chainService) {
       this.complianceService.setChainService(this.chainService);
     }
+
+    // Initialize ComplianceEngine with plugins
+    this._complianceEngine = new ComplianceEngine({
+      jurisdictionPlugin: this.pluginRegistry.getJurisdiction('uae-jurisdiction') ||
+                          this.pluginRegistry.getJurisdiction('mock-jurisdiction'),
+      compliancePlugin: this.pluginRegistry.getCompliance('kyc-compliance') ||
+                        this.pluginRegistry.getCompliance('mock-compliance'),
+      policyEvaluator: this.policyEvaluator,
+      eventStore: this.eventStore,
+      issuerId: 'tokenisation-sdk',
+      strictMode: !this.config.useMockPlugins,
+    });
+
+    // Wire ComplianceEngine to LifecycleEngine
+    this.lifecycleEngine.setComplianceEngine(this._complianceEngine);
 
     // Initialize public interfaces
     this.assets = this.createAssetManager();
@@ -726,6 +750,54 @@ export class TokenisationSDK {
     return this.eventStore;
   }
 
+  /** Get the compliance engine for direct compliance operations */
+  get complianceEngine(): ComplianceEngine {
+    return this._complianceEngine;
+  }
+
+  // ============================================================================
+  // COMPLIANCE-FIRST METHODS
+  // ============================================================================
+
+  /**
+   * Evaluate an action for compliance
+   * This is the main entry point for compliance-gated operations.
+   */
+  async evaluateCompliance(
+    action: ComplianceAction,
+    context: ComplianceContext
+  ): Promise<ComplianceResult> {
+    return this._complianceEngine.evaluate(action, context);
+  }
+
+  /**
+   * Get decision receipts for an asset
+   */
+  getDecisionReceipts(assetId: string): DecisionReceipt[] {
+    return this._complianceEngine.getReceiptsForAsset(assetId);
+  }
+
+  /**
+   * Get a specific decision receipt
+   */
+  getDecisionReceipt(receiptId: string): DecisionReceipt | undefined {
+    return this._complianceEngine.getReceipt(receiptId);
+  }
+
+  /**
+   * Verify a decision receipt
+   */
+  verifyDecisionReceipt(receiptId: string): boolean {
+    return this._complianceEngine.verifyReceipt(receiptId);
+  }
+
+  /**
+   * Verify the entire receipt chain integrity
+   */
+  verifyReceiptChain(): { valid: boolean; issues: string[] } {
+    return this._complianceEngine.verifyChain();
+  }
+
   // ============================================================================
   // EXTENSION MODULES
   // ============================================================================
@@ -783,6 +855,9 @@ export {
   PartyRole,
   PartyType,
 
+  // Compliance-first types
+  ComplianceAction,
+
   // Extension modules
   HookPriority,
   DistributionType,
@@ -805,6 +880,13 @@ export type {
   CreatePartyParams,
   RightModel,
   Result,
+
+  // Compliance-first types
+  PolicyDecision,
+  ComplianceContext,
+  ComplianceResult,
+  ComplianceEngineConfig,
+  DecisionReceipt,
 
   // Extension types
   RightTypeBehavior,
@@ -835,4 +917,6 @@ export {
   CashFlowEngine,
   GovernanceEngine,
   EscrowEngine,
+  // Compliance-first classes
+  ComplianceEngine,
 };

@@ -122,6 +122,31 @@ export * from './plugins/index.js';
 // Services
 export * from './services/index.js';
 
+// Asset Abstraction Layer (institutional-friendly API, no ERC terminology)
+export {
+  AssetType,
+  InvestorClass,
+  LiquidityProfile,
+  FractionalizationType,
+  AssetDescriptorSchema,
+  resolveTokenStandard,
+  getAssetTypeDescription,
+  getJurisdictionInfo,
+} from './core/AssetAbstraction.js';
+export type {
+  AssetDescriptor,
+  IssuedAsset,
+  ResolvedTokenConfig,
+} from './core/AssetAbstraction.js';
+
+export {
+  AssetIssuanceService,
+  AssetIssuanceError,
+} from './services/AssetIssuanceService.js';
+export type {
+  AssetIssuanceServiceOptions,
+} from './services/AssetIssuanceService.js';
+
 // Contracts (adapters)
 export * from './contracts/index.js';
 

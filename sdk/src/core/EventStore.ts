@@ -3,6 +3,8 @@
  *
  * Records all state changes for auditability and state reconstruction.
  * MVP implementation uses in-memory storage; production would use PostgreSQL.
+ *
+ * Also stores DecisionReceipts for compliance audit trail.
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -10,11 +12,50 @@ import type { BaseEvent, EventType } from './types.js';
 import type { IEventStore, EventQueryOptions } from './interfaces.js';
 
 /**
+ * DecisionReceipt storage interface
+ */
+export interface StoredReceipt {
+  id: string;
+  decisionId: string;
+  action: string;
+  result: 'ALLOW' | 'DENY' | 'CONDITIONAL';
+  issuedAt: string;
+  subjectType: 'asset' | 'party' | 'transfer';
+  subjectId: string;
+  actorId: string;
+  summary: string;
+  reasons: string[];
+  decisionHash: string;
+  policyHash: string;
+  policyVersion: string;
+  signature: string;
+  previousReceiptHash?: string;
+}
+
+/**
+ * Receipt query options
+ */
+export interface ReceiptQueryOptions {
+  assetId?: string;
+  actorId?: string;
+  result?: 'ALLOW' | 'DENY' | 'CONDITIONAL';
+  fromTimestamp?: string;
+  toTimestamp?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
  * In-memory implementation of the Event Store
  */
 export class EventStore implements IEventStore {
   private events: Map<string, BaseEvent> = new Map();
   private eventsByAsset: Map<string, string[]> = new Map();
+
+  // Receipt storage
+  private receipts: Map<string, StoredReceipt> = new Map();
+  private receiptsByAsset: Map<string, string[]> = new Map();
+  private receiptsByActor: Map<string, string[]> = new Map();
 
   /**
    * Append an event to the store
@@ -127,6 +168,9 @@ export class EventStore implements IEventStore {
   clear(): void {
     this.events.clear();
     this.eventsByAsset.clear();
+    this.receipts.clear();
+    this.receiptsByAsset.clear();
+    this.receiptsByActor.clear();
   }
 
   /**
@@ -147,5 +191,126 @@ export class EventStore implements IEventStore {
       payload: params.payload,
       eventVersion: 1,
     };
+  }
+
+  // ============================================================================
+  // RECEIPT STORAGE METHODS
+  // ============================================================================
+
+  /**
+   * Store a decision receipt
+   */
+  async storeReceipt(receipt: StoredReceipt): Promise<void> {
+    this.receipts.set(receipt.id, receipt);
+
+    // Index by asset
+    if (receipt.subjectType === 'asset' || receipt.subjectType === 'transfer') {
+      const assetReceipts = this.receiptsByAsset.get(receipt.subjectId) || [];
+      assetReceipts.push(receipt.id);
+      this.receiptsByAsset.set(receipt.subjectId, assetReceipts);
+    }
+
+    // Index by actor
+    const actorReceipts = this.receiptsByActor.get(receipt.actorId) || [];
+    actorReceipts.push(receipt.id);
+    this.receiptsByActor.set(receipt.actorId, actorReceipts);
+  }
+
+  /**
+   * Get a receipt by ID
+   */
+  async getReceipt(receiptId: string): Promise<StoredReceipt | null> {
+    return this.receipts.get(receiptId) || null;
+  }
+
+  /**
+   * Query receipts with filters
+   */
+  async queryReceipts(options: ReceiptQueryOptions): Promise<StoredReceipt[]> {
+    let results: StoredReceipt[] = [];
+
+    // Start with asset or actor index if available
+    if (options.assetId) {
+      const receiptIds = this.receiptsByAsset.get(options.assetId) || [];
+      results = receiptIds
+        .map((id) => this.receipts.get(id))
+        .filter((r): r is StoredReceipt => r !== undefined);
+    } else if (options.actorId) {
+      const receiptIds = this.receiptsByActor.get(options.actorId) || [];
+      results = receiptIds
+        .map((id) => this.receipts.get(id))
+        .filter((r): r is StoredReceipt => r !== undefined);
+    } else {
+      results = Array.from(this.receipts.values());
+    }
+
+    // Filter by result
+    if (options.result) {
+      results = results.filter((r) => r.result === options.result);
+    }
+
+    // Filter by timestamp range
+    if (options.fromTimestamp) {
+      const fromDate = new Date(options.fromTimestamp).getTime();
+      results = results.filter(
+        (r) => new Date(r.issuedAt).getTime() >= fromDate
+      );
+    }
+
+    if (options.toTimestamp) {
+      const toDate = new Date(options.toTimestamp).getTime();
+      results = results.filter(
+        (r) => new Date(r.issuedAt).getTime() <= toDate
+      );
+    }
+
+    // Sort by timestamp (newest first)
+    results.sort(
+      (a, b) =>
+        new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime()
+    );
+
+    // Apply offset
+    if (options.offset && options.offset > 0) {
+      results = results.slice(options.offset);
+    }
+
+    // Apply limit
+    if (options.limit && options.limit > 0) {
+      results = results.slice(0, options.limit);
+    }
+
+    return results;
+  }
+
+  /**
+   * Get receipts for an asset
+   */
+  async getReceiptsByAsset(assetId: string): Promise<StoredReceipt[]> {
+    return this.queryReceipts({ assetId });
+  }
+
+  /**
+   * Get receipts for an actor
+   */
+  async getReceiptsByActor(actorId: string): Promise<StoredReceipt[]> {
+    return this.queryReceipts({ actorId });
+  }
+
+  /**
+   * Get all receipts
+   */
+  async getAllReceipts(): Promise<StoredReceipt[]> {
+    return Array.from(this.receipts.values()).sort(
+      (a, b) =>
+        new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime()
+    );
+  }
+
+  /**
+   * Get receipt count
+   */
+  async receiptCount(): Promise<number> {
+    return this.receipts.size;
   }
 }

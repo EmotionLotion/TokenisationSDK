@@ -2,6 +2,7 @@ import { db, schema } from '../config/database.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { createHash, createSign, createVerify, generateKeyPairSync } from 'crypto';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
+import * as auditService from './audit.service.js';
 
 const { policies, policyVersions, decisions, investors, dldTitles, tokens } = schema;
 
@@ -598,12 +599,16 @@ async function createDecision(input: CreateDecisionInput): Promise<DecisionOutpu
     .update(JSON.stringify(input.inputs, Object.keys(input.inputs).sort()))
     .digest('hex');
 
+  // Create decision hash (for receipt linkage)
+  const decisionHash = computeDecisionHash(input, inputsHash);
+
   // Create signature over decision (in production, use HSM)
   const decisionPayload = {
     type: input.type,
     result: input.result,
     reasons: input.reasons,
     inputsHash,
+    decisionHash,
     timestamp: new Date().toISOString(),
   };
 
@@ -625,6 +630,32 @@ async function createDecision(input: CreateDecisionInput): Promise<DecisionOutpu
     signedAt: new Date(),
   }).returning();
 
+  // Log to audit trail
+  try {
+    await auditService.log({
+      orgId: input.orgId,
+      actorId: input.inputs.fromInvestorId || input.inputs.toInvestorId || 'system',
+      actorType: input.inputs.fromInvestorId || input.inputs.toInvestorId ? 'user' : 'system',
+      action: input.result === 'allow' ? 'decision_approved' : 'decision_rejected',
+      resourceType: 'decision',
+      resourceId: decision.id,
+      description: `${input.type} decision: ${input.result}`,
+      metadata: {
+        decisionType: input.type,
+        result: input.result,
+        policyVersionId: input.policyVersionId,
+        reasons: input.reasons,
+        inputsHash: inputsHash,
+        decisionHash: decisionHash,
+        subjectRef: input.subjectRef,
+        subjectType: input.subjectType,
+      },
+    });
+  } catch (auditError) {
+    // Log audit failure but don't fail the decision
+    console.error('Failed to log compliance decision to audit trail:', auditError);
+  }
+
   return {
     id: decision.id,
     type: decision.type as DecisionType,
@@ -636,6 +667,25 @@ async function createDecision(input: CreateDecisionInput): Promise<DecisionOutpu
     signature: decision.signature || undefined,
     createdAt: decision.createdAt!,
   };
+}
+
+/**
+ * Compute a deterministic hash of the decision for receipt linkage
+ */
+function computeDecisionHash(input: CreateDecisionInput, inputsHash: string): string {
+  const payload = {
+    type: input.type,
+    result: input.result,
+    reasons: input.reasons.map(r => r.code),
+    inputsHash,
+    policyVersionId: input.policyVersionId || null,
+    subjectRef: input.subjectRef,
+    subjectType: input.subjectType,
+  };
+
+  return createHash('sha256')
+    .update(JSON.stringify(payload, Object.keys(payload).sort()))
+    .digest('hex');
 }
 
 export async function getDecision(id: string, orgId: string): Promise<DecisionOutput> {

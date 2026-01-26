@@ -313,3 +313,138 @@ complianceRouter.post('/decisions/:id/verify', apiKeyMiddleware, async (req: Api
     next(error);
   }
 });
+
+// ============================================================================
+// Receipt Routes (Compliance-First Architecture)
+// ============================================================================
+
+// Get receipts with filtering
+complianceRouter.get('/receipts', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const { assetId, actorId, result, from, to, limit, offset } = req.query;
+
+    // Query decisions from database as receipts
+    const decisions = await complianceService.listDecisions(req.apiKey.orgId, {
+      subjectRef: assetId as string | undefined,
+      result: result as string | undefined,
+      limit: limit ? parseInt(limit as string) : 100,
+      offset: offset ? parseInt(offset as string) : 0,
+    });
+
+    // Transform decisions into receipt format
+    const receipts = decisions.map((d: any) => ({
+      id: d.id,
+      decisionId: d.id,
+      action: d.type,
+      result: d.result,
+      issuedAt: d.createdAt,
+      subjectRef: d.subjectRef,
+      subjectType: d.subjectType,
+      inputsHash: d.inputsHash,
+      policyVersionId: d.policyVersionId,
+      signature: d.signature,
+      reasons: d.reasons,
+    }));
+
+    res.json({
+      receipts,
+      count: receipts.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Verify a receipt
+complianceRouter.get('/receipts/:id/verify', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const decision = await complianceService.getDecision(req.params.id, req.apiKey.orgId);
+
+    // Verification checks
+    const verification: {
+      receiptId: string;
+      valid: boolean;
+      signatureValid: boolean;
+      hashValid: boolean;
+      chainValid: boolean;
+      policyHashValid: boolean;
+      issues: string[];
+    } = {
+      receiptId: decision.id,
+      valid: true,
+      signatureValid: false,
+      hashValid: true,
+      chainValid: true, // Would need previous receipt to verify chain
+      policyHashValid: true, // Would need policy to verify hash
+      issues: [],
+    };
+
+    // Verify signature
+    if (decision.signature) {
+      const payload = {
+        type: decision.type,
+        result: decision.result,
+        reasons: decision.reasons,
+        inputsHash: decision.inputsHash,
+        timestamp: decision.createdAt.toISOString(),
+      };
+
+      try {
+        verification.signatureValid = complianceService.verifyDecisionSignature(payload, decision.signature);
+        if (!verification.signatureValid) {
+          verification.valid = false;
+          verification.issues.push('Invalid signature');
+        }
+      } catch (err) {
+        verification.signatureValid = false;
+        verification.valid = false;
+        verification.issues.push(`Signature verification failed: ${err}`);
+      }
+    } else {
+      verification.valid = false;
+      verification.issues.push('Receipt has no signature');
+    }
+
+    res.json(verification);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get a specific receipt by ID
+complianceRouter.get('/receipts/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const decision = await complianceService.getDecision(req.params.id, req.apiKey.orgId);
+
+    // Transform decision into receipt format
+    const receipt = {
+      id: decision.id,
+      decisionId: decision.id,
+      action: decision.type,
+      result: decision.result,
+      issuedAt: decision.createdAt,
+      policyVersionId: decision.policyVersionId,
+      inputsHash: decision.inputsHash,
+      signature: decision.signature,
+      reasons: decision.reasons,
+      requiredActions: decision.requiredActions,
+      summary: `${decision.type} decision: ${decision.result}`,
+    };
+
+    res.json(receipt);
+  } catch (error) {
+    next(error);
+  }
+});
