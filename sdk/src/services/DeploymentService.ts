@@ -18,6 +18,8 @@ import {
   type Transport,
   getContract,
 } from 'viem';
+import { z } from 'zod';
+import { ValidationError, ContractError, ErrorCode } from '../errors/index.js';
 import {
   mainnet,
   polygon,
@@ -117,6 +119,14 @@ export interface TokenDeploymentParams {
   identityRegistryAddress: Address;
 }
 
+// Validation schemas
+const AddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address');
+const TokenDeploymentParamsSchema = z.object({
+  name: z.string().min(1, 'Token name is required').max(64, 'Token name too long'),
+  symbol: z.string().min(1, 'Token symbol is required').max(11, 'Token symbol too long'),
+  identityRegistryAddress: AddressSchema,
+});
+
 /**
  * Contract Deployment Service
  */
@@ -164,6 +174,8 @@ export class DeploymentService {
 
   /**
    * Deploy a contract
+   *
+   * @throws ContractError if deployment fails
    */
   private async deployContract(
     contractName: keyof typeof abis,
@@ -173,7 +185,10 @@ export class DeploymentService {
     const bytecode = bytecodes[contractName];
 
     if (!bytecode || bytecode === '0x') {
-      throw new Error(`Bytecode not available for ${contractName}`);
+      throw new ContractError(
+        `Bytecode not available for ${contractName}`,
+        { code: ErrorCode.INTERNAL, details: { contractName, reason: 'missing_bytecode' } }
+      );
     }
 
     // Deploy the contract
@@ -189,7 +204,10 @@ export class DeploymentService {
     });
 
     if (!receipt.contractAddress) {
-      throw new Error(`Contract deployment failed for ${contractName}`);
+      throw new ContractError(
+        `Contract deployment failed for ${contractName}`,
+        { code: ErrorCode.TRANSACTION_FAILED, transactionHash: hash, details: { contractName } }
+      );
     }
 
     return {
@@ -254,8 +272,20 @@ export class DeploymentService {
 
   /**
    * Deploy a compliance token
+   *
+   * @throws ValidationError if params are invalid
+   * @throws ContractError if deployment fails
    */
   async deployToken(params: TokenDeploymentParams): Promise<DeploymentResult> {
+    const validation = TokenDeploymentParamsSchema.safeParse(params);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      throw new ValidationError(
+        `Invalid token parameters: ${firstError.message}`,
+        { field: firstError.path.join('.'), constraints: { zodError: firstError.code } }
+      );
+    }
+
     console.log(`Deploying ComplianceToken: ${params.name} (${params.symbol})...`);
 
     const result = await this.deployContract('ComplianceToken', [
@@ -270,11 +300,24 @@ export class DeploymentService {
 
   /**
    * Deploy Oracle Registry with price feed
+   *
+   * @throws ValidationError if addresses are invalid
    */
   async deployOracleRegistry(
     priceFeedAddress: Address,
     adminAddress?: Address
   ): Promise<DeploymentResult> {
+    const feedValidation = AddressSchema.safeParse(priceFeedAddress);
+    if (!feedValidation.success) {
+      throw new ValidationError('Invalid price feed address', { field: 'priceFeedAddress', constraints: { format: 'address' } });
+    }
+    if (adminAddress) {
+      const adminValidation = AddressSchema.safeParse(adminAddress);
+      if (!adminValidation.success) {
+        throw new ValidationError('Invalid admin address', { field: 'adminAddress', constraints: { format: 'address' } });
+      }
+    }
+
     const admin = adminAddress || this.getDeployerAddress();
     console.log('Deploying OracleRegistry...');
 
@@ -286,8 +329,15 @@ export class DeploymentService {
 
   /**
    * Deploy Chainlink Price Feed
+   *
+   * @throws ValidationError if address is invalid
    */
   async deployPriceFeed(chainlinkFeedAddress: Address): Promise<DeploymentResult> {
+    const validation = AddressSchema.safeParse(chainlinkFeedAddress);
+    if (!validation.success) {
+      throw new ValidationError('Invalid Chainlink feed address', { field: 'chainlinkFeedAddress', constraints: { format: 'address' } });
+    }
+
     console.log('Deploying ChainlinkPriceFeed...');
 
     const result = await this.deployContract('ChainlinkPriceFeed', [chainlinkFeedAddress]);

@@ -13,6 +13,7 @@ import type {
   ComplianceViolation,
   IPluginRegistry,
 } from '../core/interfaces.js';
+import { ValidationError } from '../errors/index.js';
 import type { RightModel, TransferContext } from '../core/types.js';
 import type { Party } from '../models/Party.js';
 import { isPartyFrozen, hasValidKyc, isAccredited } from '../models/Party.js';
@@ -115,6 +116,12 @@ export const RulesetSchema = z.object({
 });
 
 export type Ruleset = z.infer<typeof RulesetSchema>;
+
+// Input validation schemas
+const NonEmptyStringSchema = z.string().min(1, 'Value cannot be empty');
+const AssetIdSchema = NonEmptyStringSchema.describe('Asset ID');
+const PartyIdSchema = NonEmptyStringSchema.describe('Party ID');
+const InvestorCountSchema = z.number().int().min(0, 'Investor count must be non-negative');
 
 // ============================================================================
 // COMPLIANCE SERVICE
@@ -656,8 +663,19 @@ export class ComplianceService {
 
   /**
    * Add party to asset whitelist
+   *
+   * @throws ValidationError if assetId or partyId is invalid
    */
   addToWhitelist(assetId: string, partyId: string): void {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+    const partyResult = PartyIdSchema.safeParse(partyId);
+    if (!partyResult.success) {
+      throw new ValidationError('Invalid party ID', { field: 'partyId', constraints: { minLength: '1' } });
+    }
+
     let whitelist = this.whitelists.get(assetId);
     if (!whitelist) {
       whitelist = new Set();
@@ -668,16 +686,38 @@ export class ComplianceService {
 
   /**
    * Remove party from asset whitelist
+   *
+   * @throws ValidationError if assetId or partyId is invalid
    */
   removeFromWhitelist(assetId: string, partyId: string): boolean {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+    const partyResult = PartyIdSchema.safeParse(partyId);
+    if (!partyResult.success) {
+      throw new ValidationError('Invalid party ID', { field: 'partyId', constraints: { minLength: '1' } });
+    }
+
     const whitelist = this.whitelists.get(assetId);
     return whitelist?.delete(partyId) || false;
   }
 
   /**
    * Check if party is whitelisted
+   *
+   * @throws ValidationError if assetId or partyId is invalid
    */
   isWhitelisted(assetId: string, partyId: string): boolean {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+    const partyResult = PartyIdSchema.safeParse(partyId);
+    if (!partyResult.success) {
+      throw new ValidationError('Invalid party ID', { field: 'partyId', constraints: { minLength: '1' } });
+    }
+
     const whitelist = this.whitelists.get(assetId);
     if (!whitelist) return true; // No whitelist = open
     return whitelist.has(partyId);
@@ -685,8 +725,15 @@ export class ComplianceService {
 
   /**
    * Get whitelist for an asset
+   *
+   * @throws ValidationError if assetId is invalid
    */
   getWhitelist(assetId: string): string[] {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+
     const whitelist = this.whitelists.get(assetId);
     return whitelist ? Array.from(whitelist) : [];
   }
@@ -697,15 +744,33 @@ export class ComplianceService {
 
   /**
    * Set investor count for an asset
+   *
+   * @throws ValidationError if assetId or count is invalid
    */
   setInvestorCount(assetId: string, count: number): void {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+    const countResult = InvestorCountSchema.safeParse(count);
+    if (!countResult.success) {
+      throw new ValidationError('Invalid investor count', { field: 'count', constraints: { min: '0' } });
+    }
+
     this.investorCounts.set(assetId, count);
   }
 
   /**
    * Increment investor count
+   *
+   * @throws ValidationError if assetId is invalid
    */
   incrementInvestorCount(assetId: string): number {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+
     const current = this.investorCounts.get(assetId) || 0;
     const newCount = current + 1;
     this.investorCounts.set(assetId, newCount);
@@ -714,8 +779,15 @@ export class ComplianceService {
 
   /**
    * Get investor count
+   *
+   * @throws ValidationError if assetId is invalid
    */
   getInvestorCount(assetId: string): number {
+    const assetResult = AssetIdSchema.safeParse(assetId);
+    if (!assetResult.success) {
+      throw new ValidationError('Invalid asset ID', { field: 'assetId', constraints: { minLength: '1' } });
+    }
+
     return this.investorCounts.get(assetId) || 0;
   }
 

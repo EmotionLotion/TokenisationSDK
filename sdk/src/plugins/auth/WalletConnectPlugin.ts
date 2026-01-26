@@ -6,6 +6,23 @@
  */
 
 import type { WalletConnection } from './SIWEAuthPlugin.js';
+import { AuthenticationError, ErrorCode } from '../../errors/index.js';
+
+/**
+ * WalletConnect Universal Provider module type (dynamic import)
+ */
+interface UniversalProviderModule {
+  UniversalProvider: {
+    init: (opts: unknown) => Promise<UniversalProvider>;
+  };
+}
+
+/**
+ * WalletConnect Modal module type (dynamic import)
+ */
+interface WalletConnectModalModule {
+  WalletConnectModal: new (opts: { projectId: string }) => WCModal;
+}
 
 /**
  * WalletConnect session namespace
@@ -127,7 +144,9 @@ export class WalletConnectPlugin {
 
   constructor(config: WalletConnectPluginConfig) {
     if (!config.projectId) {
-      throw new Error('WalletConnect projectId is required');
+      throw new AuthenticationError('WalletConnect projectId is required', ErrorCode.INVALID_ARGUMENT, {
+        details: { field: 'projectId' },
+      });
     }
 
     this.config = {
@@ -156,22 +175,27 @@ export class WalletConnectPlugin {
 
     try {
       // Dynamically import to avoid SSR issues
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const providerModule = await import('@walletconnect/universal-provider' as any);
-      const UniversalProvider = providerModule.UniversalProvider;
+      // Use string concatenation to prevent TypeScript from analyzing the import
+      const modulePath = '@walletconnect' + '/universal-provider';
+      const providerModule = await import(/* webpackIgnore: true */ modulePath) as UniversalProviderModule;
+      const UniversalProviderClass = providerModule.UniversalProvider;
 
-      this.provider = await UniversalProvider.init({
+      this.provider = await UniversalProviderClass.init({
         projectId: this.config.projectId,
         metadata: this.config.metadata,
         relayUrl: this.config.relayUrl,
-      }) as unknown as UniversalProvider;
+      });
 
       // Set up event handlers
       this.setupProviderEvents();
 
       return this.provider;
     } catch (error) {
-      throw new Error(`Failed to initialize WalletConnect provider: ${error}`);
+      throw new AuthenticationError(
+        `Failed to initialize WalletConnect provider: ${error instanceof Error ? error.message : String(error)}`,
+        ErrorCode.INTERNAL,
+        { cause: error instanceof Error ? error : undefined }
+      );
     }
   }
 
@@ -184,17 +208,22 @@ export class WalletConnectPlugin {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const modalModule = await import('@walletconnect/modal' as any);
+      // Use string concatenation to prevent TypeScript from analyzing the import
+      const modalPath = '@walletconnect' + '/modal';
+      const modalModule = await import(/* webpackIgnore: true */ modalPath) as WalletConnectModalModule;
       const WalletConnectModal = modalModule.WalletConnectModal;
 
       this.modal = new WalletConnectModal({
         projectId: this.config.projectId,
-      }) as WCModal;
+      });
 
       return this.modal;
     } catch (error) {
-      throw new Error(`Failed to initialize WalletConnect modal: ${error}`);
+      throw new AuthenticationError(
+        `Failed to initialize WalletConnect modal: ${error instanceof Error ? error.message : String(error)}`,
+        ErrorCode.INTERNAL,
+        { cause: error instanceof Error ? error : undefined }
+      );
     }
   }
 
@@ -242,13 +271,17 @@ export class WalletConnectPlugin {
     }
 
     if (!this.session) {
-      throw new Error('Failed to establish WalletConnect session');
+      throw new AuthenticationError('Failed to establish WalletConnect session', ErrorCode.UNAUTHENTICATED, {
+        details: { reason: 'session_failed' },
+      });
     }
 
     // Extract connected account and chain
     const eip155Namespace = this.session.namespaces.eip155;
     if (!eip155Namespace || eip155Namespace.accounts.length === 0) {
-      throw new Error('No accounts found in session');
+      throw new AuthenticationError('No accounts found in session', ErrorCode.UNAUTHENTICATED, {
+        details: { reason: 'no_accounts' },
+      });
     }
 
     // Parse CAIP-10 account format: eip155:chainId:address
@@ -264,10 +297,15 @@ export class WalletConnectPlugin {
 
   /**
    * Get current wallet connection
+   *
+   * @returns WalletConnection for use with SIWE
+   * @throws AuthenticationError if not connected
    */
   getWalletConnection(): WalletConnection {
     if (!this.connectedAddress || !this.connectedChainId || !this.provider) {
-      throw new Error('Not connected via WalletConnect');
+      throw new AuthenticationError('Not connected via WalletConnect', ErrorCode.UNAUTHENTICATED, {
+        details: { reason: 'not_connected' },
+      });
     }
 
     const provider = this.provider;
@@ -341,10 +379,13 @@ export class WalletConnectPlugin {
 
   /**
    * Switch to a different chain
+   *
+   * @param chainId - Chain ID to switch to
+   * @throws AuthenticationError if not connected or chain not available
    */
   async switchChain(chainId: number): Promise<void> {
     if (!this.provider) {
-      throw new Error('Not connected via WalletConnect');
+      throw new AuthenticationError('Not connected via WalletConnect', ErrorCode.UNAUTHENTICATED);
     }
 
     const chainIdHex = `0x${chainId.toString(16)}`;
@@ -364,7 +405,11 @@ export class WalletConnectPlugin {
     } catch (error: unknown) {
       // Error code 4902 means chain is not added
       if ((error as { code?: number }).code === 4902) {
-        throw new Error(`Chain ${chainId} is not supported by the connected wallet`);
+        throw new AuthenticationError(
+          `Chain ${chainId} is not supported by the connected wallet`,
+          ErrorCode.INVALID_ARGUMENT,
+          { details: { chainId, reason: 'chain_not_supported' }, cause: error instanceof Error ? error : undefined }
+        );
       }
       throw error;
     }
@@ -372,6 +417,10 @@ export class WalletConnectPlugin {
 
   /**
    * Send a transaction
+   *
+   * @param tx - Transaction parameters
+   * @returns Transaction hash
+   * @throws AuthenticationError if not connected
    */
   async sendTransaction(tx: {
     to: string;
@@ -381,7 +430,7 @@ export class WalletConnectPlugin {
     gasPrice?: string;
   }): Promise<string> {
     if (!this.provider || !this.connectedAddress) {
-      throw new Error('Not connected via WalletConnect');
+      throw new AuthenticationError('Not connected via WalletConnect', ErrorCode.UNAUTHENTICATED);
     }
 
     const txHash = await this.provider.request<string>(
@@ -402,6 +451,12 @@ export class WalletConnectPlugin {
 
   /**
    * Sign typed data (EIP-712)
+   *
+   * @param domain - EIP-712 domain
+   * @param types - EIP-712 types
+   * @param value - Message to sign
+   * @returns Signature
+   * @throws AuthenticationError if not connected
    */
   async signTypedData(
     domain: Record<string, unknown>,
@@ -409,7 +464,7 @@ export class WalletConnectPlugin {
     value: Record<string, unknown>
   ): Promise<string> {
     if (!this.provider || !this.connectedAddress) {
-      throw new Error('Not connected via WalletConnect');
+      throw new AuthenticationError('Not connected via WalletConnect', ErrorCode.UNAUTHENTICATED);
     }
 
     const data = {

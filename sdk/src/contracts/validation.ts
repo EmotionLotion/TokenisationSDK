@@ -25,7 +25,13 @@ export const EthereumAddressSchema = z
 export const TokenAmountSchema = z
   .string()
   .regex(/^[0-9]+$/, 'Amount must be a positive integer string')
-  .refine((val) => BigInt(val) > 0n, 'Amount must be greater than zero');
+  .refine((val) => {
+    try {
+      return BigInt(val) > 0n;
+    } catch {
+      return false;
+    }
+  }, 'Amount must be greater than zero');
 
 /**
  * Token amount that can be zero (for approvals)

@@ -6,6 +6,14 @@
  */
 
 import type { WalletConnection } from './SIWEAuthPlugin.js';
+import { AuthenticationError, ErrorCode } from '../../errors/index.js';
+
+/**
+ * MetaMask onboarding module type (dynamic import)
+ */
+interface MetaMaskOnboardingModule {
+  default: new () => { startOnboarding: () => void };
+}
 
 /**
  * Ethereum provider interface (window.ethereum)
@@ -91,8 +99,9 @@ export class MetaMaskPlugin {
 
     try {
       // Dynamically import onboarding to avoid bundle issues if not installed
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const onboardingModule = await import('@metamask/onboarding' as any);
+      // Use string concatenation to prevent TypeScript from analyzing the import
+      const modulePath = '@metamask' + '/onboarding';
+      const onboardingModule = await import(/* webpackIgnore: true */ modulePath) as MetaMaskOnboardingModule;
       const MetaMaskOnboarding = onboardingModule.default;
       const onboarding = new MetaMaskOnboarding();
       onboarding.startOnboarding();
@@ -107,10 +116,15 @@ export class MetaMaskPlugin {
   /**
    * Connect to MetaMask wallet
    * Returns a WalletConnection compatible with SIWEAuthPlugin
+   *
+   * @returns WalletConnection for use with SIWE
+   * @throws AuthenticationError if MetaMask is not installed or connection fails
    */
   async connect(): Promise<WalletConnection> {
     if (!this.isInstalled()) {
-      throw new Error('MetaMask is not installed');
+      throw new AuthenticationError('MetaMask is not installed', ErrorCode.UNAUTHENTICATED, {
+        details: { reason: 'wallet_not_installed' },
+      });
     }
 
     const ethereum = (window as { ethereum?: EthereumProvider }).ethereum!;
@@ -122,7 +136,9 @@ export class MetaMaskPlugin {
     }) as string[];
 
     if (!accounts || accounts.length === 0) {
-      throw new Error('No accounts found');
+      throw new AuthenticationError('No accounts found', ErrorCode.UNAUTHENTICATED, {
+        details: { reason: 'no_accounts' },
+      });
     }
 
     this.connectedAddress = accounts[0];
@@ -152,10 +168,15 @@ export class MetaMaskPlugin {
 
   /**
    * Get current wallet connection
+   *
+   * @returns WalletConnection for use with SIWE
+   * @throws AuthenticationError if not connected
    */
   getWalletConnection(): WalletConnection {
     if (!this.connectedAddress || !this.connectedChainId || !this.provider) {
-      throw new Error('Not connected to MetaMask');
+      throw new AuthenticationError('Not connected to MetaMask', ErrorCode.UNAUTHENTICATED, {
+        details: { reason: 'not_connected' },
+      });
     }
 
     const provider = this.provider;
@@ -208,10 +229,13 @@ export class MetaMaskPlugin {
 
   /**
    * Switch to a different chain
+   *
+   * @param chainId - Chain ID in hex format (e.g., '0x1')
+   * @throws AuthenticationError if not connected or chain not available
    */
   async switchChain(chainId: string): Promise<void> {
     if (!this.provider) {
-      throw new Error('Not connected to MetaMask');
+      throw new AuthenticationError('Not connected to MetaMask', ErrorCode.UNAUTHENTICATED);
     }
 
     try {
@@ -224,7 +248,11 @@ export class MetaMaskPlugin {
     } catch (error: unknown) {
       // Error code 4902 means chain is not added to MetaMask
       if ((error as { code?: number }).code === 4902) {
-        throw new Error(`Chain ${chainId} is not added to MetaMask. Use addChain() first.`);
+        throw new AuthenticationError(
+          `Chain ${chainId} is not added to MetaMask. Use addChain() first.`,
+          ErrorCode.INVALID_ARGUMENT,
+          { details: { chainId, reason: 'chain_not_found' }, cause: error instanceof Error ? error : undefined }
+        );
       }
       throw error;
     }
@@ -232,10 +260,13 @@ export class MetaMaskPlugin {
 
   /**
    * Add a new chain to MetaMask
+   *
+   * @param params - Chain parameters
+   * @throws AuthenticationError if not connected
    */
   async addChain(params: ChainParams): Promise<void> {
     if (!this.provider) {
-      throw new Error('Not connected to MetaMask');
+      throw new AuthenticationError('Not connected to MetaMask', ErrorCode.UNAUTHENTICATED);
     }
 
     await this.provider.request({
@@ -246,10 +277,13 @@ export class MetaMaskPlugin {
 
   /**
    * Request permissions (for additional accounts)
+   *
+   * @returns Array of permitted account addresses
+   * @throws AuthenticationError if not connected
    */
   async requestPermissions(): Promise<string[]> {
     if (!this.provider) {
-      throw new Error('Not connected to MetaMask');
+      throw new AuthenticationError('Not connected to MetaMask', ErrorCode.UNAUTHENTICATED);
     }
 
     const permissions = await this.provider.request({
@@ -274,10 +308,13 @@ export class MetaMaskPlugin {
 
   /**
    * Get all permitted accounts
+   *
+   * @returns Array of permitted account addresses
+   * @throws AuthenticationError if not connected
    */
   async getAccounts(): Promise<string[]> {
     if (!this.provider) {
-      throw new Error('Not connected to MetaMask');
+      throw new AuthenticationError('Not connected to MetaMask', ErrorCode.UNAUTHENTICATED);
     }
 
     const accounts = await this.provider.request({
@@ -289,6 +326,12 @@ export class MetaMaskPlugin {
 
   /**
    * Sign a typed data message (EIP-712)
+   *
+   * @param domain - EIP-712 domain
+   * @param types - EIP-712 types
+   * @param value - Message to sign
+   * @returns Signature
+   * @throws AuthenticationError if not connected
    */
   async signTypedData(
     domain: Record<string, unknown>,
@@ -296,7 +339,7 @@ export class MetaMaskPlugin {
     value: Record<string, unknown>
   ): Promise<string> {
     if (!this.provider || !this.connectedAddress) {
-      throw new Error('Not connected to MetaMask');
+      throw new AuthenticationError('Not connected to MetaMask', ErrorCode.UNAUTHENTICATED);
     }
 
     const data = {

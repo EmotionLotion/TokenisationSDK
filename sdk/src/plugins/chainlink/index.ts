@@ -5,6 +5,45 @@
  * and cross-chain transfers.
  */
 
+// Shared configuration and validation
+export {
+  // Validation schemas
+  EthereumAddressSchema,
+  RpcUrlSchema,
+  PrivateKeySchema,
+  ChainIdSchema,
+  FlexibleChainIdSchema,
+  BaseChainlinkConfigSchema,
+  DataFeedConfigSchema,
+  AutomationConfigSchema,
+  CCIPBridgeConfigSchema,
+  LinkManagerConfigSchema,
+  FunctionsConfigSchema,
+  OracleMonitorConfigSchema,
+  // Validation functions
+  validateChainlinkConfig,
+  validateDataFeedConfig,
+  validateAutomationConfig,
+  validateCCIPBridgeConfig,
+  validateLinkManagerConfig,
+  validateFunctionsConfig,
+  validateOracleMonitorConfig,
+  // Utilities
+  isChainlinkSupportedChain,
+  getChainlinkChainName,
+  isTestnet,
+  SUPPORTED_CHAINLINK_CHAINS,
+  // Types
+  type BaseChainlinkConfig,
+  type ValidatedDataFeedConfig,
+  type ValidatedAutomationConfig,
+  type ValidatedCCIPBridgeConfig,
+  type ValidatedLinkManagerConfig,
+  type ValidatedFunctionsConfig,
+  type ValidatedOracleMonitorConfig,
+  type SupportedChainlinkChainId,
+} from './ChainlinkConfig.js';
+
 export {
   DataFeedPlugin,
   createDataFeedPlugin,

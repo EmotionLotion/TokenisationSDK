@@ -28,6 +28,101 @@ import {
   FractionalizationType,
 } from '../core/AssetAbstraction.js';
 import { LifecycleState, TransferabilityMode } from '../core/types.js';
+import { ValidationError, ErrorCode } from '../errors/index.js';
+import { z } from 'zod';
+
+// ============================================================================
+// VALIDATION SCHEMAS
+// ============================================================================
+
+const LifecycleConditionSchema = z.object({
+  type: z.enum(['APPROVAL', 'DOCUMENT', 'TIME', 'BALANCE', 'COMPLIANCE', 'CUSTOM']),
+  approvals: z.array(z.object({ role: z.string(), count: z.number() })).optional(),
+  documents: z.array(z.string()).optional(),
+  timeCondition: z.string().optional(),
+  balanceCondition: z.object({
+    operator: z.enum(['GT', 'GTE', 'LT', 'LTE', 'EQ']),
+    value: z.string(),
+  }).optional(),
+  customCondition: z.string().optional(),
+});
+
+const LifecycleActionSchema = z.object({
+  type: z.enum(['EMIT_EVENT', 'NOTIFY', 'FREEZE', 'UNFREEZE', 'MINT', 'BURN', 'DISTRIBUTE', 'CUSTOM']),
+  params: z.record(z.unknown()),
+});
+
+const LifecycleRuleSchema = z.object({
+  from: z.union([z.nativeEnum(LifecycleState), z.literal('*')]),
+  to: z.nativeEnum(LifecycleState),
+  conditions: z.array(LifecycleConditionSchema),
+  actions: z.array(LifecycleActionSchema),
+  description: z.string().min(1, 'Description is required'),
+});
+
+const ComplianceRuleSchema = z.object({
+  id: z.string().min(1, 'Rule ID is required'),
+  name: z.string().min(1, 'Rule name is required'),
+  type: z.enum(['KYC', 'ACCREDITATION', 'JURISDICTION', 'HOLDING_LIMIT', 'TRANSFER_LIMIT', 'LOCKUP', 'CUSTOM']),
+  params: z.record(z.unknown()),
+  severity: z.enum(['BLOCK', 'WARN', 'LOG']),
+});
+
+const DistributionScheduleSchema = z.object({
+  type: z.enum(['DIVIDEND', 'INTEREST', 'ROYALTY', 'RENT', 'CUSTOM']),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'ANNUALLY', 'ON_DEMAND']),
+  calculation: z.enum(['FIXED', 'PRO_RATA', 'TIERED', 'CUSTOM']),
+  recordDateOffset: z.number().min(0),
+});
+
+const GovernanceSettingsSchema = z.object({
+  votingEnabled: z.boolean(),
+  votingStrategy: z.enum(['ONE_TOKEN_ONE_VOTE', 'QUADRATIC', 'WEIGHTED', 'ONE_PERSON_ONE_VOTE']),
+  quorumPercent: z.number().min(0).max(100),
+  approvalThresholdPercent: z.number().min(0).max(100),
+  proposalTypes: z.array(z.string()),
+  votingPeriodDays: z.number().min(1),
+});
+
+const RequiredVerificationSchema = z.object({
+  type: z.string().min(1, 'Verification type is required'),
+  description: z.string().min(1, 'Description is required'),
+  allowedVerifiers: z.array(z.string()).min(1, 'At least one verifier is required'),
+  mandatory: z.boolean(),
+});
+
+const MetadataSchemaFieldSchema = z.object({
+  type: z.enum(['string', 'number', 'boolean', 'date', 'array', 'object']),
+  required: z.boolean(),
+  description: z.string(),
+});
+
+const AssetPackDefaultsSchema = z.object({
+  assetType: z.nativeEnum(AssetType),
+  investorClass: z.nativeEnum(InvestorClass),
+  liquidityProfile: z.nativeEnum(LiquidityProfile),
+  fractionalization: z.nativeEnum(FractionalizationType),
+  lockupDays: z.number().min(0),
+  maxInvestors: z.number().min(1).optional(),
+  maxHoldingPercent: z.number().min(0).max(100).optional(),
+  additionalJurisdictions: z.array(z.string()),
+  blockedJurisdictions: z.array(z.string()),
+});
+
+const AssetPackSchema = z.object({
+  id: z.string().min(1, 'Pack ID is required').regex(/^[A-Z0-9_]+$/, 'Pack ID must be uppercase alphanumeric with underscores'),
+  name: z.string().min(1, 'Pack name is required'),
+  description: z.string().min(1, 'Description is required'),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Version must be semver format (x.y.z)'),
+  defaults: AssetPackDefaultsSchema,
+  lifecycleRules: z.array(LifecycleRuleSchema),
+  complianceRules: z.array(ComplianceRuleSchema),
+  requiredVerifications: z.array(RequiredVerificationSchema),
+  distributionSchedule: DistributionScheduleSchema.optional(),
+  governance: GovernanceSettingsSchema.optional(),
+  metadataSchema: z.record(MetadataSchemaFieldSchema),
+  tags: z.array(z.string()).min(1, 'At least one tag is required'),
+});
 
 // ============================================================================
 // TYPES
@@ -751,8 +846,17 @@ export class AssetPackRegistry {
 
   /**
    * Get a pack by ID
+   *
+   * @param packId - The pack identifier
+   * @throws ValidationError if packId is empty
    */
   static get(packId: string): AssetPack | undefined {
+    if (typeof packId !== 'string' || packId.trim().length === 0) {
+      throw new ValidationError(
+        'Pack ID must be a non-empty string',
+        { field: 'packId', constraints: { type: 'string', minLength: '1' } }
+      );
+    }
     return this.packs.get(packId);
   }
 
@@ -765,10 +869,29 @@ export class AssetPackRegistry {
 
   /**
    * Search packs by tags
+   *
+   * @param tags - Array of tags to search for
+   * @throws ValidationError if tags is empty or invalid
    */
   static searchByTags(tags: string[]): AssetPack[] {
+    if (!Array.isArray(tags) || tags.length === 0) {
+      throw new ValidationError(
+        'Tags array must be non-empty',
+        { field: 'tags', constraints: { minItems: '1' } }
+      );
+    }
+
+    for (const tag of tags) {
+      if (typeof tag !== 'string' || tag.trim().length === 0) {
+        throw new ValidationError(
+          'Each tag must be a non-empty string',
+          { field: 'tags', constraints: { type: 'string' } }
+        );
+      }
+    }
+
     return this.list().filter(pack =>
-      tags.some(tag => pack.tags.includes(tag))
+      tags.some(tag => pack.tags.includes(tag.toLowerCase()))
     );
   }
 
@@ -783,27 +906,65 @@ export class AssetPackRegistry {
 
   /**
    * Register a custom pack
+   *
+   * @param pack - Asset pack configuration to register
+   * @throws ValidationError if pack is invalid
    */
   static register(pack: AssetPack): void {
+    const result = AssetPackSchema.safeParse(pack);
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      throw new ValidationError(
+        `Invalid asset pack: ${firstError.message}`,
+        {
+          field: firstError.path.join('.'),
+          constraints: { zodError: firstError.code },
+        }
+      );
+    }
+
+    if (this.packs.has(pack.id)) {
+      throw new ValidationError(
+        `Asset pack '${pack.id}' already exists. Use a unique ID.`,
+        { field: 'id', constraints: { unique: 'true' } }
+      );
+    }
+
     this.packs.set(pack.id, pack);
   }
 
   /**
    * Validate metadata against pack schema
+   *
+   * @param packId - The pack identifier
+   * @param metadata - Metadata to validate
+   * @throws ValidationError if packId is invalid
    */
   static validateMetadata(
     packId: string,
     metadata: Record<string, unknown>
-  ): { valid: boolean; errors: string[] } {
-    const pack = this.get(packId);
-    if (!pack) {
-      return { valid: false, errors: ['Pack not found'] };
+  ): { valid: boolean; errors: Array<{ field: string; message: string }> } {
+    if (typeof packId !== 'string' || packId.trim().length === 0) {
+      throw new ValidationError(
+        'Pack ID must be a non-empty string',
+        { field: 'packId', constraints: { type: 'string', minLength: '1' } }
+      );
     }
 
-    const errors: string[] = [];
+    const pack = this.get(packId);
+    if (!pack) {
+      return { valid: false, errors: [{ field: 'packId', message: 'Pack not found' }] };
+    }
+
+    if (!metadata || typeof metadata !== 'object') {
+      return { valid: false, errors: [{ field: 'metadata', message: 'Metadata must be an object' }] };
+    }
+
+    const errors: Array<{ field: string; message: string }> = [];
     for (const [field, schema] of Object.entries(pack.metadataSchema)) {
       if (schema.required && !(field in metadata)) {
-        errors.push(`Missing required field: ${field}`);
+        errors.push({ field, message: `Missing required field: ${field}` });
+        continue;
       }
 
       if (field in metadata) {
@@ -811,7 +972,9 @@ export class AssetPackRegistry {
         const expectedType = schema.type;
 
         let actualType: string;
-        if (Array.isArray(value)) {
+        if (value === null || value === undefined) {
+          actualType = 'null';
+        } else if (Array.isArray(value)) {
           actualType = 'array';
         } else if (value instanceof Date) {
           actualType = 'date';
@@ -822,10 +985,10 @@ export class AssetPackRegistry {
         if (expectedType === 'date' && actualType === 'string') {
           // Allow ISO date strings
           if (isNaN(Date.parse(value as string))) {
-            errors.push(`Invalid date format for field: ${field}`);
+            errors.push({ field, message: `Invalid date format for field: ${field}` });
           }
         } else if (actualType !== expectedType) {
-          errors.push(`Invalid type for ${field}: expected ${expectedType}, got ${actualType}`);
+          errors.push({ field, message: `Invalid type for ${field}: expected ${expectedType}, got ${actualType}` });
         }
       }
     }

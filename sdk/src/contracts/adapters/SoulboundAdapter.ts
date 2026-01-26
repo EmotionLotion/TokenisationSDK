@@ -20,6 +20,14 @@ import type {
 } from '../../core/interfaces.js';
 import type { Result } from '../../core/types.js';
 import { ok, err } from '../../core/types.js';
+import { ContractError, ValidationError, ErrorCode } from '../../errors/index.js';
+import {
+  SoulboundAdapterConfigSchema,
+  EthereumAddressSchema,
+  TokenIdSchema,
+  TokenUriSchema,
+  validateOrThrow,
+} from '../validation.js';
 
 /**
  * Soulbound Token ABI
@@ -156,49 +164,76 @@ export class SoulboundAdapter implements ITokenAdapter {
 
   /**
    * Create and initialize a SoulboundAdapter
+   *
+   * @param config - Adapter configuration
+   * @returns Initialized SoulboundAdapter
+   * @throws ValidationError if config is invalid
+   * @throws ContractError if contract initialization fails
    */
   static async create(config: SoulboundAdapterConfig): Promise<SoulboundAdapter> {
-    const provider = new ethers.JsonRpcProvider(config.providerUrl);
-    const abi = config.abi || SOULBOUND_TOKEN_ABI;
+    // Validate configuration
+    const validatedConfig = validateOrThrow(
+      SoulboundAdapterConfigSchema,
+      config,
+      'SoulboundAdapter config'
+    );
 
-    let signer: ethers.Wallet | null = null;
-    let contract: ethers.Contract;
-
-    if (config.privateKey) {
-      signer = new ethers.Wallet(config.privateKey, provider);
-      contract = new ethers.Contract(config.contractAddress, abi, signer);
-    } else {
-      contract = new ethers.Contract(config.contractAddress, abi, provider);
-    }
-
-    // Fetch token info
-    let name = 'Soulbound Token';
-    let symbol = 'SBT';
-    let totalSupply = '0';
+    const provider = new ethers.JsonRpcProvider(validatedConfig.providerUrl);
+    const abi = validatedConfig.abi || SOULBOUND_TOKEN_ABI;
 
     try {
-      [name, symbol, totalSupply] = await Promise.all([
-        contract.name() as Promise<string>,
-        contract.symbol() as Promise<string>,
-        contract.totalSupply().then((s: bigint) => s.toString()) as Promise<string>,
-      ]);
-    } catch {
-      // Contract might not have all these methods
+      let signer: ethers.Wallet | null = null;
+      let contract: ethers.Contract;
+
+      if (validatedConfig.privateKey) {
+        signer = new ethers.Wallet(validatedConfig.privateKey, provider);
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, signer);
+      } else {
+        contract = new ethers.Contract(validatedConfig.contractAddress, abi, provider);
+      }
+
+      // Fetch token info
+      let name = 'Soulbound Token';
+      let symbol = 'SBT';
+      let totalSupply = '0';
+
+      try {
+        [name, symbol, totalSupply] = await Promise.all([
+          contract.name() as Promise<string>,
+          contract.symbol() as Promise<string>,
+          contract.totalSupply().then((s: bigint) => s.toString()) as Promise<string>,
+        ]);
+      } catch {
+        // Contract might not have all these methods
+      }
+
+      const tokenInfo: TokenInfo = {
+        address: validatedConfig.contractAddress,
+        name,
+        symbol,
+        decimals: 0,
+        totalSupply,
+        tokenType: 'SBT',
+      };
+
+      const pluginId = `sbt-${validatedConfig.contractAddress.toLowerCase().slice(0, 8)}`;
+      const tiers = config.reputationTiers || DEFAULT_REPUTATION_TIERS;
+
+      return new SoulboundAdapter(pluginId, tokenInfo, provider, contract, signer, tiers);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ContractError(
+        `Failed to initialize Soulbound adapter: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          code: ErrorCode.CONTRACT_NOT_DEPLOYED,
+          contractAddress: validatedConfig.contractAddress,
+          method: 'create',
+          cause: error instanceof Error ? error : undefined,
+        }
+      );
     }
-
-    const tokenInfo: TokenInfo = {
-      address: config.contractAddress,
-      name,
-      symbol,
-      decimals: 0,
-      totalSupply,
-      tokenType: 'SBT',
-    };
-
-    const pluginId = `sbt-${config.contractAddress.toLowerCase().slice(0, 8)}`;
-    const tiers = config.reputationTiers || DEFAULT_REPUTATION_TIERS;
-
-    return new SoulboundAdapter(pluginId, tokenInfo, provider, contract, signer, tiers);
   }
 
   /**
