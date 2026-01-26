@@ -532,6 +532,150 @@ export const SDK_METRICS = {
   CHAIN_TX_CONFIRMED: 'sdk_chain_tx_confirmed_total',
   CHAIN_TX_FAILED: 'sdk_chain_tx_failed_total',
   CHAIN_TX_DURATION: 'sdk_chain_tx_duration_ms',
+
+  // Rate limiting
+  RATE_LIMIT_ACQUIRED: 'sdk_rate_limit_acquired_total',
+  RATE_LIMIT_QUEUED: 'sdk_rate_limit_queued_total',
+  RATE_LIMIT_REJECTED: 'sdk_rate_limit_rejected_total',
+  RATE_LIMIT_TIMEOUT: 'sdk_rate_limit_timeout_total',
+  RATE_LIMIT_WAIT_DURATION: 'sdk_rate_limit_wait_duration_ms',
+  RATE_LIMIT_QUEUE_SIZE: 'sdk_rate_limit_queue_size',
+  RATE_LIMIT_AVAILABLE_TOKENS: 'sdk_rate_limit_available_tokens',
+
+  // Idempotency
+  IDEMPOTENCY_HIT: 'sdk_idempotency_hit_total',
+  IDEMPOTENCY_MISS: 'sdk_idempotency_miss_total',
+  IDEMPOTENCY_CONFLICT: 'sdk_idempotency_conflict_total',
+  IDEMPOTENCY_EXPIRED: 'sdk_idempotency_expired_total',
+
+  // Saga
+  SAGA_STARTED: 'sdk_saga_started_total',
+  SAGA_COMPLETED: 'sdk_saga_completed_total',
+  SAGA_FAILED: 'sdk_saga_failed_total',
+  SAGA_COMPENSATED: 'sdk_saga_compensated_total',
+  SAGA_STEP_COMPLETED: 'sdk_saga_step_completed_total',
+  SAGA_STEP_FAILED: 'sdk_saga_step_failed_total',
+  SAGA_DURATION: 'sdk_saga_duration_ms',
+
+  // Circuit breaker
+  CIRCUIT_OPENED: 'sdk_circuit_opened_total',
+  CIRCUIT_CLOSED: 'sdk_circuit_closed_total',
+  CIRCUIT_HALF_OPEN: 'sdk_circuit_half_open_total',
+  CIRCUIT_REJECTED: 'sdk_circuit_rejected_total',
+
+  // Payment
+  PAYMENT_CREATED: 'sdk_payment_created_total',
+  PAYMENT_CONFIRMED: 'sdk_payment_confirmed_total',
+  PAYMENT_FAILED: 'sdk_payment_failed_total',
+  PAYMENT_REFUNDED: 'sdk_payment_refunded_total',
+  PAYMENT_DURATION: 'sdk_payment_duration_ms',
 } as const;
+
+// ============================================================================
+// RATE LIMIT METRICS HELPER
+// ============================================================================
+
+/**
+ * Create a rate limit event callback that records metrics
+ */
+export function createRateLimitMetricsCallback(
+  metrics: IMetrics,
+  providerName: string
+): (event: {
+  type: 'acquired' | 'queued' | 'rejected' | 'timeout';
+  name: string;
+  queueSize: number;
+  availableTokens: number;
+  waitTimeMs?: number;
+}) => void {
+  return (event) => {
+    const labels = { provider: providerName, limiter: event.name };
+
+    switch (event.type) {
+      case 'acquired':
+        metrics.increment(SDK_METRICS.RATE_LIMIT_ACQUIRED, labels);
+        if (event.waitTimeMs !== undefined) {
+          metrics.histogram(SDK_METRICS.RATE_LIMIT_WAIT_DURATION, event.waitTimeMs, labels);
+        }
+        break;
+      case 'queued':
+        metrics.increment(SDK_METRICS.RATE_LIMIT_QUEUED, labels);
+        break;
+      case 'rejected':
+        metrics.increment(SDK_METRICS.RATE_LIMIT_REJECTED, labels);
+        break;
+      case 'timeout':
+        metrics.increment(SDK_METRICS.RATE_LIMIT_TIMEOUT, labels);
+        break;
+    }
+
+    metrics.gauge(SDK_METRICS.RATE_LIMIT_QUEUE_SIZE, event.queueSize, labels);
+    metrics.gauge(SDK_METRICS.RATE_LIMIT_AVAILABLE_TOKENS, event.availableTokens, labels);
+  };
+}
+
+// ============================================================================
+// SAGA METRICS HELPER
+// ============================================================================
+
+/**
+ * Create saga event callbacks that record metrics
+ */
+export function createSagaMetricsCallbacks(
+  metrics: IMetrics,
+  sagaType: string
+): {
+  onStepStart: (stepName: string, sagaId: string) => void;
+  onStepComplete: (stepName: string, sagaId: string) => void;
+  onStepFail: (stepName: string, error: string, sagaId: string) => void;
+  onCompensationStart: (stepName: string, sagaId: string) => void;
+  onCompensationComplete: (stepName: string, sagaId: string) => void;
+  onCompensationFail: (stepName: string, error: string, sagaId: string) => void;
+} {
+  return {
+    onStepStart: () => {
+      // Step start is tracked via saga started metric
+    },
+    onStepComplete: (stepName) => {
+      metrics.increment(SDK_METRICS.SAGA_STEP_COMPLETED, { sagaType, step: stepName });
+    },
+    onStepFail: (stepName) => {
+      metrics.increment(SDK_METRICS.SAGA_STEP_FAILED, { sagaType, step: stepName });
+    },
+    onCompensationStart: () => {
+      // Compensation start doesn't need a separate metric
+    },
+    onCompensationComplete: () => {
+      // Compensation completion is tracked via SAGA_COMPENSATED
+    },
+    onCompensationFail: (stepName) => {
+      metrics.increment(SDK_METRICS.SAGA_STEP_FAILED, { sagaType, step: `compensate:${stepName}` });
+    },
+  };
+}
+
+// ============================================================================
+// IDEMPOTENCY METRICS HELPER
+// ============================================================================
+
+/**
+ * Wrap idempotency operations with metrics
+ */
+export function createIdempotencyMetricsWrapper(metrics: IMetrics, providerName: string) {
+  return {
+    recordHit: (key: string) => {
+      metrics.increment(SDK_METRICS.IDEMPOTENCY_HIT, { provider: providerName });
+    },
+    recordMiss: (key: string) => {
+      metrics.increment(SDK_METRICS.IDEMPOTENCY_MISS, { provider: providerName });
+    },
+    recordConflict: (key: string) => {
+      metrics.increment(SDK_METRICS.IDEMPOTENCY_CONFLICT, { provider: providerName });
+    },
+    recordExpired: (key: string) => {
+      metrics.increment(SDK_METRICS.IDEMPOTENCY_EXPIRED, { provider: providerName });
+    },
+  };
+}
 
 export default ObservabilityManager;

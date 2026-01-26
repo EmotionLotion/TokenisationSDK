@@ -73,3 +73,22 @@ export {
   createMockPaymentProvider,
   type MockPaymentProviderConfig,
 } from './MockPaymentProvider.js';
+
+// Rate limited wrapper
+export {
+  RateLimitedPaymentProvider,
+  createRateLimitedStripeProvider,
+  createRateLimitedCircleProvider,
+  createRateLimitedPaymentProvider,
+  type RateLimitedProviderConfig,
+} from './RateLimitedPaymentProvider.js';
+
+// Idempotent wrapper
+export {
+  IdempotentPaymentProvider,
+  createIdempotentStripeProvider,
+  createIdempotentCircleProvider,
+  createIdempotentPaymentProvider,
+  type IdempotentPaymentProviderConfig,
+  type IdempotentCreateIntentParams,
+} from './IdempotentPaymentProvider.js';

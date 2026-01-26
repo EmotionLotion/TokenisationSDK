@@ -2,14 +2,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import { IStoragePlugin, StorageMetadata } from '../core/interfaces.js';
 import { Result, ok, err } from '../core/types.js';
+import type { BrowserStorage, JsonSerializable } from '../types/common.types.js';
 
 // Polyfill types for environment where DOM Lib might be missing
-declare var localStorage: any;
-declare interface Storage {
-    getItem(key: string): string | null;
-    setItem(key: string, value: string): void;
-    removeItem(key: string): void;
-}
+declare const localStorage: BrowserStorage | undefined;
 export class BrowserStoragePlugin implements IStoragePlugin {
     readonly pluginId = 'browser-storage';
     readonly providerName = 'LocalStorage';
@@ -20,7 +16,7 @@ export class BrowserStoragePlugin implements IStoragePlugin {
     }
 
     // Helper to safely access localStorage
-    private getStorage(): Storage | null {
+    private getStorage(): BrowserStorage | null {
         if (typeof localStorage !== 'undefined') return localStorage;
         return null;
     }
@@ -71,18 +67,31 @@ export class BrowserStoragePlugin implements IStoragePlugin {
             // For this MVP SDK, we'll assume the caller handles the string/buffer conversion or we use a basic Buffer polyfill if present.
             // Since this is a specialized environment, we'll return the string cast as any for now, or construct a Buffer if available.
 
+            // Try to decode base64 content
+            // In Node.js environments, use Buffer directly
+            // In browser environments, use atob + Uint8Array
             if (typeof Buffer !== 'undefined') {
                 return ok(Buffer.from(item, 'base64'));
             }
 
-            return ok(item as any);
+            // In browser environments without Buffer, decode base64 manually
+            // Note: This returns the raw string as a Buffer-like Uint8Array
+            // Callers should handle this appropriately
+            const binaryString = atob(item);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            // Create a minimal Buffer-like object for compatibility
+            return ok(bytes as unknown as Buffer);
 
-        } catch (e: any) {
-            return err(`Failed to load: ${e.message}`);
+        } catch (e: unknown) {
+            const error = e instanceof Error ? e : new Error(String(e));
+            return err(`Failed to load: ${error.message}`);
         }
     }
 
-    async save(key: string, data: any): Promise<void> {
+    async save(key: string, data: JsonSerializable): Promise<void> {
         if (typeof localStorage === 'undefined') return;
         try {
             const serialized = JSON.stringify(data);
@@ -126,8 +135,9 @@ export class BrowserStoragePlugin implements IStoragePlugin {
             if (!metaStr) return err('Metadata not found');
 
             return ok(JSON.parse(metaStr) as StorageMetadata);
-        } catch (e: any) {
-            return err(e.message);
+        } catch (e: unknown) {
+            const error = e instanceof Error ? e : new Error(String(e));
+            return err(error.message);
         }
     }
 }

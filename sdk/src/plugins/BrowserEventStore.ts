@@ -2,8 +2,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { IEventStore, EventQueryOptions } from '../core/interfaces.js';
 import { BaseEvent, EventType } from '../core/types.js';
+import type { BrowserStorage } from '../types/common.types.js';
 
-declare var localStorage: any;
+declare const localStorage: BrowserStorage | undefined;
 
 /**
  * BrowserEventStore
