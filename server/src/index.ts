@@ -30,6 +30,7 @@ import { distributionRouter } from './routes/distribution.routes.js';
 import paymentRailsRouter from './routes/payment-rails.routes.js';
 import reportsRouter from './routes/reports.routes.js';
 import { kycRouter } from './routes/kyc.routes.js';
+import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, standardRateLimiter, authRateLimiter, securityHeaders } from './middleware/apiGateway.js';
@@ -87,6 +88,9 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 app.get('/api/openapi.json', (_req, res) => {
   res.json(swaggerSpec);
 });
+
+// SDK Compatibility routes (aliases for React SDK)
+app.use('/api/v1', sdkCompatRouter);
 
 // API routes
 app.use('/api/v1/auth', authRouter);

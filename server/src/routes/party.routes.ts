@@ -72,6 +72,47 @@ partyRouter.get('/', async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get party by wallet address
+partyRouter.get('/by-wallet/:address', async (req: AuthRequest, res, next) => {
+  try {
+    const { address } = req.params;
+
+    if (!address || !/^0x[a-fA-F0-9]{40}$/i.test(address)) {
+      throw new ValidationError('Invalid Ethereum address');
+    }
+
+    const wallet = await db.query.partyWallets.findFirst({
+      where: eq(partyWallets.address, address.toLowerCase()),
+    });
+
+    if (!wallet) {
+      // Return null instead of error - party may not exist yet
+      return res.json({ party: null });
+    }
+
+    const party = await db.query.parties.findFirst({
+      where: eq(parties.id, wallet.partyId),
+    });
+
+    if (!party) {
+      return res.json({ party: null });
+    }
+
+    const wallets = await db.query.partyWallets.findMany({
+      where: eq(partyWallets.partyId, party.id),
+    });
+
+    res.json({
+      party: {
+        ...party,
+        wallets,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get party by ID
 partyRouter.get('/:id', async (req: AuthRequest, res, next) => {
   try {

@@ -205,6 +205,9 @@ export * from './components/index.js';
 // Extension Modules (Cash Flow, Governance, Escrow)
 export * from './modules/index.js';
 
+// Provider Implementations (Mock/Reference)
+export * from './providers/index.js';
+
 // Re-export commonly used types from SDK
 export {
   // Core enums

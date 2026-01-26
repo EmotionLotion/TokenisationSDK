@@ -49,3 +49,9 @@ export * from './IndexingEngine.js';
 
 // Asset Abstraction Layer
 export * from './AssetAbstraction.js';
+
+// Observability (Logging, Metrics, Tracing)
+export * from './Observability.js';
+
+// Retry & Error Handling
+export * from './Retry.js';

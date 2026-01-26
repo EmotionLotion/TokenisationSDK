@@ -1,0 +1,50 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs",
+  "name": "Tokenisation SDK",
+  "readme": "../README.md",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "includeVersion": true,
+  "navigationLinks": {
+    "GitHub": "https://github.com/EmotionLotion/TokenisationSDK"
+  },
+  "plugin": ["typedoc-plugin-markdown"],
+  "theme": "default",
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "SDK Core",
+    "Asset Abstraction",
+    "Compliance",
+    "Custody & Recovery",
+    "Indexing & Reporting",
+    "Contracts",
+    "Plugins",
+    "Services",
+    "Types",
+    "*"
+  ],
+  "groupOrder": [
+    "Classes",
+    "Interfaces",
+    "Type Aliases",
+    "Functions",
+    "Enumerations",
+    "Variables"
+  ],
+  "sort": ["source-order"],
+  "exclude": [
+    "**/node_modules/**",
+    "**/*.test.ts",
+    "**/tests/**"
+  ],
+  "externalPattern": ["**/node_modules/**"],
+  "excludeExternals": true,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}

@@ -11,3 +11,4 @@ export * from './OracleService.js';
 export * from './IndexingService.js';
 export * from './TaxWithholdingService.js';
 export * from './DeploymentService.js';
+export * from './HealthCheck.js';
