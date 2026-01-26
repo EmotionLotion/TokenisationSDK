@@ -45,6 +45,7 @@ const ClaimTopicsRegistryBytecode = require('../contracts/abis/ClaimTopicsRegist
 const TrustedIssuersRegistryBytecode = require('../contracts/abis/TrustedIssuersRegistry.bytecode.json');
 const OracleRegistryBytecode = require('../contracts/abis/OracleRegistry.bytecode.json');
 const ChainlinkPriceFeedBytecode = require('../contracts/abis/ChainlinkPriceFeed.bytecode.json');
+const TokenFactoryBytecode = require('../contracts/abis/TokenFactory.bytecode.json');
 
 const bytecodes = {
   ComplianceToken: ComplianceTokenBytecode as Hex,
@@ -55,6 +56,7 @@ const bytecodes = {
   TrustedIssuersRegistry: TrustedIssuersRegistryBytecode as Hex,
   OracleRegistry: OracleRegistryBytecode as Hex,
   ChainlinkPriceFeed: ChainlinkPriceFeedBytecode as Hex,
+  TokenFactory: TokenFactoryBytecode as Hex,
 } as const;
 
 /**

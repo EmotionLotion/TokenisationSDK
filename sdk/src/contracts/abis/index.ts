@@ -16,6 +16,7 @@ const ClaimTopicsRegistryAbi = require('./ClaimTopicsRegistry.json');
 const TrustedIssuersRegistryAbi = require('./TrustedIssuersRegistry.json');
 const OracleRegistryAbi = require('./OracleRegistry.json');
 const ChainlinkPriceFeedAbi = require('./ChainlinkPriceFeed.json');
+const TokenFactoryAbi = require('./TokenFactory.json');
 
 export const abis = {
   ComplianceToken: ComplianceTokenAbi as readonly unknown[],
@@ -26,6 +27,7 @@ export const abis = {
   TrustedIssuersRegistry: TrustedIssuersRegistryAbi as readonly unknown[],
   OracleRegistry: OracleRegistryAbi as readonly unknown[],
   ChainlinkPriceFeed: ChainlinkPriceFeedAbi as readonly unknown[],
+  TokenFactory: TokenFactoryAbi as readonly unknown[],
 } as const;
 
 export {
@@ -37,6 +39,7 @@ export {
   TrustedIssuersRegistryAbi,
   OracleRegistryAbi,
   ChainlinkPriceFeedAbi,
+  TokenFactoryAbi,
 };
 
 export type ContractName = keyof typeof abis;
