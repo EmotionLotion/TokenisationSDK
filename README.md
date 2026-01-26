@@ -1,4 +1,4 @@
-# AHOY Tokenisation SDK
+# Tokenisation SDK
 
 <div align="center">
 
@@ -21,7 +21,7 @@
 
 ## 🎯 What is This?
 
-The AHOY Tokenisation SDK is a comprehensive toolkit for building compliant tokenized asset applications. It provides:
+The Tokenisation SDK is a comprehensive toolkit for building compliant tokenized asset applications. It provides:
 
 - **Multi-Standard Token Support** - ERC-20, ERC-721, ERC-1155, ERC-1410, ERC-4626, Soulbound Tokens
 - **Regulatory Compliance** - Built-in KYC/AML, jurisdiction rules, transfer restrictions
