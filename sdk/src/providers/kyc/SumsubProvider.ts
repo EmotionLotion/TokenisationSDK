@@ -17,6 +17,7 @@ import type {
   KYCStatus,
   KYCVerification,
 } from '../../core/interfaces.providers.js';
+import type { KYCResult } from '../../identity/Claims.js';
 
 // ============================================================================
 // TYPES
@@ -581,6 +582,180 @@ export class SumsubProvider implements IKYCProvider {
       .digest('hex');
 
     return signature === expectedSignature;
+  }
+
+  // ==========================================================================
+  // CLAIMS SERVICE INTEGRATION
+  // ==========================================================================
+
+  /**
+   * Convert webhook payload to canonical KYCResult for ClaimsService.
+   * This is the normalization point - Sumsub specifics stay here.
+   *
+   * @example
+   * ```typescript
+   * // In your webhook handler:
+   * app.post('/webhooks/sumsub', async (req, res) => {
+   *   const signature = req.headers['x-payload-digest'];
+   *   const result = await sumsub.handleWebhook(req.body, signature);
+   *
+   *   if (result.success) {
+   *     // Get full applicant data for KYCResult
+   *     const kycResult = await sumsub.toKYCResult(result.data.verificationId);
+   *     if (kycResult.success) {
+   *       // Pipe to claims service
+   *       await claimsService.processKYCResult(kycResult.data.identityId, kycResult.data);
+   *     }
+   *   }
+   *
+   *   res.status(200).send('OK');
+   * });
+   * ```
+   */
+  async toKYCResult(verificationId: string): Promise<Result<KYCResult & { identityId: string }, string>> {
+    // Fetch full applicant data
+    const verificationResult = await this.getVerification(verificationId);
+    if (!verificationResult.success) {
+      return err(verificationResult.error);
+    }
+
+    const verification = verificationResult.data;
+    const applicant = verification.providerData?.applicant as SumsubApplicant | undefined;
+
+    // Map to canonical KYCResult
+    const kycResult: KYCResult & { identityId: string } = {
+      // Identity reference
+      identityId: verification.subjectId,
+
+      // Provider info
+      provider: this.providerId,
+      providerReferenceId: verification.verificationId,
+
+      // Status
+      status: this.mapStatusToCanonical(verification.status),
+      level: this.mapLevelToCanonical(verification.level),
+
+      // Jurisdiction
+      jurisdiction: verification.jurisdiction || 'XX', // XX = unknown
+
+      // Investor type (individual unless entity docs present)
+      investorType: this.detectInvestorType(applicant),
+
+      // Accredited status (from Sumsub questionnaire if available)
+      accreditedInvestor: this.detectAccreditedStatus(applicant),
+
+      // Sanctions (from AML check if run)
+      sanctionsStatus: verification.sanctionsStatus || 'clear',
+
+      // PEP status
+      isPEP: verification.isPEP || false,
+
+      // Expiry (1 year from verification)
+      expiresAt: this.calculateExpiry(verification.verifiedAt),
+
+      // Evidence hash (hash of applicant ID for audit trail)
+      evidenceHash: this.hashEvidence(verification.verificationId),
+    };
+
+    return ok(kycResult);
+  }
+
+  /**
+   * Process webhook and return KYCResult in one call.
+   * Convenience method for webhook handlers.
+   */
+  async processWebhook(
+    payload: unknown,
+    signature: string
+  ): Promise<Result<{ kycResult: KYCResult & { identityId: string }; status: KYCStatus }, string>> {
+    // Handle webhook
+    const webhookResult = await this.handleWebhook(payload, signature);
+    if (!webhookResult.success) {
+      return err(webhookResult.error);
+    }
+
+    // Only process approved/rejected - ignore pending updates
+    if (webhookResult.data.newStatus !== 'approved' && webhookResult.data.newStatus !== 'rejected') {
+      return err(`Status ${webhookResult.data.newStatus} does not require claims update`);
+    }
+
+    // Get KYCResult
+    const kycResultResponse = await this.toKYCResult(webhookResult.data.verificationId);
+    if (!kycResultResponse.success) {
+      return err(kycResultResponse.error);
+    }
+
+    return ok({
+      kycResult: kycResultResponse.data,
+      status: webhookResult.data.newStatus,
+    });
+  }
+
+  // ==========================================================================
+  // PRIVATE HELPERS FOR KYC RESULT CONVERSION
+  // ==========================================================================
+
+  private mapStatusToCanonical(status: KYCStatus): 'pending' | 'approved' | 'rejected' {
+    switch (status) {
+      case 'approved': return 'approved';
+      case 'rejected': return 'rejected';
+      default: return 'pending';
+    }
+  }
+
+  private mapLevelToCanonical(level: KYCLevel): 'basic' | 'standard' | 'enhanced' | 'institutional' {
+    switch (level) {
+      case 'institutional': return 'institutional';
+      case 'enhanced': return 'enhanced';
+      case 'standard': return 'standard';
+      default: return 'basic';
+    }
+  }
+
+  private detectInvestorType(applicant?: SumsubApplicant): 'individual' | 'entity' {
+    // Check if company docs were requested/provided
+    const docSets = applicant?.requiredIdDocs?.docSets || [];
+    const hasCompanyDocs = docSets.some((d) =>
+      d.idDocSetType === 'COMPANY' ||
+      d.idDocSetType === 'COMPANY_DOC' ||
+      d.types?.some((t) => t.includes('COMPANY'))
+    );
+    return hasCompanyDocs ? 'entity' : 'individual';
+  }
+
+  private detectAccreditedStatus(applicant?: SumsubApplicant): boolean {
+    // Check questionnaire answers if available
+    // Sumsub stores this in applicant data under custom fields
+    const providerData = applicant as Record<string, unknown> | undefined;
+    const questionnaire = providerData?.questionnaires as Array<{ items?: Array<{ answer?: string }> }> | undefined;
+
+    if (questionnaire) {
+      // Look for accredited investor question
+      for (const q of questionnaire) {
+        for (const item of q.items || []) {
+          if (item.answer?.toLowerCase().includes('accredited')) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private calculateExpiry(verifiedAt?: string): string {
+    const baseDate = verifiedAt ? new Date(verifiedAt) : new Date();
+    const expiry = new Date(baseDate);
+    expiry.setFullYear(expiry.getFullYear() + 1); // 1 year validity
+    return expiry.toISOString();
+  }
+
+  private hashEvidence(verificationId: string): string {
+    // Simple hash for audit trail linking
+    return createHmac('sha256', 'evidence')
+      .update(`sumsub:${verificationId}:${Date.now()}`)
+      .digest('hex')
+      .substring(0, 16);
   }
 }
 
