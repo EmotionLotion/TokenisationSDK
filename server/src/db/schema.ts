@@ -1502,6 +1502,203 @@ export const corporateActionEntitlements = pgTable('corporate_action_entitlement
 }));
 
 // ============================================================================
+// SECTION 21: Declarative Policy Layer (Enterprise)
+// ============================================================================
+
+// Policy Rulesets - Full declarative policy storage with versioning
+export const policyRulesets = pgTable('policy_rulesets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  policyVersionId: uuid('policy_version_id').notNull().references(() => policyVersions.id, { onDelete: 'cascade' }),
+
+  // Policy content
+  name: varchar('name', { length: 256 }).notNull(),
+  description: text('description'),
+  rulesetJson: jsonb('ruleset_json').notNull(), // Full JSON policy schema
+  rulesetHash: varchar('ruleset_hash', { length: 64 }).notNull(), // SHA256 hash of ruleset
+  compiledRules: jsonb('compiled_rules'), // Pre-compiled rules for fast evaluation
+
+  // Jurisdiction scoping
+  jurisdiction: varchar('jurisdiction', { length: 8 }).notNull(),
+  jurisdictionOverlays: text('jurisdiction_overlays').array().default([]), // Additional jurisdiction overlays
+
+  // Activation
+  isActive: boolean('is_active').default(false),
+  activatedAt: timestamp('activated_at', { withTimezone: true }),
+  activatedBy: uuid('activated_by'),
+  deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+  deactivatedBy: uuid('deactivated_by'),
+
+  // Validity period
+  effectiveFrom: timestamp('effective_from', { withTimezone: true }),
+  effectiveUntil: timestamp('effective_until', { withTimezone: true }),
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_policy_rulesets_org').on(table.orgId),
+  policyVersionIdx: index('idx_policy_rulesets_policy_version').on(table.policyVersionId),
+  jurisdictionIdx: index('idx_policy_rulesets_jurisdiction').on(table.jurisdiction),
+  activeIdx: index('idx_policy_rulesets_active').on(table.isActive),
+  hashIdx: index('idx_policy_rulesets_hash').on(table.rulesetHash),
+}));
+
+// Compliance Decision Receipts - Cryptographic proof of compliance decisions
+export const complianceReceipts = pgTable('compliance_receipts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+
+  // Linking
+  decisionId: uuid('decision_id').references(() => decisions.id, { onDelete: 'set null' }),
+  traceId: varchar('trace_id', { length: 64 }).notNull(),
+
+  // Cryptographic proof
+  receiptHash: varchar('receipt_hash', { length: 64 }).notNull(), // SHA256 of receipt content
+  policyHash: varchar('policy_hash', { length: 64 }).notNull(), // Hash of policy used
+  inputsHash: varchar('inputs_hash', { length: 64 }).notNull(), // Hash of evaluation inputs
+
+  // Action & Result
+  action: varchar('action', { length: 64 }).notNull(), // transfer, issuance, redemption, etc.
+  result: varchar('result', { length: 32 }).notNull(), // allow, deny, require_action
+
+  // Signature
+  signature: text('signature').notNull(), // Server signature over receipt
+  signatureAlgorithm: varchar('signature_algorithm', { length: 32 }).notNull().default('ES256'),
+  signedBy: varchar('signed_by', { length: 256 }).notNull(),
+  signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
+
+  // Audit trail
+  evaluationDurationMs: integer('evaluation_duration_ms'),
+  rulesEvaluated: integer('rules_evaluated').notNull(),
+  rulesPassed: integer('rules_passed').notNull(),
+  rulesFailed: integer('rules_failed').notNull(),
+
+  // For chain anchoring
+  anchoredTxHash: varchar('anchored_tx_hash', { length: 66 }),
+  anchoredAt: timestamp('anchored_at', { withTimezone: true }),
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_compliance_receipts_org').on(table.orgId),
+  decisionIdx: index('idx_compliance_receipts_decision').on(table.decisionId),
+  traceIdx: index('idx_compliance_receipts_trace').on(table.traceId),
+  receiptHashIdx: uniqueIndex('idx_compliance_receipts_hash').on(table.receiptHash),
+  resultIdx: index('idx_compliance_receipts_result').on(table.result),
+  createdAtIdx: index('idx_compliance_receipts_created').on(table.createdAt),
+}));
+
+// Compliance Audit Log - Detailed compliance evaluation history
+export const complianceAuditLog = pgTable('compliance_audit_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+
+  // Request identification
+  traceId: varchar('trace_id', { length: 64 }).notNull(),
+  requestId: varchar('request_id', { length: 64 }),
+
+  // Action
+  action: varchar('action', { length: 64 }).notNull(),
+  subjectType: varchar('subject_type', { length: 32 }).notNull(), // token, transfer, investor, etc.
+  subjectId: varchar('subject_id', { length: 256 }).notNull(),
+
+  // Evaluation
+  result: varchar('result', { length: 32 }).notNull(), // allow, deny, require_action
+  rulesEvaluated: integer('rules_evaluated').notNull(),
+  violations: jsonb('violations').default([]), // Array of { ruleId, code, message, severity }
+
+  // Partner-facing explanation
+  partnerExplanation: text('partner_explanation'), // Human-readable summary
+  suggestedActions: jsonb('suggested_actions').default([]), // Array of { action, endpoint, description }
+
+  // Actor
+  actorId: varchar('actor_id', { length: 256 }).notNull(),
+  actorType: varchar('actor_type', { length: 32 }).notNull(),
+
+  // Hash chain for tamper-evidence
+  entryHash: varchar('entry_hash', { length: 64 }).notNull(),
+  previousEntryHash: varchar('previous_entry_hash', { length: 64 }),
+
+  // Timing
+  evaluationDurationMs: integer('evaluation_duration_ms'),
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_compliance_audit_log_org').on(table.orgId),
+  traceIdx: index('idx_compliance_audit_log_trace').on(table.traceId),
+  actionIdx: index('idx_compliance_audit_log_action').on(table.action),
+  resultIdx: index('idx_compliance_audit_log_result').on(table.result),
+  subjectIdx: index('idx_compliance_audit_log_subject').on(table.subjectType, table.subjectId),
+  createdAtIdx: index('idx_compliance_audit_log_created').on(table.createdAt),
+  entryHashIdx: index('idx_compliance_audit_log_hash').on(table.entryHash),
+}));
+
+// ============================================================================
+// SECTION 22: Versioned State Transitions (P2 - Audit Trail)
+// ============================================================================
+
+// State Transitions - Full audit trail with who/why/when
+export const stateTransitions = pgTable('state_transitions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+
+  // Subject
+  assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').references(() => tokens.id, { onDelete: 'cascade' }),
+  subjectType: varchar('subject_type', { length: 32 }).notNull(), // asset, token, investor, transfer
+  subjectId: uuid('subject_id').notNull(), // Polymorphic reference
+
+  // State change
+  previousState: varchar('previous_state', { length: 32 }).notNull(),
+  newState: varchar('new_state', { length: 32 }).notNull(),
+
+  // Versioning
+  version: integer('version').notNull().default(1),
+  previousTransitionId: uuid('previous_transition_id'),
+
+  // Actor information (who)
+  triggeredById: varchar('triggered_by_id', { length: 256 }).notNull(),
+  triggeredByType: varchar('triggered_by_type', { length: 32 }).notNull(), // user, api_key, system, webhook
+  triggeredByName: varchar('triggered_by_name', { length: 256 }),
+  triggeredByIp: varchar('triggered_by_ip', { length: 64 }),
+
+  // Justification (why)
+  reason: varchar('reason', { length: 1024 }).notNull(), // Machine-readable reason code
+  justification: text('justification'), // Human-readable explanation
+
+  // Compliance linkage
+  decisionReceiptId: uuid('decision_receipt_id').references(() => complianceReceipts.id, { onDelete: 'set null' }),
+  complianceResult: varchar('compliance_result', { length: 16 }), // allow, deny, override
+
+  // Hash chain for tamper-evidence
+  transitionHash: varchar('transition_hash', { length: 64 }).notNull(),
+  previousTransitionHash: varchar('previous_transition_hash', { length: 64 }),
+
+  // Request context
+  requestId: varchar('request_id', { length: 64 }),
+  traceId: varchar('trace_id', { length: 64 }),
+
+  // Timing (when)
+  executedAt: timestamp('executed_at', { withTimezone: true }).notNull().defaultNow(),
+
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_state_transitions_org').on(table.orgId),
+  assetIdx: index('idx_state_transitions_asset').on(table.assetId),
+  tokenIdx: index('idx_state_transitions_token').on(table.tokenId),
+  subjectIdx: index('idx_state_transitions_subject').on(table.subjectType, table.subjectId),
+  stateIdx: index('idx_state_transitions_states').on(table.previousState, table.newState),
+  versionIdx: index('idx_state_transitions_version').on(table.subjectId, table.version),
+  triggeredByIdx: index('idx_state_transitions_triggered_by').on(table.triggeredByType, table.triggeredById),
+  executedAtIdx: index('idx_state_transitions_executed').on(table.executedAt),
+  hashIdx: index('idx_state_transitions_hash').on(table.transitionHash),
+  previousHashIdx: index('idx_state_transitions_prev_hash').on(table.previousTransitionHash),
+}));
+
+// ============================================================================
 // TYPE EXPORTS
 // ============================================================================
 
@@ -1656,3 +1853,19 @@ export type NewBuybackRequest = typeof buybackRequests.$inferInsert;
 // Clawback Type (enhanced)
 export type Clawback = typeof clawbacks.$inferSelect;
 export type NewClawback = typeof clawbacks.$inferInsert;
+
+// Policy Ruleset Types
+export type PolicyRuleset = typeof policyRulesets.$inferSelect;
+export type NewPolicyRuleset = typeof policyRulesets.$inferInsert;
+
+// Compliance Receipt Types
+export type ComplianceReceipt = typeof complianceReceipts.$inferSelect;
+export type NewComplianceReceipt = typeof complianceReceipts.$inferInsert;
+
+// Compliance Audit Log Types
+export type ComplianceAuditLogEntry = typeof complianceAuditLog.$inferSelect;
+export type NewComplianceAuditLogEntry = typeof complianceAuditLog.$inferInsert;
+
+// State Transition Types
+export type StateTransition = typeof stateTransitions.$inferSelect;
+export type NewStateTransition = typeof stateTransitions.$inferInsert;

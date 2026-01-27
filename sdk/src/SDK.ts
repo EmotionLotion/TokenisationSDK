@@ -147,6 +147,10 @@ import {
   type ReportOptions,
   ReportFramework,
 } from './modules/RegulatoryReports.js';
+import {
+  GoldenPathFlows,
+  type IGoldenPathFlows,
+} from './workflows/GoldenPath.js';
 
 /**
  * Production API configuration for real backend integration
@@ -262,6 +266,7 @@ export class TokenisationSDK {
   private _escrowEngine: EscrowEngine;
   private _offeringsEngine: OfferingsEngine;
   private _regulatoryReporter: RegulatoryReporter;
+  private _goldenPathFlows: GoldenPathFlows;
 
   // Services
   private complianceService: ComplianceService;
@@ -322,6 +327,7 @@ export class TokenisationSDK {
     this._escrowEngine = new EscrowEngine();
     this._offeringsEngine = new OfferingsEngine(this as any);
     this._regulatoryReporter = new RegulatoryReporter(this as any);
+    this._goldenPathFlows = new GoldenPathFlows(this);
 
     // Initialize services
     this.complianceService = createComplianceService();
@@ -904,6 +910,30 @@ export class TokenisationSDK {
   /** Get the regulatory reporter for compliance reports */
   get reports(): RegulatoryReporter {
     return this._regulatoryReporter;
+  }
+
+  /**
+   * Get the Golden Path workflows for high-level opinionated operations
+   *
+   * Golden Path provides convenience methods for common tokenization scenarios:
+   * - `tokenizeRealEstate()` - Dubai real estate tokenization (8 steps)
+   * - `launchSecurityToken()` - Security token with regulatory compliance (7 steps)
+   * - `distributeToInvestors()` - Fund distribution to token holders (5 steps)
+   *
+   * @example
+   * ```typescript
+   * const result = await sdk.goldenPath.tokenizeRealEstate({
+   *   titleDeedNumber: 'DLD-2024-12345',
+   *   propertyAddress: '1802, Marina Towers, Dubai Marina',
+   *   tokenName: 'Marina Tower Unit 1802',
+   *   tokenSymbol: 'MT1802',
+   *   totalSupply: '1000000',
+   *   onProgress: (p) => console.log(`[${p.step}/${p.totalSteps}] ${p.stepName}`)
+   * });
+   * ```
+   */
+  get goldenPath(): IGoldenPathFlows {
+    return this._goldenPathFlows;
   }
 
   // ============================================================================

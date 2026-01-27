@@ -41,6 +41,7 @@ import { datasourcesRouter } from './routes/datasources.routes.js';
 import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
 import { issuanceRouter } from './routes/issuance.routes.js';
 import { exportRouter } from './routes/export.routes.js';
+import { transitionRouter } from './routes/transition.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
@@ -53,6 +54,8 @@ import {
   closeRedisConnection,
 } from './middleware/rateLimit.js';
 import { requestLogger, errorLogger, logger } from './middleware/logger.js';
+import { tenantContextMiddleware, optionalTenantContextMiddleware } from './middleware/context.js';
+import { traceMiddleware } from './middleware/traceMiddleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,8 +68,9 @@ app.use(cors({
   credentials: true,
 }));
 
-// Request ID and logging (before parsing)
+// Request ID, tracing and logging (before parsing)
 app.use(requestIdMiddleware);
+app.use(traceMiddleware);
 app.use(requestLogger({ logBody: process.env.LOG_REQUEST_BODY === 'true' }));
 
 // Request parsing
@@ -116,39 +120,70 @@ app.get('/api/openapi.json', (_req, res) => {
 // SDK Compatibility routes (aliases for React SDK)
 app.use('/api/v1', sdkCompatRouter);
 
-// API routes
+// ============================================================================
+// Public routes (no auth required, optional tenant context)
+// ============================================================================
 app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/iam', iamRouter); // IAM routes (orgs, users, roles, api-keys)
-app.use('/api/v1/projects', projectRouter); // Project & Document routes
-app.use('/api/v1/compliance', complianceRouter); // Compliance policies & decisions
-app.use('/api/v1/transfers', transferRouter); // Transfer orchestration saga
-app.use('/api/v1/webhooks', webhookRouter); // Webhook endpoints & deliveries
-app.use('/api/v1/dld', dldRouter); // DLD title registry & events
-app.use('/api/v1/audit', auditRouter); // Audit log with hash chain
-app.use('/api/v1/ledger', ledgerRouter); // Ledger positions & reporting
-app.use('/api/v1/investors', investorRouter); // Investor onboarding & KYC
-app.use('/api/v1/relayer', relayerRouter); // Chain relayer & signer
-app.use('/api/v1/indexer', indexerRouter); // Chain event indexer
-app.use('/api/v1/eventbus', eventbusRouter); // Internal event bus
-app.use('/api/v1/idempotency', idempotencyRouter); // Idempotency management
-app.use('/api/v1/settlements', settlementRouter); // Settlement finality tracking
-app.use('/api/v1/distributions', distributionRouter); // Yield/dividend distributions
-app.use('/api/v1/vesting', vestingRouter); // Vesting schedules & releases
-app.use('/api/v1/corporate-actions', corporateActionRouter); // Corporate actions (splits, conversions)
-app.use('/api/v1/payment-rails', paymentRailsRouter); // Payment rails (USDC, Bank)
-app.use('/api/v1/reports', reportsRouter); // Report exports (cap table, audit, etc.)
-app.use('/api/v1/kyc', kycRouter); // KYC provider integration (SumSub, Onfido)
-app.use('/api/v1/custody', custodyRouter); // Custody integration (Fireblocks, BitGo)
-app.use('/api/v1/truthview', truthviewRouter); // Point-in-time queries & historical state
-app.use('/api/v1/reconciliation', reconciliationRouter); // Chain vs books reconciliation
-app.use('/api/v1/datasources', datasourcesRouter); // External data feeds (price oracles, NAV)
-app.use('/api/v1/issuance', issuanceRouter); // Token offerings & allocations
-app.use('/api/v1/export', exportRouter); // Evidence packs & regulatory exports
-app.use('/api/v1/parties', authMiddleware, partyRouter);
-app.use('/api/v1/assets', apiKeyMiddleware, assetRouter);
-app.use('/api/v1/events', authMiddleware, eventRouter);
-app.use('/api/v1/tokens', apiKeyMiddleware, tokenRouter);
 app.use('/api/v1/chains', chainRouter); // Public chain config
+
+// ============================================================================
+// Protected API routes with tenant context enforcement
+// All routes below require authentication AND tenant context (orgId)
+// The middleware stack: apiKeyMiddleware -> tenantContextMiddleware -> router
+// ============================================================================
+
+// IAM & Organization Management
+app.use('/api/v1/iam', apiKeyMiddleware, tenantContextMiddleware, iamRouter);
+app.use('/api/v1/projects', apiKeyMiddleware, tenantContextMiddleware, projectRouter);
+
+// Compliance & Governance
+app.use('/api/v1/compliance', apiKeyMiddleware, tenantContextMiddleware, complianceRouter);
+app.use('/api/v1/audit', apiKeyMiddleware, tenantContextMiddleware, auditRouter);
+
+// Core Asset Operations
+app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, assetRouter);
+app.use('/api/v1/tokens', apiKeyMiddleware, tenantContextMiddleware, tokenRouter);
+
+// Investor Management
+app.use('/api/v1/parties', apiKeyMiddleware, tenantContextMiddleware, partyRouter);
+app.use('/api/v1/investors', apiKeyMiddleware, tenantContextMiddleware, investorRouter);
+app.use('/api/v1/kyc', apiKeyMiddleware, tenantContextMiddleware, kycRouter);
+
+// Transfer & Settlement
+app.use('/api/v1/transfers', apiKeyMiddleware, tenantContextMiddleware, transferRouter);
+app.use('/api/v1/settlements', apiKeyMiddleware, tenantContextMiddleware, settlementRouter);
+
+// Financial Operations
+app.use('/api/v1/distributions', apiKeyMiddleware, tenantContextMiddleware, distributionRouter);
+app.use('/api/v1/vesting', apiKeyMiddleware, tenantContextMiddleware, vestingRouter);
+app.use('/api/v1/corporate-actions', apiKeyMiddleware, tenantContextMiddleware, corporateActionRouter);
+app.use('/api/v1/payment-rails', apiKeyMiddleware, tenantContextMiddleware, paymentRailsRouter);
+app.use('/api/v1/issuance', apiKeyMiddleware, tenantContextMiddleware, issuanceRouter);
+
+// Infrastructure & Operations
+app.use('/api/v1/webhooks', apiKeyMiddleware, tenantContextMiddleware, webhookRouter);
+app.use('/api/v1/relayer', apiKeyMiddleware, tenantContextMiddleware, relayerRouter);
+app.use('/api/v1/indexer', apiKeyMiddleware, tenantContextMiddleware, indexerRouter);
+app.use('/api/v1/eventbus', apiKeyMiddleware, tenantContextMiddleware, eventbusRouter);
+app.use('/api/v1/idempotency', apiKeyMiddleware, tenantContextMiddleware, idempotencyRouter);
+app.use('/api/v1/custody', apiKeyMiddleware, tenantContextMiddleware, custodyRouter);
+
+// Reporting & Analytics
+app.use('/api/v1/ledger', apiKeyMiddleware, tenantContextMiddleware, ledgerRouter);
+app.use('/api/v1/reports', apiKeyMiddleware, tenantContextMiddleware, reportsRouter);
+app.use('/api/v1/truthview', apiKeyMiddleware, tenantContextMiddleware, truthviewRouter);
+app.use('/api/v1/reconciliation', apiKeyMiddleware, tenantContextMiddleware, reconciliationRouter);
+app.use('/api/v1/export', apiKeyMiddleware, tenantContextMiddleware, exportRouter);
+
+// State Transitions & Audit Trail
+app.use('/api/v1/transitions', apiKeyMiddleware, tenantContextMiddleware, transitionRouter);
+
+// External Integrations
+app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);
+app.use('/api/v1/datasources', apiKeyMiddleware, tenantContextMiddleware, datasourcesRouter);
+
+// Events (using authMiddleware for JWT-based access)
+app.use('/api/v1/events', authMiddleware, optionalTenantContextMiddleware, eventRouter);
 
 // Error logging and handling
 app.use(errorLogger);

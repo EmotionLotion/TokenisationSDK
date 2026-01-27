@@ -1,9 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ApiKeyRequest, JwtPayload, ApiKeyPayload } from './auth.js';
 import { AsyncLocalStorage } from 'async_hooks';
+import {
+  TenantContext,
+  runWithTenant,
+  TenantContextError,
+  type ActorType,
+} from '../context/TenantContext.js';
 
 // ============================================================================
-// Request Context - Full tracing correlation
+// Request Context - Full tracing correlation (legacy, for backwards compatibility)
 // ============================================================================
 
 export interface RequestContext {
@@ -19,6 +25,9 @@ export interface RequestContext {
 
 // AsyncLocalStorage for propagating context through async operations
 const asyncContextStorage = new AsyncLocalStorage<RequestContext>();
+
+// Re-export TenantContext utilities for convenience
+export { TenantContext, runWithTenant, TenantContextError };
 
 /**
  * Gets the current request context from AsyncLocalStorage.
@@ -188,4 +197,185 @@ export function withCorrelation(metadata: Record<string, unknown> = {}): Record<
     ...correlation,
     ...metadata,
   };
+}
+
+// ============================================================================
+// Tenant Context Middleware - Enterprise-grade multi-tenant isolation
+// ============================================================================
+
+/**
+ * Tenant context middleware that enforces orgId presence.
+ *
+ * This middleware MUST be applied AFTER auth middleware so that
+ * apiKey/user information is available to determine the orgId.
+ *
+ * It creates a TenantContext that propagates through async operations
+ * and ensures all database operations are scoped to the correct tenant.
+ *
+ * @throws 403 if no orgId can be determined from the request
+ */
+export function tenantContextMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  // Cast to ContextRequest to access apiKey/user added by auth middleware
+  const contextReq = req as ContextRequest;
+
+  const requestId = (req.headers['x-request-id'] as string) ||
+    `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+  // Determine actor information from auth
+  let actorId: string;
+  let actorType: ActorType;
+  let orgId: string | undefined;
+  let permissions: string[] = [];
+
+  if (contextReq.apiKey) {
+    actorId = contextReq.apiKey.keyId;
+    actorType = 'api_key';
+    orgId = contextReq.apiKey.orgId;
+    permissions = contextReq.apiKey.scopes || [];
+  } else if (contextReq.user) {
+    actorId = contextReq.user.partyId;
+    actorType = 'user';
+    orgId = contextReq.user.orgId;
+    // User permissions would typically be loaded from the database
+    permissions = (contextReq.user as any).permissions || [];
+  } else {
+    actorId = 'anonymous';
+    actorType = 'system';
+  }
+
+  // CRITICAL: Enforce orgId presence for tenant isolation
+  if (!orgId) {
+    const error: TenantContextError = new TenantContextError(
+      'Organization context required. Provide valid authentication with orgId.',
+      'ORG_ID_REQUIRED'
+    );
+    res.status(403).json({
+      error: {
+        message: error.message,
+        code: error.code,
+      },
+    });
+    return;
+  }
+
+  // Create the tenant context
+  const tenantCtx = TenantContext.create({
+    orgId,
+    actorId,
+    actorType,
+    requestId,
+    permissions,
+    metadata: {
+      ip: (req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress) as string,
+      userAgent: req.headers['user-agent'],
+      idempotencyKey: req.headers['idempotency-key'] as string | undefined,
+    },
+  });
+
+  // Also build legacy RequestContext for backwards compatibility
+  const legacyContext: RequestContext = {
+    requestId,
+    orgId,
+    actorId,
+    actorType,
+    ip: tenantCtx.metadata.ip as string,
+    userAgent: tenantCtx.metadata.userAgent as string,
+    startTime: tenantCtx.createdAt,
+    idempotencyKey: tenantCtx.metadata.idempotencyKey as string | undefined,
+  };
+
+  // Attach to request for backwards compatibility
+  contextReq.context = legacyContext;
+
+  // Set response headers for correlation
+  res.setHeader('X-Request-ID', requestId);
+  res.setHeader('X-Org-ID', orgId);
+  const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+  if (idempotencyKey) {
+    res.setHeader('Idempotency-Key', idempotencyKey);
+  }
+
+  // Run the rest of the request within BOTH contexts:
+  // 1. TenantContext (new) via runWithTenant
+  // 2. RequestContext (legacy) via asyncContextStorage
+  runWithTenant(tenantCtx, () => {
+    asyncContextStorage.run(legacyContext, () => {
+      next();
+    });
+  });
+}
+
+/**
+ * Optional tenant context middleware that does NOT require orgId.
+ * Use this for public endpoints that may or may not have authentication.
+ */
+export function optionalTenantContextMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  // Cast to ContextRequest to access apiKey/user added by auth middleware
+  const contextReq = req as ContextRequest;
+
+  const requestId = (req.headers['x-request-id'] as string) ||
+    `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+  // Determine actor information from auth
+  let actorId: string = 'anonymous';
+  let actorType: ActorType = 'system';
+  let orgId: string | undefined;
+
+  if (contextReq.apiKey) {
+    actorId = contextReq.apiKey.keyId;
+    actorType = 'api_key';
+    orgId = contextReq.apiKey.orgId;
+  } else if (contextReq.user) {
+    actorId = contextReq.user.partyId;
+    actorType = 'user';
+    orgId = contextReq.user.orgId;
+  }
+
+  // Build legacy context (always)
+  const legacyContext: RequestContext = {
+    requestId,
+    orgId,
+    actorId,
+    actorType,
+    ip: (req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress) as string,
+    userAgent: req.headers['user-agent'],
+    startTime: Date.now(),
+    idempotencyKey: req.headers['idempotency-key'] as string | undefined,
+  };
+
+  contextReq.context = legacyContext;
+  res.setHeader('X-Request-ID', requestId);
+  if (orgId) {
+    res.setHeader('X-Org-ID', orgId);
+  }
+
+  // If we have an orgId, also create TenantContext
+  if (orgId) {
+    const tenantCtx = TenantContext.create({
+      orgId,
+      actorId,
+      actorType,
+      requestId,
+      permissions: [],
+    });
+
+    runWithTenant(tenantCtx, () => {
+      asyncContextStorage.run(legacyContext, () => {
+        next();
+      });
+    });
+  } else {
+    // No tenant context, just legacy context
+    asyncContextStorage.run(legacyContext, () => {
+      next();
+    });
+  }
 }
