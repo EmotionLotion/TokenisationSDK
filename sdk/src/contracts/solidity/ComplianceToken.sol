@@ -19,6 +19,17 @@ interface IIdentityRegistry {
 }
 
 /**
+ * @title IModularCompliance
+ * @notice Interface for the ModularCompliance contract
+ */
+interface IModularCompliance {
+    function canTransfer(address from, address to, uint256 value) external view returns (bool);
+    function transferred(address from, address to, uint256 value) external;
+    function created(address to, uint256 value) external;
+    function destroyed(address from, uint256 value) external;
+}
+
+/**
  * @title ComplianceToken
  * @notice ERC20 token with built-in compliance checks via IdentityRegistry
  * @dev All transfers are checked against the IdentityRegistry for KYC/AML compliance
@@ -40,6 +51,9 @@ contract ComplianceToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
 
     /// @notice The identity registry contract
     IIdentityRegistry public identityRegistry;
+
+    /// @notice The modular compliance contract (optional)
+    IModularCompliance public modularCompliance;
 
     /// @notice Mapping of frozen accounts (additional to registry)
     mapping(address => bool) private _frozenAccounts;
@@ -67,6 +81,7 @@ contract ComplianceToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     // ============================================================================
 
     event IdentityRegistrySet(address indexed registry);
+    event ModularComplianceSet(address indexed compliance);
     event AccountFrozen(address indexed account, string reason);
     event AccountUnfrozen(address indexed account);
     event MaxHoldersUpdated(uint256 newMax);
@@ -218,6 +233,15 @@ contract ComplianceToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     }
 
     /**
+     * @notice Set the modular compliance contract
+     * @param compliance New compliance address (use address(0) to disable)
+     */
+    function setModularCompliance(address compliance) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        modularCompliance = IModularCompliance(compliance);
+        emit ModularComplianceSet(compliance);
+    }
+
+    /**
      * @notice Set maximum holders
      * @param _maxHolders New maximum (0 = unlimited)
      */
@@ -335,6 +359,20 @@ contract ComplianceToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
         }
 
         super._update(from, to, amount);
+
+        // Notify modular compliance after successful transfer
+        if (address(modularCompliance) != address(0)) {
+            if (from == address(0)) {
+                // Minting
+                modularCompliance.created(to, amount);
+            } else if (to == address(0)) {
+                // Burning
+                modularCompliance.destroyed(from, amount);
+            } else {
+                // Transfer
+                modularCompliance.transferred(from, to, amount);
+            }
+        }
     }
 
     /**
@@ -367,7 +405,17 @@ contract ComplianceToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
             }
         }
 
-        // Check with identity registry
+        // Check with modular compliance if set (takes precedence)
+        if (address(modularCompliance) != address(0)) {
+            if (!modularCompliance.canTransfer(from, to, amount)) {
+                revert TransferNotCompliant(from, to);
+            }
+            // If modular compliance is set, skip identity registry check
+            // as the compliance modules handle verification
+            return;
+        }
+
+        // Check with identity registry (backward compatibility)
         if (address(identityRegistry) != address(0)) {
             if (!identityRegistry.isVerified(from)) revert SenderNotVerified(from);
             if (!identityRegistry.isVerified(to)) revert ReceiverNotVerified(to);

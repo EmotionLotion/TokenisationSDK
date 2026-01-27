@@ -205,6 +205,10 @@ export * from './components/index.js';
 // Extension Modules (Cash Flow, Governance, Escrow)
 export * from './modules/index.js';
 
+// Offline Engines (deprecated - for development only)
+// For production, use ApiClient modules instead
+export * as offline from './offline/index.js';
+
 // Provider Implementations (Mock/Reference)
 export * from './providers/index.js';
 

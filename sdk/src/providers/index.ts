@@ -50,3 +50,6 @@ export * from './settlement/index.js';
 
 // Payment Providers (Stripe, Circle)
 export * from './payment/index.js';
+
+// DLD Providers (Dubai Land Department)
+export * from './dld/index.js';

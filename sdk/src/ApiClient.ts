@@ -47,6 +47,10 @@ import { AssetsModule } from './modules/assets.js';
 import { EventsModule } from './modules/events.js';
 import { WebhooksModule } from './modules/webhooks.js';
 import { AuditModule } from './modules/audit.js';
+import { GovernanceModule } from './modules/GovernanceClient.js';
+import { EscrowModule } from './modules/EscrowClient.js';
+import { CashFlowModule } from './modules/CashFlowClient.js';
+import { DLDModule } from './modules/DLDClient.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -82,6 +86,18 @@ export class ApiClient {
 
   /** Audit logs and evidence pack generation */
   public readonly audit: AuditModule;
+
+  /** Governance - proposals, voting, delegation */
+  public readonly governance: GovernanceModule;
+
+  /** Escrow - conditional transfers, milestones */
+  public readonly escrow: EscrowModule;
+
+  /** Cash flow - distributions, dividends, payouts */
+  public readonly cashflow: CashFlowModule;
+
+  /** DLD - Dubai Land Department integration */
+  public readonly dld: DLDModule;
 
   constructor(config: TokenizationSDKConfig) {
     // Validate API key format
@@ -119,6 +135,10 @@ export class ApiClient {
     this.events = new EventsModule(this.http);
     this.webhooks = new WebhooksModule(this.http);
     this.audit = new AuditModule(this.http);
+    this.governance = new GovernanceModule(this.http);
+    this.escrow = new EscrowModule(this.http);
+    this.cashflow = new CashFlowModule(this.http);
+    this.dld = new DLDModule(this.http);
   }
 
   /**

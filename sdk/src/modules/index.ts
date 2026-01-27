@@ -38,6 +38,69 @@ export { EventsModule } from './events.js';
 export { WebhooksModule } from './webhooks.js';
 export { AuditModule } from './audit.js';
 
+// Thin API Client Modules (Production-ready, server-backed)
+export { GovernanceModule } from './GovernanceClient.js';
+export type {
+  Proposal as GovernanceProposal,
+  VoteRecord as GovernanceVoteRecord,
+  Delegation as GovernanceDelegation,
+  GovernanceConfig,
+  VotingPower,
+  ExecutionResult,
+  ProposalAction,
+  VoteTally,
+  ProposalType as GovernanceProposalType,
+  ProposalState,
+  VoteType as GovernanceVoteType,
+  VotingStrategy as GovernanceVotingStrategy,
+  QuorumType,
+} from './GovernanceClient.js';
+
+export { EscrowModule } from './EscrowClient.js';
+export type {
+  Escrow as ApiEscrow,
+  Milestone as ApiMilestone,
+  EscrowParty as ApiEscrowParty,
+  ReleaseCondition as ApiReleaseCondition,
+  TxRecord,
+  MilestoneEvidence,
+  MilestoneApproval,
+  DisputeResolution,
+  EscrowType as ApiEscrowType,
+  EscrowStatus as ApiEscrowStatus,
+  EscrowPartyRole,
+  ReleaseConditionType as ApiReleaseConditionType,
+  MilestoneStatus,
+} from './EscrowClient.js';
+
+export { CashFlowModule } from './CashFlowClient.js';
+export type {
+  DistributionSchedule as ApiDistributionSchedule,
+  Distribution,
+  DistributionPayout,
+  ClaimResult,
+  UnclaimedPayout,
+  YieldSummary,
+  DistributionType as ApiDistributionType,
+  DistributionFrequency as ApiDistributionFrequency,
+  DistributionStatus as ApiDistributionStatus,
+  AllocationStrategy as ApiAllocationStrategy,
+} from './CashFlowClient.js';
+
+export { DLDModule } from './DLDClient.js';
+export type {
+  TitleDeed,
+  TokenizationEligibility,
+  TokenizationNotification as DLDTokenizationNotification,
+  Valuation,
+  DldEvent,
+  PropertySummary,
+  Owner as DLDOwner,
+  TitleDeedStatus,
+  PropertyType,
+  OwnershipType,
+} from './DLDClient.js';
+
 // Validation utilities
 export {
   validate,
@@ -47,3 +110,6 @@ export {
   generateDeterministicKey,
   schemas,
 } from './validation.js';
+
+// Additional validation schemas for new modules
+export * from './validation-governance.js';

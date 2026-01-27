@@ -285,6 +285,17 @@ export class TokenisationSDK {
   public readonly tokens: TokenManager;
 
   constructor(config: SDKConfig = {}) {
+    // Deprecation warning for production use
+    if (typeof console !== 'undefined' && process?.env?.NODE_ENV !== 'test') {
+      console.warn(
+        '[TokenisationSDK] DEPRECATED: TokenisationSDK stores state in memory and loses data on restart. ' +
+        'For production use, switch to ApiClient which persists state on the server:\n\n' +
+        '  import { ApiClient } from "@tokenisation/sdk";\n' +
+        '  const client = new ApiClient({ apiKey: "sk_..." });\n\n' +
+        'Migration guide: https://docs.tokenisation.io/migration'
+      );
+    }
+
     this.config = {
       useMockPlugins: true,
       ...config,
