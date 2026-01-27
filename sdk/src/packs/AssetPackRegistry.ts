@@ -997,6 +997,15 @@ export class AssetPackRegistry {
   }
 }
 
+// Import new jurisdiction-specific packs
+import { dubaiRealEstatePack, type AssetPackConfig } from './dubai-real-estate.pack.js';
+import { usSecurities506cPack, usSecurities506bPack } from './us-securities.pack.js';
+
+// Register jurisdiction-specific packs
+AssetPackRegistry.register(dubaiRealEstatePack as AssetPack);
+AssetPackRegistry.register(usSecurities506cPack as AssetPack);
+AssetPackRegistry.register(usSecurities506bPack as AssetPack);
+
 // Export individual packs for direct access
 export {
   PRIVATE_EQUITY_FUND,
@@ -1004,4 +1013,10 @@ export {
   CARBON_CREDIT,
   CORPORATE_BOND,
   ART_COLLECTIBLE,
+  dubaiRealEstatePack,
+  usSecurities506cPack,
+  usSecurities506bPack,
 };
+
+// Export types
+export type { AssetPackConfig };

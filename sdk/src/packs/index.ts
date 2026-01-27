@@ -31,3 +31,10 @@ export * from './WarehouseReceipt.js';
 
 // Pack H: Airline Tickets - ACCESS (conditional transfer)
 export * from './AirlineTicket.js';
+
+// Jurisdiction-Specific Packs
+// Pack I: Dubai Real Estate - UAE VARA compliant with DLD integration
+export * from './dubai-real-estate.pack.js';
+
+// Pack J: US Securities - SEC Regulation D compliant (506b/506c)
+export * from './us-securities.pack.js';

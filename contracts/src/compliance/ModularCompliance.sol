@@ -298,4 +298,78 @@ contract ModularCompliance is Ownable {
     function getModuleCount() external view returns (uint256) {
         return _modules.length;
     }
+
+    /**
+     * @notice Check if a token is bound to this compliance contract
+     * @return True if a token is bound
+     */
+    function isTokenBound() external view returns (bool) {
+        return boundToken != address(0);
+    }
+
+    /**
+     * @notice Get the bound token address
+     * @return The bound token address (alias for boundToken)
+     */
+    function getTokenBound() external view returns (address) {
+        return boundToken;
+    }
+
+    /**
+     * @notice Check compliance and return reason for failure
+     * @param from Sender address
+     * @param to Recipient address
+     * @param value Transfer amount
+     * @return compliant Whether the transfer is compliant
+     * @return failedModule Address of the first failing module (zero if compliant)
+     */
+    function canTransferWithReason(
+        address from,
+        address to,
+        uint256 value
+    ) external view returns (bool compliant, address failedModule) {
+        if (isPaused) {
+            return (true, address(0));
+        }
+
+        for (uint256 i = 0; i < _modules.length; i++) {
+            address module = _modules[i];
+            if (_moduleInfo[module].isActive) {
+                try IComplianceModule(module).moduleCheck(from, to, value, boundToken) returns (bool result) {
+                    if (!result) {
+                        return (false, module);
+                    }
+                } catch {
+                    return (false, module);
+                }
+            }
+        }
+
+        return (true, address(0));
+    }
+
+    /**
+     * @notice Check compliance for a specific module
+     * @param module Module address to check
+     * @param from Sender address
+     * @param to Recipient address
+     * @param value Transfer amount
+     * @return Whether compliant with the specified module
+     */
+    function checkModule(
+        address module,
+        address from,
+        address to,
+        uint256 value
+    ) external view returns (bool) {
+        if (!_moduleInfo[module].isActive) {
+            return true;
+        }
+
+        try IComplianceModule(module).moduleCheck(from, to, value, boundToken) returns (bool result) {
+            return result;
+        } catch {
+            return false;
+        }
+    }
 }
