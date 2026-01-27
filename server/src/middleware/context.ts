@@ -7,6 +7,8 @@ import {
   TenantContextError,
   type ActorType,
 } from '../context/TenantContext.js';
+import { pool, getDbMode } from '../config/database.js';
+import { logger } from './logger.js';
 
 // ============================================================================
 // Request Context - Full tracing correlation (legacy, for backwards compatibility)
@@ -200,6 +202,41 @@ export function withCorrelation(metadata: Record<string, unknown> = {}): Record<
 }
 
 // ============================================================================
+// PostgreSQL Row Level Security (RLS) Context
+// ============================================================================
+
+/**
+ * Sets PostgreSQL session variable for RLS policies.
+ * This must be called at the start of each request with the tenant's org_id.
+ */
+async function setPostgresOrgContext(orgId: string): Promise<(() => Promise<void>) | null> {
+  // Skip for SQLite mode (doesn't support RLS)
+  if (getDbMode() === 'sqlite' || !pool) {
+    return null;
+  }
+
+  try {
+    const client = await pool.connect();
+    await client.query(`SELECT app.set_current_org_id($1::uuid)`, [orgId]);
+
+    // Return cleanup function
+    return async () => {
+      try {
+        await client.query(`SELECT app.clear_current_org_id()`);
+      } catch (error) {
+        logger.error('Failed to clear RLS context', { error });
+      } finally {
+        client.release();
+      }
+    };
+  } catch (error) {
+    // Log but don't fail - RLS will block queries if context isn't set
+    logger.warn('Failed to set PostgreSQL RLS context', { error, orgId });
+    return null;
+  }
+}
+
+// ============================================================================
 // Tenant Context Middleware - Enterprise-grade multi-tenant isolation
 // ============================================================================
 
@@ -299,12 +336,29 @@ export function tenantContextMiddleware(
     res.setHeader('Idempotency-Key', idempotencyKey);
   }
 
-  // Run the rest of the request within BOTH contexts:
-  // 1. TenantContext (new) via runWithTenant
-  // 2. RequestContext (legacy) via asyncContextStorage
-  runWithTenant(tenantCtx, () => {
-    asyncContextStorage.run(legacyContext, () => {
-      next();
+  // Set PostgreSQL RLS context for tenant isolation at the database level
+  setPostgresOrgContext(orgId).then((cleanup) => {
+    // Register cleanup on response finish
+    if (cleanup) {
+      res.on('finish', cleanup);
+      res.on('close', cleanup);
+    }
+
+    // Run the rest of the request within BOTH contexts:
+    // 1. TenantContext (new) via runWithTenant
+    // 2. RequestContext (legacy) via asyncContextStorage
+    runWithTenant(tenantCtx, () => {
+      asyncContextStorage.run(legacyContext, () => {
+        next();
+      });
+    });
+  }).catch((error) => {
+    logger.error('Failed to set RLS context', { error, orgId });
+    // Continue without RLS - database policies will block unauthorized access
+    runWithTenant(tenantCtx, () => {
+      asyncContextStorage.run(legacyContext, () => {
+        next();
+      });
     });
   });
 }
@@ -357,7 +411,7 @@ export function optionalTenantContextMiddleware(
     res.setHeader('X-Org-ID', orgId);
   }
 
-  // If we have an orgId, also create TenantContext
+  // If we have an orgId, also create TenantContext and set RLS
   if (orgId) {
     const tenantCtx = TenantContext.create({
       orgId,
@@ -367,9 +421,23 @@ export function optionalTenantContextMiddleware(
       permissions: [],
     });
 
-    runWithTenant(tenantCtx, () => {
-      asyncContextStorage.run(legacyContext, () => {
-        next();
+    // Set PostgreSQL RLS context
+    setPostgresOrgContext(orgId).then((cleanup) => {
+      if (cleanup) {
+        res.on('finish', cleanup);
+        res.on('close', cleanup);
+      }
+
+      runWithTenant(tenantCtx, () => {
+        asyncContextStorage.run(legacyContext, () => {
+          next();
+        });
+      });
+    }).catch(() => {
+      runWithTenant(tenantCtx, () => {
+        asyncContextStorage.run(legacyContext, () => {
+          next();
+        });
       });
     });
   } else {

@@ -13,7 +13,8 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "openapi:generate": "tsx scripts/generate-openapi.ts"
+    "openapi:generate": "tsx scripts/generate-openapi.ts",
+    "postman:generate": "tsx scripts/generate-postman.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
