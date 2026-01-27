@@ -191,6 +191,43 @@ export interface TransferRequest {
   reKycRequired: boolean;
   reKycCompleted: boolean;
   reKycCompletedAt?: string;
+  /** Idempotency key for deduplication (AT-11) */
+  idempotencyKey?: string;
+  /** Resale fee/royalty amount (AT-09) */
+  resaleFee?: string;
+  /** Payment reference for fee collection */
+  paymentReference?: string;
+}
+
+// ============================================================================
+// RESALE FEE TYPES (AT-09)
+// ============================================================================
+
+export interface ResaleFeeConfig {
+  /** Percentage of resale value as fee (e.g., 0.05 = 5%) */
+  feePercentage: number;
+  /** Minimum fee amount */
+  minimumFee: string;
+  /** Maximum fee cap */
+  maximumFee?: string;
+  /** Treasury address for fee collection */
+  treasuryAddress: string;
+  /** Whether fee is required before transfer */
+  feeRequired: boolean;
+}
+
+export interface ResaleFeeLedgerEntry {
+  id: string;
+  transferRequestId: string;
+  ticketId: string;
+  resaleValue: string;
+  feeAmount: string;
+  feePercentage: number;
+  treasuryAddress: string;
+  paymentReference?: string;
+  status: 'PENDING' | 'COLLECTED' | 'WAIVED';
+  createdAt: string;
+  collectedAt?: string;
 }
 
 // ============================================================================
@@ -690,6 +727,13 @@ export class AirlineTicketEngine {
   private events: AirlineEvent[] = [];
   private webhookConfigs: Map<string, AirlineWebhookConfig> = new Map();
 
+  // Idempotency tracking (AT-11)
+  private transferIdempotencyKeys: Map<string, string> = new Map(); // key -> requestId
+
+  // Resale fee tracking (AT-09)
+  private resaleFeeConfig?: ResaleFeeConfig;
+  private resaleFeeLedger: Map<string, ResaleFeeLedgerEntry> = new Map();
+
   // External system adapters (Requirement D)
   private pssAdapter?: IPSSAdapter;
   private dcsAdapter?: IDCSAdapter;
@@ -698,10 +742,57 @@ export class AirlineTicketEngine {
     distributedLock?: IDistributedLock;
     pssAdapter?: IPSSAdapter;
     dcsAdapter?: IDCSAdapter;
+    resaleFeeConfig?: ResaleFeeConfig;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
     this.pssAdapter = config?.pssAdapter;
     this.dcsAdapter = config?.dcsAdapter;
+    this.resaleFeeConfig = config?.resaleFeeConfig;
+  }
+
+  /**
+   * Configure resale fee (AT-09)
+   */
+  setResaleFeeConfig(config: ResaleFeeConfig): void {
+    this.resaleFeeConfig = config;
+  }
+
+  /**
+   * Get resale fee ledger entries
+   */
+  getResaleFeeLedger(): ResaleFeeLedgerEntry[] {
+    return Array.from(this.resaleFeeLedger.values());
+  }
+
+  /**
+   * Get treasury balance (sum of collected fees)
+   */
+  getTreasuryBalance(): { total: string; pending: string; collected: string } {
+    let pending = 0;
+    let collected = 0;
+
+    for (const entry of Array.from(this.resaleFeeLedger.values())) {
+      const amount = parseFloat(entry.feeAmount);
+      if (entry.status === 'PENDING') pending += amount;
+      if (entry.status === 'COLLECTED') collected += amount;
+    }
+
+    return {
+      total: (pending + collected).toFixed(2),
+      pending: pending.toFixed(2),
+      collected: collected.toFixed(2),
+    };
+  }
+
+  /**
+   * Get transfer request by idempotency key (AT-11)
+   */
+  private getTransferByIdempotencyKey(key: string): TransferRequest | undefined {
+    const requestId = this.transferIdempotencyKeys.get(key);
+    if (requestId) {
+      return this.transferRequests.get(requestId);
+    }
+    return undefined;
   }
 
   /**
@@ -841,8 +932,9 @@ export class AirlineTicketEngine {
       segments: params.segments,
       status: TicketStatus.ISSUED,
       fare: params.fare,
-      transferRules: params.transferRules,
-      cancellationRules: params.cancellationRules,
+      // Deep copy to prevent mutation of original params
+      transferRules: { ...params.transferRules },
+      cancellationRules: { ...params.cancellationRules },
       issuingAirline: {
         code: params.airlineCode,
         name: params.airlineCode, // Would be looked up in real implementation
@@ -1169,56 +1261,100 @@ export class AirlineTicketEngine {
     reason: TransferReason;
     /** Supporting documentation for reason */
     supportingDocumentation?: string;
-  }): { success: boolean; request?: TransferRequest; error?: string } {
+    /** Idempotency key for deduplication (AT-11) */
+    idempotencyKey?: string;
+  }): { success: boolean; request?: TransferRequest; error?: string; errorCode?: string } {
+    // Check idempotency key first (AT-11)
+    if (params.idempotencyKey) {
+      const existingRequest = this.getTransferByIdempotencyKey(params.idempotencyKey);
+      if (existingRequest) {
+        return { success: true, request: existingRequest }; // Return existing request
+      }
+    }
+
     const ticket = this.tickets.get(params.ticketId);
     if (!ticket) {
-      return { success: false, error: 'Ticket not found' };
+      return { success: false, error: 'Ticket not found', errorCode: 'TICKET_NOT_FOUND' };
     }
 
     const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
 
     // Check if ticket is revoked (Requirement F)
     if (metadata.revoked) {
-      return { success: false, error: 'Cannot transfer revoked ticket' };
+      return { success: false, error: 'Cannot transfer revoked ticket', errorCode: 'TICKET_VOID' };
     }
 
     // Check if ticket is frozen (Requirement F)
     if (metadata.frozen) {
-      return { success: false, error: 'Cannot transfer frozen ticket - contact airline support' };
+      return { success: false, error: 'Cannot transfer frozen ticket - contact airline support', errorCode: 'TICKET_FROZEN' };
     }
 
     // Check policy flags - transferability (Requirement A)
     if (!metadata.policyFlags.transferable) {
-      return { success: false, error: 'Ticket is non-transferable per airline policy' };
+      return { success: false, error: 'Ticket is non-transferable per airline policy', errorCode: 'NON_TRANSFERABLE' };
     }
 
     // Check current passenger
     if (metadata.passengerName !== params.fromPassenger) {
-      return { success: false, error: 'Not the current ticket holder' };
+      return { success: false, error: 'Not the current ticket holder', errorCode: 'NOT_OWNER' };
     }
 
-    // Check ticket status
+    // Check ticket status - includes CHECKED_IN, BOARDED, COMPLETED, CANCELLED, REFUNDED (AT-04, AT-07)
     if (metadata.status !== TicketStatus.ISSUED && metadata.status !== TicketStatus.CONFIRMED) {
-      return { success: false, error: 'Ticket cannot be transferred in current status' };
+      // Specific error codes for different states
+      if (metadata.status === TicketStatus.CHECKED_IN) {
+        return { success: false, error: 'Ticket is locked after check-in', errorCode: 'TICKET_LOCKED_AFTER_CHECKIN' };
+      }
+      if (metadata.status === TicketStatus.BOARDED || metadata.status === TicketStatus.COMPLETED) {
+        return { success: false, error: 'Ticket has already been used', errorCode: 'TICKET_USED' };
+      }
+      if (metadata.status === TicketStatus.REFUNDED) {
+        return { success: false, error: 'Ticket has been voided after refund', errorCode: 'TICKET_VOID' };
+      }
+      if (metadata.status === TicketStatus.CANCELLED) {
+        return { success: false, error: 'Ticket has been cancelled', errorCode: 'TICKET_CANCELLED' };
+      }
+      return { success: false, error: 'Ticket cannot be transferred in current status', errorCode: 'INVALID_STATE' };
     }
 
-    // Check transfer count limit
+    // Check transfer count limit (AT-03)
     if (metadata.transferRules.transferCount >= metadata.transferRules.maxTransfers) {
-      return { success: false, error: `Maximum transfers (${metadata.transferRules.maxTransfers}) reached` };
+      return {
+        success: false,
+        error: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
+        errorCode: 'MAX_TRANSFERS_EXCEEDED'
+      };
     }
 
-    // Check transfer deadline (use policy flags deadline if set)
+    // Check transfer deadline (AT-02)
     const firstDeparture = new Date(metadata.segments[0]?.departure.dateTime);
     const deadlineHours = metadata.policyFlags.changeDeadlineHours ?? metadata.transferRules.transferDeadlineHours;
     const deadline = new Date(firstDeparture.getTime() - deadlineHours * 60 * 60 * 1000);
     if (new Date() > deadline) {
-      return { success: false, error: 'Transfer deadline has passed' };
+      return { success: false, error: 'Transfer window has closed', errorCode: 'TRANSFER_WINDOW_CLOSED' };
     }
 
     // Determine if re-KYC is required (Requirement C)
     const reKycRequired = metadata.policyFlags.reKycRequiredForTransfer ||
       params.reason === TransferReason.RESALE ||
       !params.toPassenger.identity;
+
+    // Calculate resale fee if configured (AT-09)
+    let resaleFee: string | undefined;
+    if (this.resaleFeeConfig && params.reason === TransferReason.RESALE) {
+      const ticketValue = parseFloat(metadata.fare.total);
+      let feeAmount = ticketValue * this.resaleFeeConfig.feePercentage;
+      const minFee = parseFloat(this.resaleFeeConfig.minimumFee);
+      const maxFee = this.resaleFeeConfig.maximumFee ? parseFloat(this.resaleFeeConfig.maximumFee) : Infinity;
+
+      feeAmount = Math.max(minFee, Math.min(maxFee, feeAmount));
+      resaleFee = feeAmount.toFixed(2);
+
+      // If fee is required and no payment reference provided, block transfer
+      if (this.resaleFeeConfig.feeRequired) {
+        // Fee will be tracked and must be paid before approval
+      }
+    }
 
     const now = new Date();
     const request: TransferRequest = {
@@ -1235,7 +1371,30 @@ export class AirlineTicketEngine {
       reKycRequired,
       reKycCompleted: !reKycRequired, // If not required, mark as complete
       reKycCompletedAt: !reKycRequired ? now.toISOString() : undefined,
+      idempotencyKey: params.idempotencyKey,
+      resaleFee,
     };
+
+    // Store idempotency key mapping (AT-11)
+    if (params.idempotencyKey) {
+      this.transferIdempotencyKeys.set(params.idempotencyKey, request.id);
+    }
+
+    // Create resale fee ledger entry if fee applies (AT-09)
+    if (resaleFee && this.resaleFeeConfig) {
+      const ledgerEntry: ResaleFeeLedgerEntry = {
+        id: uuidv4(),
+        transferRequestId: request.id,
+        ticketId: params.ticketId,
+        resaleValue: metadata.fare.total,
+        feeAmount: resaleFee,
+        feePercentage: this.resaleFeeConfig.feePercentage,
+        treasuryAddress: this.resaleFeeConfig.treasuryAddress,
+        status: 'PENDING',
+        createdAt: now.toISOString(),
+      };
+      this.resaleFeeLedger.set(ledgerEntry.id, ledgerEntry);
+    }
 
     // Emit KYC_REQUIRED event if re-KYC is needed (Requirement C)
     if (request.reKycRequired && !request.reKycCompleted) {
@@ -1344,26 +1503,42 @@ export class AirlineTicketEngine {
   approveTransfer(params: {
     requestId: string;
     approvedBy: string;
-  }): { success: boolean; error?: string } {
+  }): { success: boolean; error?: string; errorCode?: string } {
     const request = this.transferRequests.get(params.requestId);
     if (!request) {
-      return { success: false, error: 'Transfer request not found' };
+      return { success: false, error: 'Transfer request not found', errorCode: 'REQUEST_NOT_FOUND' };
     }
 
     if (request.status !== TransferApprovalStatus.PENDING) {
-      return { success: false, error: 'Request is not pending' };
+      return { success: false, error: 'Request is not pending', errorCode: 'INVALID_STATE' };
     }
 
     // Check expiry
     if (new Date() > new Date(request.expiresAt)) {
       request.status = TransferApprovalStatus.REJECTED;
       request.rejectionReason = 'Request expired';
-      return { success: false, error: 'Request has expired' };
+      return { success: false, error: 'Request has expired', errorCode: 'REQUEST_EXPIRED' };
     }
 
     // Check re-KYC completion (Requirement C)
     if (request.reKycRequired && !request.reKycCompleted) {
-      return { success: false, error: 'Re-KYC verification required before approval - call completeTransferKyc first' };
+      return {
+        success: false,
+        error: 'Re-KYC verification required before approval - call completeTransferKyc first',
+        errorCode: 'KYC_REQUIRED'
+      };
+    }
+
+    // Check resale fee payment (AT-09)
+    if (request.resaleFee && this.resaleFeeConfig?.feeRequired) {
+      const feeEntry = this.findResaleFeeLedgerEntry(request.id);
+      if (feeEntry && feeEntry.status === 'PENDING' && !request.paymentReference) {
+        return {
+          success: false,
+          error: `Resale fee of ${request.resaleFee} must be paid before approval`,
+          errorCode: 'PAYMENT_REQUIRED'
+        };
+      }
     }
 
     const ticket = this.tickets.get(request.ticketId);
@@ -1375,15 +1550,64 @@ export class AirlineTicketEngine {
 
     this.executeTransfer(request);
 
+    // Mark resale fee as collected (AT-09)
+    if (request.resaleFee) {
+      const feeEntry = this.findResaleFeeLedgerEntry(request.id);
+      if (feeEntry && feeEntry.status === 'PENDING') {
+        feeEntry.status = 'COLLECTED';
+        feeEntry.collectedAt = new Date().toISOString();
+        feeEntry.paymentReference = request.paymentReference;
+      }
+    }
+
     // Emit transfer event
     this.emitEvent(AirlineEventType.TICKET_TRANSFERRED, request.ticketId, {
       from: request.fromPassenger,
       to: request.toPassenger.name,
       reason: request.reason,
       approvedBy: params.approvedBy,
+      resaleFee: request.resaleFee,
     }, metadata?.bookingReference);
 
     return { success: true };
+  }
+
+  /**
+   * Pay resale fee for a transfer (AT-09)
+   */
+  payResaleFee(params: {
+    requestId: string;
+    paymentReference: string;
+  }): { success: boolean; error?: string } {
+    const request = this.transferRequests.get(params.requestId);
+    if (!request) {
+      return { success: false, error: 'Transfer request not found' };
+    }
+
+    if (!request.resaleFee) {
+      return { success: false, error: 'No resale fee required for this transfer' };
+    }
+
+    request.paymentReference = params.paymentReference;
+
+    const feeEntry = this.findResaleFeeLedgerEntry(params.requestId);
+    if (feeEntry) {
+      feeEntry.paymentReference = params.paymentReference;
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Find resale fee ledger entry by transfer request ID
+   */
+  private findResaleFeeLedgerEntry(requestId: string): ResaleFeeLedgerEntry | undefined {
+    for (const entry of Array.from(this.resaleFeeLedger.values())) {
+      if (entry.transferRequestId === requestId) {
+        return entry;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -1405,6 +1629,68 @@ export class AirlineTicketEngine {
 
     request.status = TransferApprovalStatus.REJECTED;
     request.rejectionReason = params.reason;
+
+    return { success: true };
+  }
+
+  /**
+   * Assign passenger to ticket after transfer (AT-05)
+   * Links passenger identity to ticket with audit trail
+   */
+  assignPassenger(params: {
+    ticketId: string;
+    passengerId: string;
+    passengerIdentity?: AirlineTicketMetadata['passengerIdentity'];
+    actor: ActorContext;
+  }): { success: boolean; error?: string; errorCode?: string } {
+    this.enforcePermission(params.actor, 'APPROVE_TRANSFER', params.ticketId);
+
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found', errorCode: 'TICKET_NOT_FOUND' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    // Cannot assign after check-in (AT-04)
+    if (metadata.status === TicketStatus.CHECKED_IN) {
+      return { success: false, error: 'Cannot reassign passenger after check-in', errorCode: 'TICKET_LOCKED_AFTER_CHECKIN' };
+    }
+
+    if (metadata.status === TicketStatus.BOARDED || metadata.status === TicketStatus.COMPLETED) {
+      return { success: false, error: 'Ticket has already been used', errorCode: 'TICKET_USED' };
+    }
+
+    if (metadata.revoked || metadata.status === TicketStatus.REFUNDED) {
+      return { success: false, error: 'Ticket has been voided', errorCode: 'TICKET_VOID' };
+    }
+
+    // Record previous state for audit trail
+    const previousState = {
+      passengerName: metadata.passengerName,
+      passengerIdentity: metadata.passengerIdentity,
+    };
+
+    // Update passenger
+    const previousMetadata = { ...metadata };
+    metadata.passengerName = params.passengerId;
+    metadata.passengerIdentity = params.passengerIdentity;
+    metadata.kycStatus = {
+      ...metadata.kycStatus,
+      verified: !!params.passengerIdentity,
+      verifiedAt: params.passengerIdentity ? new Date().toISOString() : undefined,
+    };
+    ticket.name = `${metadata.issuingAirline.code} ${metadata.segments[0]?.flightNumber} - ${params.passengerId}`;
+    ticket.updatedAt = new Date().toISOString();
+
+    // Record audit trail
+    this.recordMetadataChange(
+      params.ticketId,
+      previousMetadata,
+      metadata,
+      params.actor.actorId,
+      `Passenger assigned: ${previousState.passengerName} -> ${params.passengerId}`
+    );
 
     return { success: true };
   }

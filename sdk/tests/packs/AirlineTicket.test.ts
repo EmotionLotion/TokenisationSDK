@@ -272,7 +272,8 @@ describe('AirlineTicketEngine', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Ticket cannot be transferred in current status');
+      expect(result.errorCode).toBe('TICKET_LOCKED_AFTER_CHECKIN');
+      expect(result.error).toContain('locked after check-in');
     });
 
     it('should block transfer of frozen ticket', () => {
@@ -1077,6 +1078,582 @@ describe('AirlineTicketEngine', () => {
       expect(policyFlags.refundable).toBe(false);
       expect(policyFlags.standbyAllowed).toBe(true);
       expect(metadata.custodyModel).toBe(CustodyModel.PASSENGER_CUSTODY);
+    });
+  });
+
+  // ==========================================================================
+  // AT Test Cases (Airline Ticket - Production Scenarios)
+  // ==========================================================================
+  describe('AT Test Cases', () => {
+    // AT-01: Mint ticket with seat + flight constraints
+    describe('AT-01: Mint ticket with metadata', () => {
+      it('should mint ticket with correct seat and flight metadata', () => {
+        const result = engine.issue(defaultTicketParams);
+
+        expect(result.success).toBe(true);
+        expect(result.ticket).toBeDefined();
+
+        const metadata = result.ticket!.metadata as Record<string, unknown>;
+        expect(metadata.bookingReference).toBe('ABC123');
+        expect(metadata.eTicketNumber).toBe('176-1234567890');
+
+        const segments = metadata.segments as Array<Record<string, unknown>>;
+        expect(segments[0].flightNumber).toBe('EK001');
+        expect(segments[0].seatNumber).toBe('1A');
+      });
+
+      it('should emit TICKET_ISSUED event with booking reference', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const events = engine.getTicketEvents(ticket!.id);
+        expect(events.length).toBe(1);
+        expect(events[0].type).toBe(AirlineEventType.TICKET_ISSUED);
+        expect(events[0].pnr).toBe('ABC123');
+      });
+
+      it('should have hash-chained metadata versions', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const versions = engine.getMetadataVersions(ticket!.id);
+        expect(versions.length).toBe(1);
+        expect(versions[0].currentHash).toBeDefined();
+        expect(versions[0].currentHash.length).toBe(64); // SHA256 hex
+      });
+    });
+
+    // AT-02: Transfer allowed window (e.g., before T-24h)
+    describe('AT-02: Transfer window', () => {
+      it('should allow transfer before deadline', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const result = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should block transfer after window closes with TRANSFER_WINDOW_CLOSED', () => {
+        // Create ticket with departure very soon (past deadline)
+        const pastDeadlineSegment = {
+          ...testSegment,
+          departure: {
+            airport: 'DXB',
+            terminal: 'T3',
+            dateTime: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(), // 12 hours from now
+          },
+          arrival: {
+            airport: 'LHR',
+            terminal: 'T3',
+            dateTime: new Date(Date.now() + 19 * 60 * 60 * 1000).toISOString(),
+          },
+        };
+
+        const { ticket } = engine.issue({
+          ...defaultTicketParams,
+          segments: [pastDeadlineSegment],
+          transferRules: {
+            ...defaultTicketParams.transferRules,
+            transferDeadlineHours: 24, // Need 24h before, only have 12h
+          },
+        });
+
+        const result = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('TRANSFER_WINDOW_CLOSED');
+      });
+    });
+
+    // AT-03: Transfer count limit (only once)
+    describe('AT-03: Transfer count limit', () => {
+      it('should block transfer when MAX_TRANSFERS_EXCEEDED', () => {
+        const issueResult = engine.issue({
+          ...defaultTicketParams,
+          policyFlags: {
+            transferable: true,
+            refundable: true,
+            upgradeable: true,
+            standbyAllowed: false,
+            seatLocked: false,
+            sameDayChangeAllowed: true,
+            changeDeadlineHours: 24,
+            reKycRequiredForTransfer: false, // Disable re-KYC
+          },
+          transferRules: {
+            ...defaultTicketParams.transferRules,
+            maxTransfers: 1,
+            requiresIssuerApproval: false,
+            autoApproveWithIdentity: false,
+          },
+        });
+
+        expect(issueResult.success).toBe(true);
+        const ticket = issueResult.ticket!;
+
+        // First transfer succeeds and executes immediately (no approval needed)
+        // Must provide identity to bypass re-KYC requirement
+        const result1 = engine.requestTransfer({
+          ticketId: ticket.id,
+          fromPassenger: 'John Doe',
+          toPassenger: {
+            name: 'Jane Doe',
+            identity: {
+              type: 'PASSPORT',
+              number: 'JD123456',
+              country: 'US',
+              expiryDate: '2030-01-01',
+            },
+          },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result1.success).toBe(true);
+        expect(result1.request!.status).toBe('AUTO_APPROVED');
+
+        // Second transfer fails
+        const result2 = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'Jane Doe',
+          toPassenger: {
+            name: 'Bob Smith',
+            identity: {
+              type: 'PASSPORT',
+              number: 'BS789012',
+              country: 'US',
+              expiryDate: '2030-01-01',
+            },
+          },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result2.success).toBe(false);
+        expect(result2.errorCode).toBe('MAX_TRANSFERS_EXCEEDED');
+      });
+    });
+
+    // AT-04: Identity binding at check-in
+    describe('AT-04: Identity binding at check-in', () => {
+      it('should lock ticket after check-in with TICKET_LOCKED_AFTER_CHECKIN', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        engine.checkIn({ ticketId: ticket!.id, actor: passenger });
+
+        const result = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('TICKET_LOCKED_AFTER_CHECKIN');
+
+        const metadata = engine.getTicket(ticket!.id)!.metadata as Record<string, unknown>;
+        expect(metadata.status).toBe(TicketStatus.CHECKED_IN);
+      });
+    });
+
+    // AT-05: Name change / passenger reassignment flow
+    describe('AT-05: Passenger assignment', () => {
+      it('should allow assignPassenger before check-in', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const result = engine.assignPassenger({
+          ticketId: ticket!.id,
+          passengerId: 'Jane Doe',
+          passengerIdentity: {
+            type: 'PASSPORT',
+            number: 'AB123456',
+            country: 'GB',
+            expiryDate: '2030-01-01',
+          },
+          actor: airlineAgent,
+        });
+
+        expect(result.success).toBe(true);
+
+        const metadata = engine.getTicket(ticket!.id)!.metadata as Record<string, unknown>;
+        expect(metadata.passengerName).toBe('Jane Doe');
+      });
+
+      it('should create audit trail for passenger assignment', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        engine.assignPassenger({
+          ticketId: ticket!.id,
+          passengerId: 'Jane Doe',
+          actor: airlineAgent,
+        });
+
+        const versions = engine.getMetadataVersions(ticket!.id);
+        expect(versions.length).toBe(2);
+        expect(versions[1].changeReason).toContain('Passenger assigned');
+        expect(versions[1].changes.passengerName).toEqual({
+          old: 'John Doe',
+          new: 'Jane Doe',
+        });
+      });
+
+      it('should block assignPassenger after check-in', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+        engine.checkIn({ ticketId: ticket!.id, actor: passenger });
+
+        const result = engine.assignPassenger({
+          ticketId: ticket!.id,
+          passengerId: 'Jane Doe',
+          actor: airlineAgent,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('TICKET_LOCKED_AFTER_CHECKIN');
+      });
+    });
+
+    // AT-06: "Illness" scenario
+    describe('AT-06: Medical transfer scenario', () => {
+      it('should require approval for ILLNESS transfer', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const result = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.ILLNESS,
+          supportingDocumentation: 'Medical certificate #12345',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.request!.status).toBe('PENDING');
+        expect(result.request!.reason).toBe(TransferReason.ILLNESS);
+      });
+
+      it('should complete ILLNESS transfer after approval', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const transferResult = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.ILLNESS,
+        });
+
+        // Complete KYC if required
+        if (transferResult.request!.reKycRequired) {
+          engine.completeTransferKyc({
+            requestId: transferResult.request!.id,
+            verifiedBy: 'kyc-agent',
+          });
+        }
+
+        // Approve
+        const approvalResult = engine.approveTransfer({
+          requestId: transferResult.request!.id,
+          approvedBy: 'airline-medical-desk',
+        });
+
+        expect(approvalResult.success).toBe(true);
+
+        const metadata = engine.getTicket(ticket!.id)!.metadata as Record<string, unknown>;
+        expect(metadata.passengerName).toBe('Jane Doe');
+      });
+    });
+
+    // AT-07: Refund flow (burn + status)
+    describe('AT-07: Refund flow', () => {
+      it('should block transfer after refund with TICKET_VOID', () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        // Cancel
+        engine.cancel({ ticketId: ticket!.id, requestedBy: 'John Doe' });
+
+        // Process refund
+        const refundResult = engine.processRefund(ticket!.id);
+        expect(refundResult.success).toBe(true);
+
+        // Try transfer - should fail
+        const result = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('TICKET_VOID');
+      });
+    });
+
+    // AT-08: Boarding scan consumes ticket
+    describe('AT-08: Boarding consumes ticket', () => {
+      it('should prevent second boarding with ALREADY_USED', async () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+        engine.checkIn({ ticketId: ticket!.id, actor: passenger });
+
+        // First boarding
+        const result1 = await engine.board({
+          ticketId: ticket!.id,
+          actor: airlineAgent,
+        });
+        expect(result1.success).toBe(true);
+        expect(result1.verificationLog?.result).toBe('VALID');
+
+        // Second boarding - fails
+        const result2 = await engine.board({
+          ticketId: ticket!.id,
+          actor: airlineAgent,
+        });
+        expect(result2.success).toBe(false);
+        expect(result2.error).toContain('ALREADY_USED');
+        expect(result2.verificationLog?.result).toBe('ALREADY_USED');
+      });
+    });
+
+    // AT-09: Royalty / fee on resale
+    describe('AT-09: Resale royalty', () => {
+      const resaleTicketParams = {
+        ...defaultTicketParams,
+        transferRules: {
+          ...defaultTicketParams.transferRules,
+          requiresIssuerApproval: true, // Require approval to test fee flow
+        },
+      };
+
+      it('should calculate resale fee', () => {
+        const engineWithFees = new AirlineTicketEngine({
+          resaleFeeConfig: {
+            feePercentage: 0.05, // 5%
+            minimumFee: '10.00',
+            maximumFee: '100.00',
+            treasuryAddress: '0xAirlineTreasury',
+            feeRequired: false,
+          },
+        });
+        engineWithFees.registerAirline(AIRLINE_CODE);
+
+        const { ticket } = engineWithFees.issue(resaleTicketParams);
+
+        const result = engineWithFees.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.RESALE,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.request!.resaleFee).toBe('60.00'); // 5% of 1200
+      });
+
+      it('should collect fee on approval', () => {
+        const engineWithFees = new AirlineTicketEngine({
+          resaleFeeConfig: {
+            feePercentage: 0.05,
+            minimumFee: '10.00',
+            treasuryAddress: '0xAirlineTreasury',
+            feeRequired: false,
+          },
+        });
+        engineWithFees.registerAirline(AIRLINE_CODE);
+
+        const { ticket } = engineWithFees.issue(resaleTicketParams);
+
+        const transferResult = engineWithFees.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.RESALE,
+        });
+        expect(transferResult.success).toBe(true);
+
+        // Complete KYC
+        engineWithFees.completeTransferKyc({
+          requestId: transferResult.request!.id,
+          verifiedBy: 'kyc-agent',
+        });
+
+        // Approve
+        engineWithFees.approveTransfer({
+          requestId: transferResult.request!.id,
+          approvedBy: 'agent',
+        });
+
+        const treasury = engineWithFees.getTreasuryBalance();
+        expect(parseFloat(treasury.collected)).toBe(60.00);
+      });
+
+      it('should require payment when feeRequired is true', () => {
+        const engineWithFees = new AirlineTicketEngine({
+          resaleFeeConfig: {
+            feePercentage: 0.05,
+            minimumFee: '10.00',
+            treasuryAddress: '0xAirlineTreasury',
+            feeRequired: true,
+          },
+        });
+        engineWithFees.registerAirline(AIRLINE_CODE);
+
+        const { ticket } = engineWithFees.issue(resaleTicketParams);
+
+        const transferResult = engineWithFees.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.RESALE,
+        });
+        expect(transferResult.success).toBe(true);
+
+        // Complete KYC
+        engineWithFees.completeTransferKyc({
+          requestId: transferResult.request!.id,
+          verifiedBy: 'kyc-agent',
+        });
+
+        // Try to approve without payment
+        const result = engineWithFees.approveTransfer({
+          requestId: transferResult.request!.id,
+          approvedBy: 'agent',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('PAYMENT_REQUIRED');
+      });
+    });
+
+    // AT-10: High throughput test
+    describe('AT-10: High throughput', () => {
+      it('should handle bulk minting without duplicates', async () => {
+        const ticketIds = new Set<string>();
+
+        for (let i = 0; i < 100; i++) {
+          const result = engine.issue({
+            ...defaultTicketParams,
+            eTicketNumber: `176-${String(i).padStart(10, '0')}`,
+            passengerName: `Passenger ${i}`,
+          });
+          expect(result.success).toBe(true);
+          expect(ticketIds.has(result.ticket!.id)).toBe(false);
+          ticketIds.add(result.ticket!.id);
+        }
+
+        expect(ticketIds.size).toBe(100);
+      });
+
+      it('should handle concurrent boarding with locking', async () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+        engine.checkIn({ ticketId: ticket!.id, actor: passenger });
+
+        // Simulate concurrent boarding attempts
+        const results = await Promise.all([
+          engine.board({ ticketId: ticket!.id, actor: airlineAgent, scanLocation: 'Gate A' }),
+          engine.board({ ticketId: ticket!.id, actor: airlineAgent, scanLocation: 'Gate B' }),
+          engine.board({ ticketId: ticket!.id, actor: airlineAgent, scanLocation: 'Gate C' }),
+        ]);
+
+        const successCount = results.filter(r => r.success).length;
+        expect(successCount).toBe(1); // Only one should succeed
+      });
+    });
+
+    // AT-11: Offline/edge case — duplicated API calls
+    describe('AT-11: Idempotency', () => {
+      const idempotentTicketParams = {
+        ...defaultTicketParams,
+        transferRules: {
+          ...defaultTicketParams.transferRules,
+          requiresIssuerApproval: true, // Ensure request is pending
+        },
+      };
+
+      it('should deduplicate transfer requests with same idempotency key', () => {
+        const { ticket } = engine.issue(idempotentTicketParams);
+
+        const idempotencyKey = 'unique-transfer-key-123';
+
+        // First request
+        const result1 = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+          idempotencyKey,
+        });
+
+        // Retry with same key
+        const result2 = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+          idempotencyKey,
+        });
+
+        expect(result1.success).toBe(true);
+        expect(result2.success).toBe(true);
+        expect(result1.request!.id).toBe(result2.request!.id); // Same request returned
+      });
+
+      it('should return same response on retry (5 times)', () => {
+        const { ticket } = engine.issue(idempotentTicketParams);
+        const idempotencyKey = 'retry-test-key';
+
+        const requests: Array<{ id: string }> = [];
+
+        for (let i = 0; i < 5; i++) {
+          const result = engine.requestTransfer({
+            ticketId: ticket!.id,
+            fromPassenger: 'John Doe',
+            toPassenger: { name: 'Jane Doe' },
+            reason: TransferReason.GIFT,
+            idempotencyKey,
+          });
+          expect(result.success).toBe(true);
+          requests.push({ id: result.request!.id });
+        }
+
+        // All should have the same ID
+        const uniqueIds = new Set(requests.map(r => r.id));
+        expect(uniqueIds.size).toBe(1);
+      });
+    });
+
+    // AT-12: Event ordering correctness
+    describe('AT-12: State machine validation', () => {
+      it('should fail board() before checkIn() with INVALID_STATE', async () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+
+        const result = await engine.board({
+          ticketId: ticket!.id,
+          actor: airlineAgent,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Must be CHECKED_IN');
+        expect(result.verificationLog?.result).toBe('INVALID');
+      });
+
+      it('should fail transfer() after board() with TICKET_USED', async () => {
+        const { ticket } = engine.issue(defaultTicketParams);
+        engine.checkIn({ ticketId: ticket!.id, actor: passenger });
+        await engine.board({ ticketId: ticket!.id, actor: airlineAgent });
+
+        const result = engine.requestTransfer({
+          ticketId: ticket!.id,
+          fromPassenger: 'John Doe',
+          toPassenger: { name: 'Jane Doe' },
+          reason: TransferReason.GIFT,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('TICKET_USED');
+      });
     });
   });
 });
