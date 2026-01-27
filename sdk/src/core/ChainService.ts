@@ -16,11 +16,54 @@ import { mainnet, sepolia, anvil } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { Result, ok, err } from './types.js'; // Assuming types.js exists in core
 
+// ============================================================================
+// SECURITY: Browser Environment Detection
+// ============================================================================
+
+/**
+ * Detects if code is running in a browser environment
+ * @returns true if running in a browser
+ */
+function isBrowserEnvironment(): boolean {
+    return (
+        typeof window !== 'undefined' &&
+        typeof window.document !== 'undefined'
+    );
+}
+
+/**
+ * Security error thrown when attempting to use private keys in browser
+ */
+export class ClientSideKeyError extends Error {
+    constructor() {
+        super(
+            'SECURITY ERROR: Private keys must NEVER be used in browser environments. ' +
+            'This would expose your keys to potential attackers. Instead, use one of these secure alternatives:\n' +
+            '  1. WalletConnect or injected wallet (MetaMask, etc.) for user transactions\n' +
+            '  2. Server-side signing with a custody provider (Fireblocks, BitGo)\n' +
+            '  3. Meta-transactions with a relayer service\n' +
+            '  4. Session keys with limited permissions\n\n' +
+            'See: https://docs.tokenisation.io/security/key-management'
+        );
+        this.name = 'ClientSideKeyError';
+    }
+}
+
 export interface ChainConnectionConfig {
     chainId: number;
     rpcUrl: string;
-    privateKey?: string; // Optional: Only needed for signing transactions directly
+    /**
+     * Private key for signing transactions.
+     * @security NEVER use in browser environments - will throw ClientSideKeyError.
+     * Use WalletConnect, injected wallets, or server-side signing instead.
+     */
+    privateKey?: string;
     relayerUrl?: string; // Optional: For meta-transactions
+    /**
+     * Bypass browser security check (for testing only).
+     * @internal This should NEVER be used in production code.
+     */
+    _dangerouslyAllowBrowserKeys?: boolean;
 }
 
 export class ChainService {
@@ -29,7 +72,28 @@ export class ChainService {
     private account?: Account;
     private chain: Chain;
 
+    /**
+     * Check if the current environment supports direct private key usage.
+     * @returns true if running in Node.js (server-side), false if in browser
+     */
+    static canUsePrivateKeys(): boolean {
+        return !isBrowserEnvironment();
+    }
+
+    /**
+     * Check if running in a browser environment
+     * @returns true if running in browser
+     */
+    static isBrowser(): boolean {
+        return isBrowserEnvironment();
+    }
+
     constructor(config: ChainConnectionConfig) {
+        // SECURITY: Prevent private key usage in browser environments
+        if (config.privateKey && isBrowserEnvironment() && !config._dangerouslyAllowBrowserKeys) {
+            throw new ClientSideKeyError();
+        }
+
         this.chain = this.getChain(config.chainId);
 
         this.publicClient = createPublicClient({
@@ -38,6 +102,13 @@ export class ChainService {
         });
 
         if (config.privateKey) {
+            // Additional warning even in Node.js environments
+            if (process.env.NODE_ENV === 'production') {
+                console.warn(
+                    '[ChainService] WARNING: Using raw private keys is not recommended in production. ' +
+                    'Consider using a custody provider or hardware wallet for enhanced security.'
+                );
+            }
             this.account = privateKeyToAccount(config.privateKey as `0x${string}`);
             this.walletClient = createWalletClient({
                 account: this.account,

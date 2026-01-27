@@ -1,0 +1,40 @@
+# Compliance Service - Production Values
+
+replicaCount: ${replica_count}
+
+image:
+  repository: tokenisation/compliance-service
+  tag: "${image_tag}"
+  pullPolicy: IfNotPresent
+
+environment: ${environment}
+
+database:
+  host: "${database_host}"
+  name: "${database_name}"
+  port: 5432
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilization: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+ingress:
+  enabled: true
+  host: compliance.tokenisation.io
+  tls:
+    enabled: true
+    secretName: compliance-tls

@@ -1,0 +1,33 @@
+# Governance Service - Staging Values
+
+replicaCount: ${replica_count}
+
+image:
+  repository: tokenisation/governance-service
+  tag: "${image_tag}"
+  pullPolicy: Always
+
+environment: ${environment}
+
+database:
+  host: "${database_host}"
+  name: "${database_name}"
+  port: 5432
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilization: 70
+
+ingress:
+  enabled: true
+  host: governance-staging.tokenisation.example.com

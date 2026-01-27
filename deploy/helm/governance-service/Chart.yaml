@@ -1,0 +1,16 @@
+apiVersion: v2
+name: governance-service
+description: Helm chart for TokenisationSDK Governance Service
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: TokenisationSDK Team
+    email: team@tokenisation.io
+
+keywords:
+  - tokenisation
+  - governance
+  - blockchain
+  - security-tokens

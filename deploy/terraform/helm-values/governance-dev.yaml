@@ -1,0 +1,30 @@
+# Governance Service - Development Values
+
+replicaCount: ${replica_count}
+
+image:
+  repository: tokenisation/governance-service
+  tag: "${image_tag}"
+  pullPolicy: Always
+
+environment: ${environment}
+
+database:
+  host: "${database_host}"
+  name: "${database_name}"
+  port: 5432
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: true
+  host: governance-dev.tokenisation.example.com
