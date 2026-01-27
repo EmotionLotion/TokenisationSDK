@@ -433,6 +433,135 @@ export const ComplianceOverrideInputSchema = z.object({
   reason: z.string().min(1, 'Override reason is required').max(1000),
 });
 
+export const ListDecisionsParamsSchema = PaginationSchema.extend({
+  policyId: UUIDSchema.optional(),
+  entityType: z.enum(['transfer', 'issuance', 'redemption', 'investor']).optional(),
+  decision: ComplianceDecisionResultSchema.optional(),
+  fromDate: z.string().datetime().optional(),
+  toDate: z.string().datetime().optional(),
+});
+
+// ============================================================================
+// TOKENS MODULE - CLAWBACK SCHEMAS
+// ============================================================================
+
+export const ClawbackInputSchema = z.object({
+  fromWallet: EthereumAddressSchema,
+  toWallet: EthereumAddressSchema,
+  fromInvestorId: UUIDSchema.optional(),
+  toInvestorId: UUIDSchema.optional(),
+  amount: TokenAmountSchema,
+  reason: z.string().min(10, 'Clawback reason must be at least 10 characters').max(2000),
+  idempotencyKey: z.string().min(1, 'Idempotency key is required for clawback'),
+  metadata: MetadataSchema,
+}).refine(
+  (data) => data.fromWallet.toLowerCase() !== data.toWallet.toLowerCase(),
+  { message: 'Cannot clawback to the same wallet', path: ['toWallet'] }
+);
+
+export const ConfirmClawbackInputSchema = z.object({
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash format'),
+  blockNumber: z.number().int().positive('Block number must be a positive integer'),
+});
+
+export const ListClawbacksParamsSchema = PaginationSchema.extend({
+  status: z.enum(['pending', 'approved', 'executed', 'confirmed', 'failed']).optional(),
+  fromWallet: EthereumAddressSchema.optional(),
+});
+
+// ============================================================================
+// WEBHOOKS MODULE SCHEMAS
+// ============================================================================
+
+export const SendTestEventInputSchema = z.object({
+  eventType: z.string().min(1, 'Event type is required').max(255),
+  data: z.record(z.unknown()).optional(),
+});
+
+// ============================================================================
+// EVENTS MODULE SCHEMAS
+// ============================================================================
+
+export const PurgeEventsInputSchema = z.object({
+  olderThanDays: z.number().int().min(1, 'olderThanDays must be at least 1'),
+});
+
+// ============================================================================
+// AUDIT MODULE SCHEMAS
+// ============================================================================
+
+export const ListAuditLogsParamsSchema = PaginationSchema.extend({
+  actorId: UUIDSchema.optional(),
+  actorType: z.enum(['user', 'api_key', 'system', 'webhook']).optional(),
+  action: z.string().max(256).optional(),
+  resourceType: z.string().max(128).optional(),
+  resourceId: z.string().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+});
+
+export const ExportAuditLogsInputSchema = z.object({
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  format: z.enum(['json', 'csv']).optional(),
+});
+
+export const VerifyChainInputSchema = z.object({
+  batchSize: z.number().int().min(1).max(10000).optional(),
+  startFrom: UUIDSchema.optional(),
+});
+
+// ============================================================================
+// COMMON INPUT SCHEMAS
+// ============================================================================
+
+/**
+ * Schema for operations that require a reason (e.g., freeze, pause, suspend)
+ */
+export const ReasonInputSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});
+
+/**
+ * Schema for operations that require a mandatory reason
+ */
+export const RequiredReasonInputSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(2000),
+});
+
+/**
+ * Schema for token freeze operation (requires reason)
+ */
+export const FreezeTokenInputSchema = z.object({
+  reason: z.string().min(1, 'Freeze reason is required').max(2000),
+});
+
+/**
+ * Schema for wallet history query params
+ */
+export const WalletHistoryParamsSchema = PaginationSchema.extend({
+  tokenId: UUIDSchema.optional(),
+  direction: z.enum(['in', 'out', 'both']).optional(),
+  fromDate: z.string().datetime().optional(),
+  toDate: z.string().datetime().optional(),
+});
+
+/**
+ * Schema for token history query params
+ */
+export const TokenHistoryParamsSchema = PaginationSchema.extend({
+  fromDate: z.string().datetime().optional(),
+  toDate: z.string().datetime().optional(),
+});
+
+/**
+ * Schema for document list params
+ */
+export const ListDocumentsParamsSchema = PaginationSchema.extend({
+  type: z.string().max(128).optional(),
+  status: z.string().max(64).optional(),
+});
+
 // ============================================================================
 // DOCUMENT SCHEMAS
 // ============================================================================
@@ -586,6 +715,9 @@ export const schemas = {
   issueTokens: IssueTokensInputSchema,
   redeemTokens: RedeemTokensInputSchema,
   createTranche: CreateTrancheInputSchema,
+  clawback: ClawbackInputSchema,
+  confirmClawback: ConfirmClawbackInputSchema,
+  listClawbacks: ListClawbacksParamsSchema,
 
   // Transfers
   createTransfer: CreateTransferInputSchema,
@@ -602,9 +734,29 @@ export const schemas = {
   createPolicy: CreatePolicyInputSchema,
   checkCompliance: CheckComplianceInputSchema,
   overrideDecision: OverrideDecisionInputSchema,
+  listDecisions: ListDecisionsParamsSchema,
 
   // Projects
   createProject: CreateProjectInputSchema,
   updateProject: UpdateProjectInputSchema,
   listProjects: ListProjectsParamsSchema,
+
+  // Webhooks
+  sendTestEvent: SendTestEventInputSchema,
+
+  // Events
+  purgeEvents: PurgeEventsInputSchema,
+
+  // Audit
+  listAuditLogs: ListAuditLogsParamsSchema,
+  exportAuditLogs: ExportAuditLogsInputSchema,
+  verifyChain: VerifyChainInputSchema,
+
+  // Common
+  reason: ReasonInputSchema,
+  requiredReason: RequiredReasonInputSchema,
+  freezeToken: FreezeTokenInputSchema,
+  walletHistory: WalletHistoryParamsSchema,
+  tokenHistory: TokenHistoryParamsSchema,
+  listDocuments: ListDocumentsParamsSchema,
 };

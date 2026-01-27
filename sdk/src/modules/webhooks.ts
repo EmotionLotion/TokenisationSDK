@@ -1,6 +1,6 @@
 import type { HttpClient } from '../utils/http.js';
 import type { WebhookEndpoint, WebhookDelivery, PaginatedResponse } from '../types.js';
-import { validate } from './validation.js';
+import { validate, SendTestEventInputSchema } from './validation.js';
 import { z } from 'zod';
 
 // ============================================================================
@@ -314,9 +314,10 @@ export class WebhooksModule {
     eventType: string,
     data?: Record<string, unknown>
   ): Promise<TestWebhookResult> {
+    const validated = validate(SendTestEventInputSchema, { eventType, data });
     const response = await this.http.post<TestWebhookResult>('/api/v1/webhooks/test', {
-      eventType,
-      data: data || { test: true, timestamp: new Date().toISOString() }
+      eventType: validated.eventType,
+      data: validated.data || { test: true, timestamp: new Date().toISOString() }
     });
     return response.data;
   }

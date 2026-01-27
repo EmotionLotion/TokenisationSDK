@@ -9,6 +9,11 @@ import {
   IssueTokensInputSchema,
   RedeemTokensInputSchema,
   CreateTrancheInputSchema,
+  ClawbackInputSchema,
+  ConfirmClawbackInputSchema,
+  ListClawbacksParamsSchema,
+  ReasonInputSchema,
+  FreezeTokenInputSchema,
   UUIDSchema,
   EthereumAddressSchema,
   PaginationSchema,
@@ -201,7 +206,8 @@ export class TokensModule {
    */
   async pause(id: string, reason?: string): Promise<Token> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/pause`, { reason });
+    const validated = validate(ReasonInputSchema, { reason });
+    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/pause`, validated);
     return response.data;
   }
 
@@ -219,7 +225,8 @@ export class TokensModule {
    */
   async freeze(id: string, reason: string): Promise<Token> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/freeze`, { reason });
+    const validated = validate(FreezeTokenInputSchema, { reason });
+    const response = await this.http.post<Token>(`/api/v1/tokens/${validatedId}/freeze`, validated);
     return response.data;
   }
 
@@ -387,10 +394,11 @@ export class TokensModule {
    */
   async initiateClawback(tokenId: string, input: ClawbackInput): Promise<Clawback> {
     const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = validate(ClawbackInputSchema, input);
     const response = await this.http.post<Clawback>(
       `/api/v1/tokens/${validatedTokenId}/clawback`,
-      input,
-      { idempotencyKey: input.idempotencyKey }
+      validated,
+      { idempotencyKey: validated.idempotencyKey }
     );
     return response.data;
   }
@@ -432,9 +440,10 @@ export class TokensModule {
   ): Promise<Clawback> {
     const validatedTokenId = validate(UUIDSchema, tokenId);
     const validatedClawbackId = validate(UUIDSchema, clawbackId);
+    const validated = validate(ConfirmClawbackInputSchema, { txHash, blockNumber });
     const response = await this.http.post<Clawback>(
       `/api/v1/tokens/${validatedTokenId}/clawbacks/${validatedClawbackId}/confirm`,
-      { txHash, blockNumber }
+      validated
     );
     return response.data;
   }
@@ -472,9 +481,10 @@ export class TokensModule {
     params?: ListClawbacksParams
   ): Promise<PaginatedResponse<Clawback>> {
     const validatedTokenId = validate(UUIDSchema, tokenId);
+    const validated = params ? validate(ListClawbacksParamsSchema, params) : undefined;
     return this.http.list<Clawback>(
       `/api/v1/tokens/${validatedTokenId}/clawbacks`,
-      params as Record<string, string | number | boolean | undefined>
+      validated as Record<string, string | number | boolean | undefined>
     );
   }
 }

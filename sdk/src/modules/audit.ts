@@ -1,25 +1,12 @@
 import type { HttpClient } from '../utils/http.js';
 import type { AuditLogEntry, PaginatedResponse } from '../types.js';
-import { validate } from './validation.js';
-import { z } from 'zod';
-
-// ============================================================================
-// Validation Schemas
-// ============================================================================
-
-const ListAuditLogsParamsSchema = z.object({
-  actorId: z.string().uuid().optional(),
-  actorType: z.enum(['user', 'api_key', 'system', 'webhook']).optional(),
-  action: z.string().optional(),
-  resourceType: z.string().optional(),
-  resourceId: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  limit: z.number().int().min(1).max(1000).optional(),
-  offset: z.number().int().min(0).optional(),
-});
-
-const UUIDSchema = z.string().uuid();
+import {
+  validate,
+  ListAuditLogsParamsSchema,
+  ExportAuditLogsInputSchema,
+  VerifyChainInputSchema,
+  UUIDSchema,
+} from './validation.js';
 
 // ============================================================================
 // Types
@@ -230,7 +217,8 @@ export class AuditModule {
     batchSize?: number;
     startFrom?: string;
   }): Promise<ChainVerificationResult> {
-    const response = await this.http.post<ChainVerificationResult>('/api/v1/audit/verify-chain', params || {});
+    const validated = params ? validate(VerifyChainInputSchema, params) : undefined;
+    const response = await this.http.post<ChainVerificationResult>('/api/v1/audit/verify-chain', validated || {});
     return response.data;
   }
 
@@ -273,9 +261,10 @@ export class AuditModule {
     endDate?: string;
     format?: 'json' | 'csv';
   }): Promise<{ data: AuditLogEntry[]; format: string; exportedAt: string }> {
+    const validated = params ? validate(ExportAuditLogsInputSchema, params) : undefined;
     const response = await this.http.post<{ data: AuditLogEntry[]; format: string; exportedAt: string }>(
       '/api/v1/audit/export',
-      params || {}
+      validated || {}
     );
     return response.data;
   }

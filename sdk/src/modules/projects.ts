@@ -6,8 +6,8 @@ import {
   UpdateProjectInputSchema,
   ListProjectsParamsSchema,
   CreateDocumentInputSchema,
+  ListDocumentsParamsSchema,
   UUIDSchema,
-  PaginationSchema,
 } from './validation.js';
 
 // ============================================================================
@@ -115,9 +115,9 @@ export class ProjectsModule {
   /**
    * Lists documents for a project.
    */
-  async listDocuments(projectId: string, params?: { type?: string; status?: string }): Promise<PaginatedResponse<Document>> {
+  async listDocuments(projectId: string, params?: { type?: string; status?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Document>> {
     const validatedProjectId = validate(UUIDSchema, projectId);
-    const validated = params ? validate(PaginationSchema, params) : undefined;
+    const validated = params ? validate(ListDocumentsParamsSchema, params) : undefined;
     return this.http.list<Document>(`/api/v1/projects/${validatedProjectId}/documents`, validated as Record<string, string | number | boolean | undefined>);
   }
 

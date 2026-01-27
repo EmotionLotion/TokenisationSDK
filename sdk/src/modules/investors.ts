@@ -8,6 +8,8 @@ import {
   AddWalletInputSchema,
   StartKycInputSchema,
   VerifyWalletInputSchema,
+  ReasonInputSchema,
+  RequiredReasonInputSchema,
   UUIDSchema,
 } from './validation.js';
 
@@ -123,7 +125,8 @@ export class InvestorsModule {
    */
   async suspend(id: string, reason?: string): Promise<Investor> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/suspend`, { reason });
+    const validated = validate(ReasonInputSchema, { reason });
+    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/suspend`, validated);
     return response.data;
   }
 
@@ -132,7 +135,8 @@ export class InvestorsModule {
    */
   async offboard(id: string, reason?: string): Promise<Investor> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/offboard`, { reason });
+    const validated = validate(ReasonInputSchema, { reason });
+    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/offboard`, validated);
     return response.data;
   }
 
@@ -155,7 +159,8 @@ export class InvestorsModule {
    */
   async approveKyc(investorId: string, reason?: string): Promise<Investor> {
     const validatedId = validate(UUIDSchema, investorId);
-    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/kyc/approve`, { reason });
+    const validated = validate(ReasonInputSchema, { reason });
+    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/kyc/approve`, validated);
     return response.data;
   }
 
@@ -164,7 +169,8 @@ export class InvestorsModule {
    */
   async rejectKyc(investorId: string, reason: string): Promise<Investor> {
     const validatedId = validate(UUIDSchema, investorId);
-    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/kyc/reject`, { reason });
+    const validated = validate(RequiredReasonInputSchema, { reason });
+    const response = await this.http.post<Investor>(`/api/v1/investors/${validatedId}/kyc/reject`, validated);
     return response.data;
   }
 

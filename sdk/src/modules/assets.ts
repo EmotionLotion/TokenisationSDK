@@ -14,6 +14,7 @@ import {
   UpdateAssetInputSchema,
   ListAssetsParamsSchema,
   UpdateValuationInputSchema,
+  ReasonInputSchema,
   UUIDSchema,
 } from './validation.js';
 
@@ -138,7 +139,8 @@ export class AssetsModule {
    */
   async freeze(id: string, reason?: string): Promise<Asset> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.post<Asset>(`/api/v1/assets/${validatedId}/freeze`, { reason });
+    const validated = validate(ReasonInputSchema, { reason });
+    const response = await this.http.post<Asset>(`/api/v1/assets/${validatedId}/freeze`, validated);
     return response.data;
   }
 

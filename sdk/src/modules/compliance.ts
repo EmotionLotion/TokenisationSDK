@@ -8,8 +8,8 @@ import {
   CheckComplianceEntityInputSchema,
   CreatePolicyVersionInputSchema,
   ComplianceOverrideInputSchema,
+  ListDecisionsParamsSchema,
   UUIDSchema,
-  PaginationSchema,
 } from './validation.js';
 
 // ============================================================================
@@ -179,14 +179,14 @@ export class ComplianceModule {
    */
   async listDecisions(params?: {
     policyId?: string;
-    entityType?: string;
+    entityType?: 'transfer' | 'issuance' | 'redemption' | 'investor';
     decision?: 'approved' | 'rejected' | 'pending_review';
     fromDate?: string;
     toDate?: string;
     limit?: number;
     offset?: number;
   }): Promise<PaginatedResponse<ComplianceDecision>> {
-    const validated = params ? validate(PaginationSchema, params) : undefined;
+    const validated = params ? validate(ListDecisionsParamsSchema, params) : undefined;
     return this.http.list<ComplianceDecision>('/api/v1/compliance/decisions', validated as Record<string, string | number | boolean | undefined>);
   }
 

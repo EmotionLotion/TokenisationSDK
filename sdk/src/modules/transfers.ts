@@ -5,9 +5,11 @@ import {
   CreateTransferInputSchema,
   ListTransfersParamsSchema,
   CreateBatchTransferInputSchema,
+  ReasonInputSchema,
+  WalletHistoryParamsSchema,
+  TokenHistoryParamsSchema,
   UUIDSchema,
   EthereumAddressSchema,
-  PaginationSchema,
 } from './validation.js';
 
 // ============================================================================
@@ -77,7 +79,8 @@ export class TransfersModule {
    */
   async cancel(id: string, reason?: string): Promise<Transfer> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.post<Transfer>(`/api/v1/transfers/${validatedId}/cancel`, { reason });
+    const validated = validate(ReasonInputSchema, { reason });
+    const response = await this.http.post<Transfer>(`/api/v1/transfers/${validatedId}/cancel`, validated);
     return response.data;
   }
 
@@ -152,7 +155,7 @@ export class TransfersModule {
     offset?: number;
   }): Promise<PaginatedResponse<Transfer>> {
     const validatedAddress = validate(EthereumAddressSchema, walletAddress);
-    const validated = params ? validate(PaginationSchema, params) : undefined;
+    const validated = params ? validate(WalletHistoryParamsSchema, params) : undefined;
     return this.http.list<Transfer>(`/api/v1/transfers/wallet/${validatedAddress}`, validated as Record<string, string | number | boolean | undefined>);
   }
 
@@ -166,7 +169,7 @@ export class TransfersModule {
     offset?: number;
   }): Promise<PaginatedResponse<Transfer>> {
     const validatedTokenId = validate(UUIDSchema, tokenId);
-    const validated = params ? validate(PaginationSchema, params) : undefined;
+    const validated = params ? validate(TokenHistoryParamsSchema, params) : undefined;
     return this.http.list<Transfer>(`/api/v1/transfers/token/${validatedTokenId}`, validated as Record<string, string | number | boolean | undefined>);
   }
 }

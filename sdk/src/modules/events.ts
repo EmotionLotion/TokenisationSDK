@@ -1,6 +1,6 @@
 import type { HttpClient } from '../utils/http.js';
 import type { EventMessage, EventStatus, PaginatedResponse } from '../types.js';
-import { validate } from './validation.js';
+import { validate, PurgeEventsInputSchema } from './validation.js';
 import { z } from 'zod';
 
 // ============================================================================
@@ -260,10 +260,8 @@ export class EventsModule {
    * ```
    */
   async purge(olderThanDays: number): Promise<{ deleted: number }> {
-    if (olderThanDays < 1) {
-      throw new Error('olderThanDays must be at least 1');
-    }
-    const response = await this.http.post<{ deleted: number }>('/api/v1/eventbus/purge', { olderThanDays });
+    const validated = validate(PurgeEventsInputSchema, { olderThanDays });
+    const response = await this.http.post<{ deleted: number }>('/api/v1/eventbus/purge', validated);
     return response.data;
   }
 }
