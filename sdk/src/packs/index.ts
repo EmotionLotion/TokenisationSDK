@@ -38,3 +38,13 @@ export * from './dubai-real-estate.pack.js';
 
 // Pack J: US Securities - SEC Regulation D compliant (506b/506c)
 export * from './us-securities.pack.js';
+
+// Custom Condition Evaluators
+// DLD Condition Evaluator - Dubai Land Department verification
+export * from './DLDConditionEvaluator.js';
+
+// VARA Condition Evaluator - UAE VARA regulatory compliance
+export * from './VARAConditionEvaluator.js';
+
+// AssetPack Lifecycle Manager - Wires pack rules to the engine
+export * from './AssetPackLifecycleManager.js';

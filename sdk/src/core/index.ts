@@ -93,3 +93,6 @@ export * from './Idempotency.js';
 
 // Saga/Transaction Coordinator
 export * from './Saga.js';
+
+// Custom Condition Evaluation
+export * from './CustomConditionRegistry.js';

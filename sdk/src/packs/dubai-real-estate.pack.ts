@@ -35,6 +35,11 @@ export interface AssetPackConfig extends AssetPack {
 
 /**
  * Dubai Real Estate Pack Lifecycle Rules
+ *
+ * Implements VARA-compliant lifecycle with DLD integration:
+ * 1. DRAFT -> PENDING_VERIFICATION: Submit with required documents + VARA compliance check
+ * 2. PENDING_VERIFICATION -> VERIFIED: DLD ownership verification + approvals
+ * 3. VERIFIED -> ACTIVE: DLD tokenization registration
  */
 const lifecycleRules: LifecycleRule[] = [
   {
@@ -43,14 +48,22 @@ const lifecycleRules: LifecycleRule[] = [
     conditions: [
       {
         type: 'DOCUMENT',
-        documents: ['TITLE_DEED', 'VALUATION_REPORT', 'NOC', 'LEGAL_OPINION'],
+        documents: [
+          'TITLE_DEED',
+          'VALUATION_REPORT',
+          'NOC',
+          'LEGAL_OPINION',
+          'VARA_LICENSE_CERTIFICATE',
+          'AML_ASSESSMENT_REPORT',
+        ],
       },
+      { type: 'CUSTOM', customCondition: 'VARA_COMPLIANCE_VERIFIED' },
     ],
     actions: [
-      { type: 'NOTIFY', params: { roles: ['COMPLIANCE', 'LEGAL'] } },
+      { type: 'NOTIFY', params: { roles: ['COMPLIANCE', 'LEGAL', 'VARA_OFFICER'] } },
       { type: 'EMIT_EVENT', params: { event: 'VERIFICATION_REQUESTED' } },
     ],
-    description: 'Submit property with DLD title deed and RERA valuation',
+    description: 'Submit property with DLD title deed, RERA valuation, and VARA compliance documents',
   },
   {
     from: LifecycleState.PENDING_VERIFICATION,
@@ -61,26 +74,30 @@ const lifecycleRules: LifecycleRule[] = [
         approvals: [
           { role: 'COMPLIANCE', count: 1 },
           { role: 'LEGAL', count: 1 },
+          { role: 'VARA_OFFICER', count: 1 }, // VARA compliance officer approval
         ],
       },
       { type: 'CUSTOM', customCondition: 'DLD_OWNERSHIP_VERIFIED' },
     ],
     actions: [
       { type: 'EMIT_EVENT', params: { event: 'PROPERTY_VERIFIED' } },
+      { type: 'EMIT_EVENT', params: { event: 'VARA_VERIFICATION_COMPLETE' } },
     ],
-    description: 'DLD ownership verification and compliance approval required',
+    description: 'DLD ownership verification, VARA compliance, and multi-party approval required',
   },
   {
     from: LifecycleState.VERIFIED,
     to: LifecycleState.ACTIVE,
     conditions: [
       { type: 'CUSTOM', customCondition: 'DLD_TOKENIZATION_REGISTERED' },
+      { type: 'CUSTOM', customCondition: 'VARA_REPORTING_ACTIVE' },
     ],
     actions: [
       { type: 'EMIT_EVENT', params: { event: 'PROPERTY_TOKENIZED' } },
-      { type: 'NOTIFY', params: { roles: ['INVESTOR'] } },
+      { type: 'EMIT_EVENT', params: { event: 'VARA_ASSET_ACTIVATED' } },
+      { type: 'NOTIFY', params: { roles: ['INVESTOR', 'VARA_OFFICER'] } },
     ],
-    description: 'Activate after DLD tokenization registration',
+    description: 'Activate after DLD tokenization registration and VARA reporting setup',
   },
   {
     from: LifecycleState.ACTIVE,
@@ -123,55 +140,217 @@ const lifecycleRules: LifecycleRule[] = [
 
 /**
  * Dubai Real Estate Compliance Rules
+ *
+ * Implements UAE VARA (Virtual Assets Regulatory Authority) requirements
+ * as outlined in the Virtual Assets and Related Activities Regulations 2023
  */
 const complianceRules: ComplianceRule[] = [
+  // =============================================================================
+  // VARA KYC/AML REQUIREMENTS
+  // =============================================================================
   {
-    id: 'UAE_KYC',
-    name: 'UAE KYC Requirements',
+    id: 'VARA_KYC',
+    name: 'VARA KYC Requirements',
     type: 'KYC',
     params: {
-      requiredLevel: 'standard',
+      requiredLevel: 'enhanced', // VARA requires enhanced due diligence for real estate
       allowedDocuments: ['emirates_id', 'passport', 'residence_visa'],
+      additionalChecks: ['source_of_funds', 'pep_screening', 'sanctions_check'],
+      expiryDays: 365, // Re-verification required annually
     },
     severity: 'BLOCK',
   },
   {
-    id: 'INVESTOR_WHITELIST',
-    name: 'Investor Whitelist',
+    id: 'VARA_AML_CFT',
+    name: 'VARA AML/CFT Compliance',
+    type: 'CUSTOM',
+    params: {
+      requireSourceOfFunds: true,
+      sourceOfFundsThreshold: '100000', // AED - requires proof above this amount
+      requireBeneficialOwnership: true,
+      sanctionsScreeningRequired: true,
+      pepCheckRequired: true,
+      refreshPeriodDays: 180, // Re-screen every 6 months
+    },
+    severity: 'BLOCK',
+  },
+
+  // =============================================================================
+  // VARA JURISDICTION RESTRICTIONS
+  // =============================================================================
+  {
+    id: 'VARA_JURISDICTION',
+    name: 'VARA Jurisdiction Restrictions',
     type: 'JURISDICTION',
     params: {
-      allowedCountries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM', 'GB', 'US', 'SG'],
-      blockedCountries: ['KP', 'IR', 'CU', 'SY', 'RU'],
+      // GCC + approved jurisdictions
+      allowedCountries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM', 'GB', 'US', 'SG', 'HK', 'CH', 'DE', 'FR'],
+      // FATF blacklist + VARA restricted jurisdictions
+      blockedCountries: ['KP', 'IR', 'CU', 'SY', 'RU', 'BY', 'MM', 'VE', 'YE', 'LY', 'SD', 'SO'],
+      // High-risk jurisdictions require additional EDD
+      highRiskCountries: ['AF', 'HT', 'ML', 'NI', 'PK', 'PA', 'SS', 'UG', 'ZW'],
+      requireEnhancedDueDiligenceForHighRisk: true,
     },
     severity: 'BLOCK',
   },
+
+  // =============================================================================
+  // VARA INVESTOR QUALIFICATION
+  // =============================================================================
   {
-    id: 'MAX_HOLDING',
-    name: 'Maximum Holding Limit',
-    type: 'HOLDING_LIMIT',
+    id: 'VARA_QUALIFIED_INVESTOR',
+    name: 'VARA Qualified Investor Check',
+    type: 'ACCREDITATION',
     params: {
-      maxPercent: 10,
-      exemptRoles: ['INSTITUTIONAL'],
+      // For investments >= 500k AED, must be qualified/institutional
+      qualifiedInvestorThreshold: '500000', // AED
+      acceptedQualifications: [
+        'institutional', // Licensed financial institution
+        'professional', // Professional investor certification
+        'qualified', // Qualified investor status
+        'high_net_worth', // HNW individual (>3M AED liquid assets)
+      ],
+      exemptBelowThreshold: true, // Retail allowed for smaller investments
     },
     severity: 'BLOCK',
   },
+
+  // =============================================================================
+  // VARA INVESTMENT LIMITS
+  // =============================================================================
   {
-    id: 'MIN_INVESTMENT',
-    name: 'Minimum Investment',
+    id: 'VARA_MIN_INVESTMENT',
+    name: 'VARA Minimum Investment',
     type: 'TRANSFER_LIMIT',
     params: {
-      minAmount: '500', // AED
+      minAmount: '1000', // AED - VARA minimum for tokenized real estate
       currency: 'AED',
+      exemptTransfers: ['REDEMPTION', 'GIFT', 'INHERITANCE'],
     },
     severity: 'BLOCK',
   },
   {
-    id: 'LOCKUP_PERIOD',
-    name: 'Initial Lockup Period',
+    id: 'VARA_MAX_RETAIL_INVESTMENT',
+    name: 'VARA Retail Investment Cap',
+    type: 'TRANSFER_LIMIT',
+    params: {
+      // Retail investors capped at 500k AED per asset
+      maxAmount: '500000', // AED
+      currency: 'AED',
+      appliesTo: ['RETAIL'],
+      exemptRoles: ['INSTITUTIONAL', 'PROFESSIONAL', 'QUALIFIED'],
+    },
+    severity: 'WARN', // Warn but allow with additional acknowledgment
+  },
+
+  // =============================================================================
+  // VARA HOLDING LIMITS
+  // =============================================================================
+  {
+    id: 'VARA_MAX_HOLDING',
+    name: 'VARA Maximum Holding Limit',
+    type: 'HOLDING_LIMIT',
+    params: {
+      maxPercent: 10, // No single investor > 10% (anti-concentration)
+      exemptRoles: ['INSTITUTIONAL', 'SPONSOR'],
+      concentrationLimitPercent: 25, // Top 5 holders < 25% combined
+    },
+    severity: 'BLOCK',
+  },
+
+  // =============================================================================
+  // VARA LOCKUP REQUIREMENTS
+  // =============================================================================
+  {
+    id: 'VARA_LOCKUP',
+    name: 'VARA Initial Lockup Period',
     type: 'LOCKUP',
     params: {
-      lockupDays: 90,
-      exemptTransfers: ['REDEMPTION', 'FORCED_TRANSFER'],
+      lockupDays: 90, // 90-day lockup for new investments
+      exemptTransfers: ['REDEMPTION', 'FORCED_TRANSFER', 'REGULATORY_FREEZE'],
+      earlyReleaseWithPenalty: true,
+      earlyReleasePenaltyPercent: 2.5,
+    },
+    severity: 'BLOCK',
+  },
+
+  // =============================================================================
+  // VARA DISCLOSURE & MARKETING
+  // =============================================================================
+  {
+    id: 'VARA_DISCLOSURE',
+    name: 'VARA Risk Disclosure',
+    type: 'CUSTOM',
+    params: {
+      requireRiskAcknowledgment: true,
+      requiredDisclosures: [
+        'investment_risk', // General investment risk
+        'liquidity_risk', // Limited secondary market
+        'market_risk', // Property value fluctuation
+        'regulatory_risk', // Regulatory changes
+        'no_guaranteed_returns', // Returns not guaranteed
+      ],
+      disclosureLanguages: ['en', 'ar'], // English and Arabic required
+      coolingOffPeriodHours: 24, // 24-hour cooling off after disclosure
+    },
+    severity: 'BLOCK',
+  },
+  {
+    id: 'VARA_MARKETING',
+    name: 'VARA Marketing Compliance',
+    type: 'CUSTOM',
+    params: {
+      prohibitedClaims: [
+        'guaranteed_returns',
+        'risk_free',
+        'government_backed',
+        'principal_protected',
+      ],
+      requiredWarnings: [
+        'capital_at_risk',
+        'past_performance_not_indicative',
+        'vara_regulated',
+      ],
+      targetAudienceRestrictions: ['no_minors', 'qualified_jurisdictions_only'],
+    },
+    severity: 'WARN',
+  },
+
+  // =============================================================================
+  // VARA REPORTING
+  // =============================================================================
+  {
+    id: 'VARA_REPORTING',
+    name: 'VARA Regulatory Reporting',
+    type: 'CUSTOM',
+    params: {
+      reportingFrequency: 'QUARTERLY',
+      reportTypes: [
+        'investor_summary', // Investor count and demographics
+        'transaction_summary', // Transfer volume and value
+        'aml_sar', // Suspicious activity reports
+        'complaints_register', // Investor complaints
+      ],
+      suspiciousActivityThreshold: '50000', // AED - auto-flag for SAR review
+      largeTransactionThreshold: '250000', // AED - requires enhanced monitoring
+    },
+    severity: 'LOG', // Tracking/logging requirement
+  },
+
+  // =============================================================================
+  // VARA CUSTODY REQUIREMENTS
+  // =============================================================================
+  {
+    id: 'VARA_CUSTODY',
+    name: 'VARA Custody Standards',
+    type: 'CUSTOM',
+    params: {
+      requireLicensedCustodian: true,
+      segregatedAssets: true,
+      insuranceRequired: true,
+      minimumInsuranceCoverage: '10000000', // AED - 10M minimum coverage
+      multiSigRequired: true,
+      coldStoragePercent: 80, // 80% in cold storage
     },
     severity: 'BLOCK',
   },
@@ -179,8 +358,10 @@ const complianceRules: ComplianceRule[] = [
 
 /**
  * Required Verifications for Dubai Real Estate
+ * Includes VARA regulatory requirements and DLD property verifications
  */
 const requiredVerifications: RequiredVerification[] = [
+  // DLD Property Verifications
   {
     type: 'DLD_TITLE_VERIFICATION',
     description: 'Dubai Land Department title deed verification',
@@ -194,21 +375,49 @@ const requiredVerifications: RequiredVerification[] = [
     mandatory: true,
   },
   {
-    type: 'LEGAL_OPINION',
-    description: 'Legal opinion on tokenization structure',
-    allowedVerifiers: ['LEGAL'],
-    mandatory: true,
-  },
-  {
     type: 'NOC_VERIFICATION',
     description: 'No Objection Certificate from developer (if applicable)',
     allowedVerifiers: ['DEVELOPER', 'COMPLIANCE'],
     mandatory: false,
   },
+
+  // VARA Regulatory Verifications
+  {
+    type: 'VARA_VASP_LICENSE',
+    description: 'VARA Virtual Asset Service Provider license verification',
+    allowedVerifiers: ['VARA', 'COMPLIANCE'],
+    mandatory: true,
+  },
+  {
+    type: 'VARA_COMPLIANCE_ATTESTATION',
+    description: 'VARA compliance framework attestation',
+    allowedVerifiers: ['VARA', 'LICENSED_AUDITOR'],
+    mandatory: true,
+  },
+  {
+    type: 'VARA_AML_ASSESSMENT',
+    description: 'VARA AML/CFT risk assessment',
+    allowedVerifiers: ['COMPLIANCE', 'LICENSED_AUDITOR'],
+    mandatory: true,
+  },
+
+  // Legal & Insurance
+  {
+    type: 'LEGAL_OPINION',
+    description: 'Legal opinion on tokenization structure under UAE law',
+    allowedVerifiers: ['LEGAL'],
+    mandatory: true,
+  },
   {
     type: 'INSURANCE_VERIFICATION',
-    description: 'Property insurance verification',
-    allowedVerifiers: ['COMPLIANCE'],
+    description: 'Property and custody insurance verification',
+    allowedVerifiers: ['COMPLIANCE', 'INSURANCE_PROVIDER'],
+    mandatory: true,
+  },
+  {
+    type: 'CUSTODY_AGREEMENT',
+    description: 'Licensed custodian agreement verification',
+    allowedVerifiers: ['COMPLIANCE', 'CUSTODIAN'],
     mandatory: true,
   },
 ];
@@ -282,10 +491,16 @@ export const dubaiRealEstatePack: AssetPackConfig = {
   governance: governanceSettings,
 
   metadataSchema: {
+    // DLD Property Information
     titleDeedNumber: {
       type: 'string',
       required: true,
       description: 'DLD Title Deed Number',
+    },
+    propertyId: {
+      type: 'string',
+      required: true,
+      description: 'DLD Property ID',
     },
     propertyAddress: {
       type: 'string',
@@ -307,6 +522,18 @@ export const dubaiRealEstatePack: AssetPackConfig = {
       required: true,
       description: 'Property area in square feet',
     },
+    developer: {
+      type: 'string',
+      required: false,
+      description: 'Property developer name',
+    },
+    completionDate: {
+      type: 'date',
+      required: false,
+      description: 'Property completion date (for off-plan)',
+    },
+
+    // Valuation & Pricing
     valuationAmount: {
       type: 'string',
       required: true,
@@ -317,20 +544,71 @@ export const dubaiRealEstatePack: AssetPackConfig = {
       required: true,
       description: 'Date of RERA valuation',
     },
+    mintPrice: {
+      type: 'string',
+      required: true,
+      description: 'Initial mint price per token in AED',
+    },
     expectedYield: {
       type: 'number',
       required: false,
       description: 'Expected annual rental yield (%)',
     },
-    developer: {
+
+    // VARA Compliance Information
+    varaLicenseNumber: {
+      type: 'string',
+      required: true,
+      description: 'VARA VASP License Number',
+    },
+    varaLicenseExpiry: {
+      type: 'date',
+      required: true,
+      description: 'VARA License Expiry Date',
+    },
+    varaRiskCategory: {
+      type: 'string',
+      required: true,
+      description: 'VARA Risk Category (LOW, MEDIUM, HIGH)',
+    },
+    varaComplianceStatus: {
+      type: 'string',
+      required: true,
+      description: 'VARA Compliance Status (COMPLIANT, PENDING, REMEDIATION)',
+    },
+
+    // Issuer Information
+    issuerName: {
+      type: 'string',
+      required: true,
+      description: 'Legal name of the token issuer',
+    },
+    issuerRegistrationNumber: {
+      type: 'string',
+      required: true,
+      description: 'Issuer commercial registration number',
+    },
+    issuerJurisdiction: {
+      type: 'string',
+      required: true,
+      description: 'Issuer jurisdiction (ISO country code)',
+    },
+
+    // Token Details
+    tokenContractAddress: {
       type: 'string',
       required: false,
-      description: 'Property developer name',
+      description: 'Deployed ERC-3643 token contract address',
     },
-    completionDate: {
-      type: 'date',
+    totalSupply: {
+      type: 'string',
+      required: true,
+      description: 'Total token supply',
+    },
+    tokenizationReferenceNumber: {
+      type: 'string',
       required: false,
-      description: 'Property completion date (for off-plan)',
+      description: 'DLD Tokenization Reference Number',
     },
   },
 

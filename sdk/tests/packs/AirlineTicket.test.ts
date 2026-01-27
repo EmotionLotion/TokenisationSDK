@@ -245,10 +245,10 @@ describe('AirlineTicketEngine', () => {
   // TC-4 & TC-5: Transfer rules
   // ==========================================================================
   describe('TC-4 & TC-5: Transfer rules', () => {
-    it('TC-4: should allow transfer before check-in', () => {
+    it('TC-4: should allow transfer before check-in', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
 
-      const result = engine.requestTransfer({
+      const result = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -260,11 +260,11 @@ describe('AirlineTicketEngine', () => {
       expect(result.request!.reason).toBe(TransferReason.GIFT);
     });
 
-    it('TC-5: should block transfer after check-in', () => {
+    it('TC-5: should block transfer after check-in', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
       engine.checkIn({ ticketId: ticket!.id, actor: passenger });
 
-      const result = engine.requestTransfer({
+      const result = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -276,7 +276,7 @@ describe('AirlineTicketEngine', () => {
       expect(result.error).toContain('locked after check-in');
     });
 
-    it('should block transfer of frozen ticket', () => {
+    it('should block transfer of frozen ticket', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
 
       // Freeze the ticket
@@ -286,7 +286,7 @@ describe('AirlineTicketEngine', () => {
         reason: 'FRAUD_INVESTIGATION',
       });
 
-      const result = engine.requestTransfer({
+      const result = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -297,7 +297,7 @@ describe('AirlineTicketEngine', () => {
       expect(result.error).toContain('frozen');
     });
 
-    it('should block transfer of revoked ticket', () => {
+    it('should block transfer of revoked ticket', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
 
       // Revoke the ticket
@@ -308,7 +308,7 @@ describe('AirlineTicketEngine', () => {
         issueRefund: false,
       });
 
-      const result = engine.requestTransfer({
+      const result = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -319,13 +319,13 @@ describe('AirlineTicketEngine', () => {
       expect(result.error).toContain('revoked');
     });
 
-    it('should block transfer of non-transferable ticket', () => {
+    it('should block transfer of non-transferable ticket', async () => {
       const { ticket } = engine.issue({
         ...defaultTicketParams,
         policyFlags: { transferable: false },
       });
 
-      const result = engine.requestTransfer({
+      const result = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -336,10 +336,10 @@ describe('AirlineTicketEngine', () => {
       expect(result.error).toContain('non-transferable');
     });
 
-    it('should require re-KYC for resale transfers', () => {
+    it('should require re-KYC for resale transfers', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
 
-      const result = engine.requestTransfer({
+      const result = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -351,10 +351,10 @@ describe('AirlineTicketEngine', () => {
       expect(result.request!.reKycCompleted).toBe(false);
     });
 
-    it('should require re-KYC completion before approval', () => {
+    it('should require re-KYC completion before approval', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
 
-      const transferResult = engine.requestTransfer({
+      const transferResult = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -371,10 +371,10 @@ describe('AirlineTicketEngine', () => {
       expect(approvalResult.error).toContain('Re-KYC verification required');
     });
 
-    it('should allow approval after re-KYC completion', () => {
+    it('should allow approval after re-KYC completion', async () => {
       const { ticket } = engine.issue(defaultTicketParams);
 
-      const transferResult = engine.requestTransfer({
+      const transferResult = await engine.requestTransfer({
         ticketId: ticket!.id,
         fromPassenger: 'John Doe',
         toPassenger: { name: 'Jane Doe' },
@@ -1123,10 +1123,10 @@ describe('AirlineTicketEngine', () => {
 
     // AT-02: Transfer allowed window (e.g., before T-24h)
     describe('AT-02: Transfer window', () => {
-      it('should allow transfer before deadline', () => {
+      it('should allow transfer before deadline', async () => {
         const { ticket } = engine.issue(defaultTicketParams);
 
-        const result = engine.requestTransfer({
+        const result = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1136,7 +1136,7 @@ describe('AirlineTicketEngine', () => {
         expect(result.success).toBe(true);
       });
 
-      it('should block transfer after window closes with TRANSFER_WINDOW_CLOSED', () => {
+      it('should block transfer after window closes with TRANSFER_WINDOW_CLOSED', async () => {
         // Create ticket with departure very soon (past deadline)
         const pastDeadlineSegment = {
           ...testSegment,
@@ -1161,7 +1161,7 @@ describe('AirlineTicketEngine', () => {
           },
         });
 
-        const result = engine.requestTransfer({
+        const result = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1175,7 +1175,7 @@ describe('AirlineTicketEngine', () => {
 
     // AT-03: Transfer count limit (only once)
     describe('AT-03: Transfer count limit', () => {
-      it('should block transfer when MAX_TRANSFERS_EXCEEDED', () => {
+      it('should block transfer when MAX_TRANSFERS_EXCEEDED', async () => {
         const issueResult = engine.issue({
           ...defaultTicketParams,
           policyFlags: {
@@ -1201,7 +1201,7 @@ describe('AirlineTicketEngine', () => {
 
         // First transfer succeeds and executes immediately (no approval needed)
         // Must provide identity to bypass re-KYC requirement
-        const result1 = engine.requestTransfer({
+        const result1 = await engine.requestTransfer({
           ticketId: ticket.id,
           fromPassenger: 'John Doe',
           toPassenger: {
@@ -1220,7 +1220,7 @@ describe('AirlineTicketEngine', () => {
         expect(result1.request!.status).toBe('AUTO_APPROVED');
 
         // Second transfer fails
-        const result2 = engine.requestTransfer({
+        const result2 = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'Jane Doe',
           toPassenger: {
@@ -1242,12 +1242,12 @@ describe('AirlineTicketEngine', () => {
 
     // AT-04: Identity binding at check-in
     describe('AT-04: Identity binding at check-in', () => {
-      it('should lock ticket after check-in with TICKET_LOCKED_AFTER_CHECKIN', () => {
+      it('should lock ticket after check-in with TICKET_LOCKED_AFTER_CHECKIN', async () => {
         const { ticket } = engine.issue(defaultTicketParams);
 
         engine.checkIn({ ticketId: ticket!.id, actor: passenger });
 
-        const result = engine.requestTransfer({
+        const result = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1320,10 +1320,10 @@ describe('AirlineTicketEngine', () => {
 
     // AT-06: "Illness" scenario
     describe('AT-06: Medical transfer scenario', () => {
-      it('should require approval for ILLNESS transfer', () => {
+      it('should require approval for ILLNESS transfer', async () => {
         const { ticket } = engine.issue(defaultTicketParams);
 
-        const result = engine.requestTransfer({
+        const result = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1336,10 +1336,10 @@ describe('AirlineTicketEngine', () => {
         expect(result.request!.reason).toBe(TransferReason.ILLNESS);
       });
 
-      it('should complete ILLNESS transfer after approval', () => {
+      it('should complete ILLNESS transfer after approval', async () => {
         const { ticket } = engine.issue(defaultTicketParams);
 
-        const transferResult = engine.requestTransfer({
+        const transferResult = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1369,7 +1369,7 @@ describe('AirlineTicketEngine', () => {
 
     // AT-07: Refund flow (burn + status)
     describe('AT-07: Refund flow', () => {
-      it('should block transfer after refund with TICKET_VOID', () => {
+      it('should block transfer after refund with TICKET_VOID', async () => {
         const { ticket } = engine.issue(defaultTicketParams);
 
         // Cancel
@@ -1380,7 +1380,7 @@ describe('AirlineTicketEngine', () => {
         expect(refundResult.success).toBe(true);
 
         // Try transfer - should fail
-        const result = engine.requestTransfer({
+        const result = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1427,7 +1427,7 @@ describe('AirlineTicketEngine', () => {
         },
       };
 
-      it('should calculate resale fee', () => {
+      it('should calculate resale fee', async () => {
         const engineWithFees = new AirlineTicketEngine({
           resaleFeeConfig: {
             feePercentage: 0.05, // 5%
@@ -1441,7 +1441,7 @@ describe('AirlineTicketEngine', () => {
 
         const { ticket } = engineWithFees.issue(resaleTicketParams);
 
-        const result = engineWithFees.requestTransfer({
+        const result = await engineWithFees.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1452,7 +1452,7 @@ describe('AirlineTicketEngine', () => {
         expect(result.request!.resaleFee).toBe('60.00'); // 5% of 1200
       });
 
-      it('should collect fee on approval', () => {
+      it('should collect fee on approval', async () => {
         const engineWithFees = new AirlineTicketEngine({
           resaleFeeConfig: {
             feePercentage: 0.05,
@@ -1465,7 +1465,7 @@ describe('AirlineTicketEngine', () => {
 
         const { ticket } = engineWithFees.issue(resaleTicketParams);
 
-        const transferResult = engineWithFees.requestTransfer({
+        const transferResult = await engineWithFees.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1489,7 +1489,7 @@ describe('AirlineTicketEngine', () => {
         expect(parseFloat(treasury.collected)).toBe(60.00);
       });
 
-      it('should require payment when feeRequired is true', () => {
+      it('should require payment when feeRequired is true', async () => {
         const engineWithFees = new AirlineTicketEngine({
           resaleFeeConfig: {
             feePercentage: 0.05,
@@ -1502,7 +1502,7 @@ describe('AirlineTicketEngine', () => {
 
         const { ticket } = engineWithFees.issue(resaleTicketParams);
 
-        const transferResult = engineWithFees.requestTransfer({
+        const transferResult = await engineWithFees.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1572,13 +1572,13 @@ describe('AirlineTicketEngine', () => {
         },
       };
 
-      it('should deduplicate transfer requests with same idempotency key', () => {
+      it('should deduplicate transfer requests with same idempotency key', async () => {
         const { ticket } = engine.issue(idempotentTicketParams);
 
         const idempotencyKey = 'unique-transfer-key-123';
 
         // First request
-        const result1 = engine.requestTransfer({
+        const result1 = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1587,7 +1587,7 @@ describe('AirlineTicketEngine', () => {
         });
 
         // Retry with same key
-        const result2 = engine.requestTransfer({
+        const result2 = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1600,14 +1600,14 @@ describe('AirlineTicketEngine', () => {
         expect(result1.request!.id).toBe(result2.request!.id); // Same request returned
       });
 
-      it('should return same response on retry (5 times)', () => {
+      it('should return same response on retry (5 times)', async () => {
         const { ticket } = engine.issue(idempotentTicketParams);
         const idempotencyKey = 'retry-test-key';
 
         const requests: Array<{ id: string }> = [];
 
         for (let i = 0; i < 5; i++) {
-          const result = engine.requestTransfer({
+          const result = await engine.requestTransfer({
             ticketId: ticket!.id,
             fromPassenger: 'John Doe',
             toPassenger: { name: 'Jane Doe' },
@@ -1644,7 +1644,7 @@ describe('AirlineTicketEngine', () => {
         engine.checkIn({ ticketId: ticket!.id, actor: passenger });
         await engine.board({ ticketId: ticket!.id, actor: airlineAgent });
 
-        const result = engine.requestTransfer({
+        const result = await engine.requestTransfer({
           ticketId: ticket!.id,
           fromPassenger: 'John Doe',
           toPassenger: { name: 'Jane Doe' },
@@ -1654,6 +1654,611 @@ describe('AirlineTicketEngine', () => {
         expect(result.success).toBe(false);
         expect(result.errorCode).toBe('TICKET_USED');
       });
+    });
+  });
+
+  // ============================================================================
+  // PR-XX: PRODUCTION READINESS TESTS
+  // ============================================================================
+
+  describe('PR-01: Auth Bypass Attempts', () => {
+    it('should reject approveTransfer from unauthorized role (PASSENGER)', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      // Request transfer
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+      });
+      expect(transferResult.success).toBe(true);
+
+      // Passenger tries to approve (should fail)
+      const result = engine.approveTransfer({
+        requestId: transferResult.request!.id,
+        approvedBy: 'passenger-self',
+        actor: passenger, // Unauthorized role
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('UNAUTHORIZED');
+    });
+
+    it('should reject approveTransfer from wrong airline', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+      });
+
+      // Agent from different airline tries to approve
+      const wrongAirlineAgent: ActorContext = {
+        actorId: 'agent-other',
+        role: AirlineRole.AIRLINE_AGENT,
+        airlineCode: 'QF', // Different airline
+      };
+
+      const result = engine.approveTransfer({
+        requestId: transferResult.request!.id,
+        approvedBy: 'wrong-airline-agent',
+        actor: wrongAirlineAgent,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('UNAUTHORIZED');
+    });
+
+    it('should reject rejectTransfer from AUDITOR role', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+      });
+
+      // Auditor tries to reject (should fail - read-only role)
+      const result = engine.rejectTransfer({
+        requestId: transferResult.request!.id,
+        rejectedBy: 'auditor',
+        reason: 'Test rejection',
+        actor: auditor,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('UNAUTHORIZED');
+    });
+
+    it('should allow approveTransfer from authorized AIRLINE_AGENT', async () => {
+      // Use policy that doesn't require re-KYC to isolate RBAC testing
+      const { ticket } = engine.issue({
+        ...defaultTicketParams,
+        policyFlags: {
+          reKycRequiredForTransfer: false,
+          transferable: true,
+          refundable: true,
+          upgradeable: true,
+          standbyAllowed: false,
+          seatLocked: false,
+          sameDayChangeAllowed: true,
+          changeDeadlineHours: 24,
+        },
+      });
+
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: {
+          name: 'Jane Doe',
+          // Provide identity to avoid re-KYC requirement
+          identity: {
+            type: 'PASSPORT',
+            number: 'JD123456',
+            country: 'US',
+            expiryDate: '2030-01-01',
+          },
+        },
+        reason: TransferReason.GIFT,
+      });
+
+      expect(transferResult.success).toBe(true);
+
+      // Airline agent approves
+      const result = engine.approveTransfer({
+        requestId: transferResult.request!.id,
+        approvedBy: 'airline-agent',
+        actor: airlineAgent,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject requestTransfer with RBAC from non-owner passenger', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      // Different passenger tries to request transfer
+      const otherPassenger: ActorContext = {
+        actorId: 'Jane Doe',
+        role: AirlineRole.PASSENGER,
+        passengerId: 'Jane Doe', // Not the ticket owner
+      };
+
+      const result = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Alice' },
+        reason: TransferReason.GIFT,
+        actor: otherPassenger,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('PR-02: Replay Attack Prevention', () => {
+    it('should deduplicate transfer requests with same idempotency key', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      const idempotencyKey = 'transfer-key-123';
+
+      // First request
+      const result1 = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+        idempotencyKey,
+      });
+      expect(result1.success).toBe(true);
+
+      // Second request with same key should return same result
+      const result2 = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Alice' }, // Different passenger - should be ignored
+        reason: TransferReason.RESALE,
+        idempotencyKey,
+      });
+
+      expect(result2.success).toBe(true);
+      expect(result2.request!.id).toBe(result1.request!.id); // Same request ID
+      expect(result2.request!.toPassenger.name).toBe('Jane Doe'); // Original passenger, not Alice
+    });
+
+    it('should allow different requests with different idempotency keys', async () => {
+      // Create two tickets
+      const { ticket: ticket1 } = engine.issue({
+        ...defaultTicketParams,
+        eTicketNumber: '176-1111111111',
+        bookingReference: 'AAA111',
+      });
+      const { ticket: ticket2 } = engine.issue({
+        ...defaultTicketParams,
+        eTicketNumber: '176-2222222222',
+        bookingReference: 'BBB222',
+      });
+
+      const result1 = await engine.requestTransfer({
+        ticketId: ticket1!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+        idempotencyKey: 'key-1',
+      });
+
+      const result2 = await engine.requestTransfer({
+        ticketId: ticket2!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Alice' },
+        reason: TransferReason.GIFT,
+        idempotencyKey: 'key-2',
+      });
+
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+      expect(result1.request!.id).not.toBe(result2.request!.id);
+    });
+
+    it('should retrieve transfer by idempotency key', () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+      const idempotencyKey = 'lookup-key-456';
+
+      engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+        idempotencyKey,
+      });
+
+      const retrieved = engine.getTransferByIdempotencyKey(idempotencyKey);
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.toPassenger.name).toBe('Jane Doe');
+    });
+  });
+
+  describe('PR-03: Audit Logs Complete', () => {
+    it('should record audit entry for approveTransfer', async () => {
+      // Use policy without re-KYC to test audit logging flow
+      const { ticket } = engine.issue({
+        ...defaultTicketParams,
+        policyFlags: {
+          reKycRequiredForTransfer: false,
+          transferable: true,
+          refundable: true,
+          upgradeable: true,
+          standbyAllowed: false,
+          seatLocked: false,
+          sameDayChangeAllowed: true,
+          changeDeadlineHours: 24,
+        },
+      });
+
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: {
+          name: 'Jane Doe',
+          // Provide identity to avoid re-KYC requirement
+          identity: {
+            type: 'PASSPORT',
+            number: 'JD123456',
+            country: 'US',
+            expiryDate: '2030-01-01',
+          },
+        },
+        reason: TransferReason.GIFT,
+        actor: passenger,
+      });
+
+      expect(transferResult.success).toBe(true);
+
+      engine.approveTransfer({
+        requestId: transferResult.request!.id,
+        approvedBy: 'airline-agent',
+        actor: airlineAgent,
+      });
+
+      const auditLog = engine.getAuditLog({
+        action: 'APPROVE_TRANSFER',
+        resourceId: transferResult.request!.id,
+      });
+
+      expect(auditLog.length).toBeGreaterThan(0);
+      expect(auditLog[0].actor.id).toBe('agent-1');
+      expect(auditLog[0].actor.role).toBe(AirlineRole.AIRLINE_AGENT);
+      expect(auditLog[0].success).toBe(true);
+    });
+
+    it('should record audit entry for failed authorization', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+      });
+
+      // Unauthorized attempt
+      engine.approveTransfer({
+        requestId: transferResult.request!.id,
+        approvedBy: 'unauthorized',
+        actor: passenger,
+      });
+
+      const auditLog = engine.getAuditLog({
+        actorId: 'John Doe',
+        action: 'APPROVE_TRANSFER',
+      });
+
+      expect(auditLog.length).toBeGreaterThan(0);
+      expect(auditLog[0].success).toBe(false);
+      expect(auditLog[0].error).toContain('PERMISSION_DENIED');
+    });
+
+    it('should record audit entry for requestTransfer with idempotency key', () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+      const idempotencyKey = 'audit-key-789';
+
+      engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+        idempotencyKey,
+        actor: passenger,
+      });
+
+      const auditLog = engine.getAuditLog({
+        action: 'REQUEST_TRANSFER',
+      });
+
+      const entry = auditLog.find(e => e.metadata?.idempotencyKey === idempotencyKey);
+      expect(entry).toBeDefined();
+      expect(entry!.reason).toBe(TransferReason.GIFT);
+    });
+
+    it('should filter audit log by time range', () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      const before = new Date().toISOString();
+
+      engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+        actor: passenger,
+      });
+
+      const after = new Date(Date.now() + 1000).toISOString();
+
+      const auditLog = engine.getAuditLog({
+        since: before,
+        until: after,
+      });
+
+      expect(auditLog.length).toBeGreaterThan(0);
+    });
+
+    it('should include before/after state in audit entry for rejectTransfer', async () => {
+      const { ticket } = engine.issue(defaultTicketParams);
+
+      const transferResult = await engine.requestTransfer({
+        ticketId: ticket!.id,
+        fromPassenger: 'John Doe',
+        toPassenger: { name: 'Jane Doe' },
+        reason: TransferReason.GIFT,
+      });
+
+      engine.rejectTransfer({
+        requestId: transferResult.request!.id,
+        rejectedBy: 'agent',
+        reason: 'Policy violation',
+        actor: airlineAgent,
+      });
+
+      const auditLog = engine.getAuditLog({
+        action: 'REJECT_TRANSFER',
+      });
+
+      expect(auditLog.length).toBeGreaterThan(0);
+      expect(auditLog[0].before).toBeDefined();
+      expect(auditLog[0].after).toBeDefined();
+      expect(auditLog[0].reason).toBe('Policy violation');
+    });
+  });
+
+  describe('PR-04: Webhook Security', () => {
+    it('should sign webhooks with HMAC-SHA256', () => {
+      const webhookConfig = {
+        endpointId: 'webhook-1',
+        url: 'https://airline.example.com/webhook',
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret: 'test-secret-key-12345',
+        active: true,
+        retryPolicy: { maxRetries: 3, backoffMs: 1000 },
+      };
+
+      engine.registerWebhook(webhookConfig);
+
+      // Issue ticket to trigger webhook
+      const { ticket } = engine.issue(defaultTicketParams);
+      expect(ticket).toBeDefined();
+
+      // Get the webhook delivery
+      const events = engine.getTicketEvents(ticket!.id);
+      const issueEvent = events.find(e => e.type === AirlineEventType.TICKET_ISSUED);
+      expect(issueEvent).toBeDefined();
+
+      const deliveries = engine.getDeliveriesForEvent(issueEvent!.id);
+      expect(deliveries.length).toBeGreaterThan(0);
+
+      const delivery = deliveries[0];
+      expect(delivery.signature).toBeDefined();
+      expect(delivery.signature.length).toBe(64); // SHA-256 hex length
+      expect(delivery.timestamp).toBeDefined();
+      expect(delivery.nonce).toBeDefined();
+    });
+
+    it('should verify webhook signature correctly', () => {
+      const secret = 'test-secret-key';
+      const payload = JSON.stringify({ test: 'data' });
+      const timestamp = new Date().toISOString();
+      const nonce = 'test-nonce-123';
+
+      // Simulate creating a signature (using internal method via a delivery)
+      const webhookConfig = {
+        endpointId: 'verify-test',
+        url: 'https://test.example.com/webhook',
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret,
+        active: true,
+        retryPolicy: { maxRetries: 1, backoffMs: 100 },
+      };
+      engine.registerWebhook(webhookConfig);
+
+      const { ticket } = engine.issue(defaultTicketParams);
+      const events = engine.getTicketEvents(ticket!.id);
+      const delivery = engine.getDeliveriesForEvent(events[0].id)[0];
+
+      // Verify signature validation works
+      const verifyResult = engine.verifyWebhookSignature({
+        payload: delivery.payload,
+        signature: delivery.signature,
+        secret,
+        timestamp: delivery.timestamp,
+        nonce: delivery.nonce,
+      });
+
+      expect(verifyResult.valid).toBe(true);
+    });
+
+    it('should reject expired webhook timestamp (replay protection)', () => {
+      const secret = 'test-secret';
+      const payload = '{"test":"data"}';
+      const oldTimestamp = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 minutes ago
+      const nonce = 'old-nonce';
+
+      const result = engine.verifyWebhookSignature({
+        payload,
+        signature: 'any-signature',
+        secret,
+        timestamp: oldTimestamp,
+        nonce,
+        maxAgeMs: 300000, // 5 minutes
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('replay protection');
+    });
+
+    it('should reject invalid webhook signature', () => {
+      const webhookConfig = {
+        endpointId: 'invalid-test',
+        url: 'https://test.example.com/webhook',
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret: 'real-secret',
+        active: true,
+        retryPolicy: { maxRetries: 1, backoffMs: 100 },
+      };
+      engine.registerWebhook(webhookConfig);
+
+      const { ticket } = engine.issue(defaultTicketParams);
+      const events = engine.getTicketEvents(ticket!.id);
+      const delivery = engine.getDeliveriesForEvent(events[0].id)[0];
+
+      const result = engine.verifyWebhookSignature({
+        payload: delivery.payload,
+        signature: delivery.signature,
+        secret: 'wrong-secret', // Wrong secret
+        timestamp: delivery.timestamp,
+        nonce: delivery.nonce,
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('Invalid webhook signature');
+    });
+
+    it('should move failed webhook to dead letter queue after max retries', () => {
+      const webhookConfig = {
+        endpointId: 'failing-webhook',
+        url: 'https://fail.example.com/webhook', // URL with 'fail' triggers failure
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret: 'test-secret',
+        active: true,
+        retryPolicy: { maxRetries: 2, backoffMs: 100 },
+      };
+
+      engine.registerWebhook(webhookConfig);
+
+      // Issue ticket to trigger webhook (will fail)
+      const { ticket } = engine.issue(defaultTicketParams);
+      expect(ticket).toBeDefined();
+
+      // Get pending deliveries
+      const pending = engine.getPendingDeliveries();
+      expect(pending.some(d => d.endpointId === 'failing-webhook')).toBe(true);
+
+      // Retry until max retries exceeded
+      const failingDelivery = pending.find(d => d.endpointId === 'failing-webhook')!;
+      engine.retryWebhook(failingDelivery.id);
+      engine.retryWebhook(failingDelivery.id);
+
+      // Should now be in dead letter queue
+      const dlq = engine.getDeadLetterQueue();
+      expect(dlq.length).toBeGreaterThan(0);
+      expect(dlq[0].reason).toContain('Max retries');
+    });
+
+    it('should track webhook delivery attempts', () => {
+      const webhookConfig = {
+        endpointId: 'attempt-tracker',
+        url: 'https://fail.example.com/webhook',
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret: 'test-secret',
+        active: true,
+        retryPolicy: { maxRetries: 5, backoffMs: 100 },
+      };
+
+      engine.registerWebhook(webhookConfig);
+
+      const { ticket } = engine.issue(defaultTicketParams);
+      const events = engine.getTicketEvents(ticket!.id);
+      const deliveries = engine.getDeliveriesForEvent(events[0].id);
+      const delivery = deliveries.find(d => d.endpointId === 'attempt-tracker')!;
+
+      expect(delivery.attemptCount).toBe(1);
+
+      engine.retryWebhook(delivery.id);
+      const updated = engine.getWebhookDelivery(delivery.id);
+      expect(updated!.attemptCount).toBe(2);
+    });
+
+    it('should allow manual retry from dead letter queue', () => {
+      const webhookConfig = {
+        endpointId: 'manual-retry-test',
+        url: 'https://fail.example.com/webhook',
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret: 'test-secret',
+        active: true,
+        retryPolicy: { maxRetries: 1, backoffMs: 100 },
+      };
+
+      engine.registerWebhook(webhookConfig);
+
+      const { ticket } = engine.issue(defaultTicketParams);
+      const events = engine.getTicketEvents(ticket!.id);
+      const deliveries = engine.getDeliveriesForEvent(events[0].id);
+      const delivery = deliveries.find(d => d.endpointId === 'manual-retry-test')!;
+
+      // Exhaust retries
+      engine.retryWebhook(delivery.id);
+
+      // Should be in DLQ
+      const dlq = engine.getDeadLetterQueue();
+      const dlEntry = dlq.find(e => e.endpointId === 'manual-retry-test');
+      expect(dlEntry).toBeDefined();
+      expect(dlEntry!.retriable).toBe(true);
+
+      // Manual retry from DLQ (will still fail but tests the mechanism)
+      const retryResult = engine.retryFromDeadLetter(dlEntry!.id);
+      expect(retryResult.success).toBe(false); // Still fails because URL has 'fail'
+
+      // Entry should be removed from DLQ
+      const updatedDlq = engine.getDeadLetterQueue();
+      expect(updatedDlq.find(e => e.id === dlEntry!.id)).toBeUndefined();
+    });
+
+    it('should calculate exponential backoff for retries', () => {
+      const webhookConfig = {
+        endpointId: 'backoff-test',
+        url: 'https://fail.example.com/webhook',
+        events: [AirlineEventType.TICKET_ISSUED],
+        secret: 'test-secret',
+        active: true,
+        retryPolicy: { maxRetries: 5, backoffMs: 1000 },
+      };
+
+      engine.registerWebhook(webhookConfig);
+
+      const { ticket } = engine.issue(defaultTicketParams);
+      const events = engine.getTicketEvents(ticket!.id);
+      const deliveries = engine.getDeliveriesForEvent(events[0].id);
+      const delivery = deliveries.find(d => d.endpointId === 'backoff-test')!;
+
+      // First retry - backoff should be 1000ms
+      expect(delivery.nextRetryAt).toBeDefined();
+      const firstRetryTime = new Date(delivery.nextRetryAt!).getTime();
+      const firstAttemptTime = new Date(delivery.lastAttemptAt!).getTime();
+      expect(firstRetryTime - firstAttemptTime).toBeGreaterThanOrEqual(1000);
     });
   });
 });

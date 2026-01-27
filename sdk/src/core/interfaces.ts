@@ -849,3 +849,99 @@ export interface IAcePlugin {
    */
   getConsensusInfo(attestationId: string): Promise<ACEConsensusInfo | null>;
 }
+
+// ============================================================================
+// CUSTOM CONDITION EVALUATOR INTERFACE
+// ============================================================================
+
+/**
+ * Custom condition evaluation context
+ */
+export interface CustomConditionContext {
+  /** Asset ID being evaluated */
+  assetId: string;
+  /** Full asset model */
+  asset: RightModel;
+  /** Actor requesting the transition */
+  actorId: string;
+  /** Target lifecycle state */
+  targetState: LifecycleState;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Custom condition evaluation result
+ */
+export interface CustomConditionResult {
+  /** Whether the condition is satisfied */
+  satisfied: boolean;
+  /** Reason if not satisfied */
+  reason?: string;
+  /** Evidence/proof of evaluation (e.g., DLD reference number) */
+  evidence?: Record<string, unknown>;
+  /** Warnings (non-blocking) */
+  warnings?: string[];
+}
+
+/**
+ * ICustomConditionEvaluator - Evaluates pack-defined custom conditions
+ *
+ * Custom conditions are defined in AssetPack lifecycle rules using
+ * `{ type: 'CUSTOM', customCondition: 'CONDITION_NAME' }`
+ *
+ * This interface allows jurisdiction-specific or domain-specific
+ * condition evaluators to be plugged in (e.g., DLD verification for Dubai).
+ */
+export interface ICustomConditionEvaluator {
+  /** Evaluator identifier */
+  readonly evaluatorId: string;
+
+  /** List of condition names this evaluator handles */
+  readonly supportedConditions: string[];
+
+  /**
+   * Evaluate a custom condition
+   * @param conditionName The condition to evaluate (e.g., 'DLD_OWNERSHIP_VERIFIED')
+   * @param context The evaluation context
+   * @returns Evaluation result
+   */
+  evaluate(
+    conditionName: string,
+    context: CustomConditionContext
+  ): Promise<CustomConditionResult>;
+
+  /**
+   * Check if this evaluator supports a condition
+   * @param conditionName The condition name
+   */
+  supports(conditionName: string): boolean;
+}
+
+/**
+ * ICustomConditionRegistry - Registry for custom condition evaluators
+ */
+export interface ICustomConditionRegistry {
+  /**
+   * Register an evaluator
+   */
+  register(evaluator: ICustomConditionEvaluator): void;
+
+  /**
+   * Get evaluator for a condition
+   */
+  getEvaluator(conditionName: string): ICustomConditionEvaluator | undefined;
+
+  /**
+   * Evaluate a condition using the appropriate evaluator
+   */
+  evaluate(
+    conditionName: string,
+    context: CustomConditionContext
+  ): Promise<CustomConditionResult>;
+
+  /**
+   * List all registered evaluators
+   */
+  listEvaluators(): ICustomConditionEvaluator[];
+}
