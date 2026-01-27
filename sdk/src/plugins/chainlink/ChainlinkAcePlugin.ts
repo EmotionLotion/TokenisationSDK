@@ -35,10 +35,17 @@ const ACE_ROUTER_ABI = [
   'function donNodeCount() external view returns (uint8)',
   'function cacheTTL(uint8 attestationType) external view returns (uint256)',
   'function highValueThreshold() external view returns (uint256)',
+  'function usePolicyModules() external view returns (bool)',
+  'function policyRegistry() external view returns (address)',
 
   // Write functions
   'function requestAttestation(tuple(address subject, uint8 attestationType, bytes32 contextHash, bytes additionalData)) external returns (bytes32 requestId)',
   'function checkTransferCompliance(address from, address to, uint256 value, address token) external returns (bytes32 requestId)',
+
+  // Policy Module functions
+  'function evaluatePolicies(address from, address to, uint256 amount, address token) external view returns (bool allowed, tuple(bool allowed, bytes32 policyId, bytes32 ruleId, string reason, uint256 timestamp, bytes proof)[] results)',
+  'function evaluatePoliciesEarly(address from, address to, uint256 amount, address token) external view returns (bool allowed, address failedModule, string reason)',
+  'function checkFullCompliance(address from, address to, uint256 amount, address token) external view returns (bool compliant, bytes32 attestationId, tuple(bool allowed, bytes32 policyId, bytes32 ruleId, string reason, uint256 timestamp, bytes proof)[] policyResults)',
 
   // Events
   'event AttestationRequested(bytes32 indexed requestId, address indexed subject, uint8 attestationType, bytes32 contextHash)',
@@ -46,6 +53,7 @@ const ACE_ROUTER_ABI = [
   'event AttestationRevoked(bytes32 indexed attestationId, string reason)',
   'event AttestationExpired(bytes32 indexed attestationId)',
   'event FallbackTriggered(bytes32 indexed requestId, string reason)',
+  'event PolicyEvaluated(address indexed from, address indexed to, address indexed token, uint256 amount, bool allowed, uint256 moduleCount)',
 ];
 
 // Attestation type enum values (matches Solidity)
@@ -103,6 +111,29 @@ interface PendingRequest {
   resolve: (value: ACEAttestation) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout>;
+}
+
+/**
+ * Policy evaluation result from on-chain policy modules
+ */
+export interface PolicyResult {
+  allowed: boolean;
+  policyId: string;
+  ruleId: string;
+  reason: string;
+  timestamp: number;
+  proof: string;
+}
+
+/**
+ * Full compliance check result combining attestations and policy modules
+ */
+export interface FullComplianceResult {
+  compliant: boolean;
+  attestationId: string | null;
+  policyResults: PolicyResult[];
+  attestationsValid: boolean;
+  policiesPass: boolean;
 }
 
 /**
@@ -492,6 +523,239 @@ export class ChainlinkAcePlugin implements IAcePlugin {
       threshold: Number(threshold),
       nodeCount: Number(nodeCount),
       cacheTTLs,
+    };
+  }
+
+  // ============================================================================
+  // Policy Module Evaluation Methods
+  // ============================================================================
+
+  /**
+   * Check if policy modules are enabled on the ACE router
+   */
+  async isPolicyModulesEnabled(): Promise<boolean> {
+    try {
+      return await this.contract.usePolicyModules();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get the policy registry address
+   */
+  async getPolicyRegistryAddress(): Promise<string | null> {
+    try {
+      const address = await this.contract.policyRegistry();
+      return address === ethers.ZeroAddress ? null : address;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Evaluate transfer against on-chain policy modules
+   * This provides authoritative DON-enforced policy evaluation
+   *
+   * @param from Sender address
+   * @param to Recipient address
+   * @param amount Transfer amount (as string with decimals)
+   * @param token Token address
+   * @returns Policy evaluation results
+   */
+  async evaluatePolicies(
+    from: string,
+    to: string,
+    amount: string,
+    token: string
+  ): Promise<Result<{ allowed: boolean; results: PolicyResult[] }, string>> {
+    try {
+      const value = ethers.parseUnits(amount, 18);
+
+      const [allowed, rawResults] = await this.contract.evaluatePolicies(from, to, value, token);
+
+      const results: PolicyResult[] = rawResults.map((r: {
+        allowed: boolean;
+        policyId: string;
+        ruleId: string;
+        reason: string;
+        timestamp: bigint;
+        proof: string;
+      }) => ({
+        allowed: r.allowed,
+        policyId: r.policyId,
+        ruleId: r.ruleId,
+        reason: r.reason,
+        timestamp: Number(r.timestamp),
+        proof: r.proof,
+      }));
+
+      return ok({ allowed, results });
+    } catch (error) {
+      return err(
+        `Policy evaluation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Evaluate policies with early termination on first failure
+   * More gas-efficient when only the first failure matters
+   *
+   * @param from Sender address
+   * @param to Recipient address
+   * @param amount Transfer amount (as string with decimals)
+   * @param token Token address
+   * @returns Early termination result
+   */
+  async evaluatePoliciesEarly(
+    from: string,
+    to: string,
+    amount: string,
+    token: string
+  ): Promise<Result<{ allowed: boolean; failedModule: string | null; reason: string }, string>> {
+    try {
+      const value = ethers.parseUnits(amount, 18);
+
+      const [allowed, failedModule, reason] = await this.contract.evaluatePoliciesEarly(
+        from,
+        to,
+        value,
+        token
+      );
+
+      return ok({
+        allowed,
+        failedModule: failedModule === ethers.ZeroAddress ? null : failedModule,
+        reason,
+      });
+    } catch (error) {
+      return err(
+        `Early policy evaluation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Check full compliance combining attestations and policy modules
+   * This is the recommended method for production use
+   *
+   * @param from Sender address
+   * @param to Recipient address
+   * @param amount Transfer amount (as string with decimals)
+   * @param token Token address
+   * @returns Full compliance result with attestation and policy details
+   */
+  async checkFullCompliance(
+    from: string,
+    to: string,
+    amount: string,
+    token: string
+  ): Promise<Result<FullComplianceResult, string>> {
+    try {
+      const value = ethers.parseUnits(amount, 18);
+
+      const [compliant, attestationId, rawPolicyResults] = await this.contract.checkFullCompliance(
+        from,
+        to,
+        value,
+        token
+      );
+
+      const policyResults: PolicyResult[] = rawPolicyResults.map((r: {
+        allowed: boolean;
+        policyId: string;
+        ruleId: string;
+        reason: string;
+        timestamp: bigint;
+        proof: string;
+      }) => ({
+        allowed: r.allowed,
+        policyId: r.policyId,
+        ruleId: r.ruleId,
+        reason: r.reason,
+        timestamp: Number(r.timestamp),
+        proof: r.proof,
+      }));
+
+      // Check attestation validity separately
+      const attestationsValid = attestationId !== ethers.ZeroHash &&
+        await this.isAttestationValid(attestationId);
+
+      // Check if all policies pass
+      const policiesPass = policyResults.every((r) => r.allowed);
+
+      return ok({
+        compliant,
+        attestationId: attestationId === ethers.ZeroHash ? null : attestationId,
+        policyResults,
+        attestationsValid,
+        policiesPass,
+      });
+    } catch (error) {
+      return err(
+        `Full compliance check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Pre-validate transfer using SDK as a local pre-validator
+   * Use this before requesting on-chain attestation to catch obvious issues
+   *
+   * @param from Sender address
+   * @param to Recipient address
+   * @param amount Transfer amount
+   * @param token Token address
+   * @returns Pre-validation result
+   */
+  async preValidateTransfer(
+    from: string,
+    to: string,
+    amount: string,
+    token: string
+  ): Promise<{ valid: boolean; issues: string[] }> {
+    const issues: string[] = [];
+
+    // Check addresses
+    if (!ethers.isAddress(from)) {
+      issues.push('Invalid sender address');
+    }
+    if (!ethers.isAddress(to)) {
+      issues.push('Invalid recipient address');
+    }
+    if (from.toLowerCase() === to.toLowerCase()) {
+      issues.push('Sender and recipient are the same address');
+    }
+
+    // Check amount
+    try {
+      const value = ethers.parseUnits(amount, 18);
+      if (value <= 0n) {
+        issues.push('Transfer amount must be greater than zero');
+      }
+    } catch {
+      issues.push('Invalid transfer amount format');
+    }
+
+    // Check token address
+    if (token !== ethers.ZeroAddress && !ethers.isAddress(token)) {
+      issues.push('Invalid token address');
+    }
+
+    // Check cached attestations (quick local check)
+    const fromCached = await this.getCachedAttestation(from, 'IDENTITY_VERIFICATION' as ACEAttestationType);
+    const toCached = await this.getCachedAttestation(to, 'IDENTITY_VERIFICATION' as ACEAttestationType);
+
+    if (!fromCached && !toCached) {
+      // No cached identity attestations - might need fresh attestation
+      // This is a warning, not a hard failure
+      issues.push('Warning: No cached identity attestations found - may require fresh DON attestation');
+    }
+
+    return {
+      valid: issues.filter((i) => !i.startsWith('Warning:')).length === 0,
+      issues,
     };
   }
 

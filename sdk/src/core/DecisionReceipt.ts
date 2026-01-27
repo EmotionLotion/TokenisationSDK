@@ -16,6 +16,193 @@ import type { ACEConsensusInfo } from './interfaces.js';
 export type { ACEConsensusInfo };
 
 // ============================================================================
+// PDR (Policy Decision Record) TYPES - CCID-Compatible
+// ============================================================================
+
+/**
+ * DON Signature - Individual node signature in DON consensus
+ */
+export interface DONSignature {
+  /** Node address/identifier */
+  nodeAddress: string;
+  /** Signature bytes (hex encoded) */
+  signature: string;
+  /** Signing timestamp */
+  timestamp: string;
+}
+
+/**
+ * DON Consensus Proof - Cryptographic proof of DON consensus
+ */
+export interface DONConsensusProof {
+  /** Request ID that was processed */
+  requestId: string;
+  /** Number of nodes that participated */
+  nodeCount: number;
+  /** Required threshold for consensus */
+  threshold: number;
+  /** Individual node signatures */
+  signatures: DONSignature[];
+  /** Aggregated multi-sig (if available) */
+  aggregatedSignature?: string;
+  /** Block number when consensus was reached */
+  blockNumber: number;
+  /** Block hash for reference */
+  blockHash: string;
+  /** Transaction hash that fulfilled the request */
+  transactionHash?: string;
+}
+
+/**
+ * CCID Credential Schema Reference
+ * Compatible with Chainlink Credential Interoperability Definition
+ */
+export interface CCIDSchemaRef {
+  /** Schema identifier (e.g., "ccid:schema:transfer-compliance:v1") */
+  schemaId: string;
+  /** Schema version */
+  version: string;
+  /** Schema registry URL */
+  registryUrl?: string;
+  /** Hash of schema definition for verification */
+  schemaHash?: string;
+}
+
+/**
+ * Policy Module Evaluation Result
+ * Matches the on-chain PolicyResult structure
+ */
+export interface PolicyModuleResult {
+  /** Module address that evaluated the policy */
+  moduleAddress: string;
+  /** Module name */
+  moduleName: string;
+  /** Whether the policy check passed */
+  allowed: boolean;
+  /** Policy identifier */
+  policyId: string;
+  /** Specific rule that was triggered (if any) */
+  ruleId?: string;
+  /** Human-readable reason for the decision */
+  reason: string;
+  /** Evaluation timestamp */
+  timestamp: number;
+  /** Cryptographic proof of evaluation (abi-encoded) */
+  proof: string;
+}
+
+/**
+ * PolicyDecisionRecord (PDR) - CCID-Compatible Decision Record
+ *
+ * A PDR is a signed attestation that can be verified by:
+ * 1. External auditors
+ * 2. DeFi protocols (Aave, Uniswap, etc.)
+ * 3. Regulatory bodies
+ * 4. Cross-chain verification systems
+ *
+ * It mirrors the structure returned by the Chainlink DON so that
+ * any party can independently verify the decision against the DON.
+ */
+export interface PolicyDecisionRecord {
+  /** Unique PDR identifier (matches ACE attestation ID if available) */
+  pdrId: string;
+
+  // === Core Decision Data ===
+  /** The compliance action evaluated */
+  action: ComplianceAction;
+  /** Decision result */
+  result: 'ALLOW' | 'DENY' | 'CONDITIONAL';
+  /** Policy version used */
+  policyVersion: string;
+  /** SHA-256 hash of the complete policy configuration */
+  policyHash: string;
+
+  // === DON Consensus Proof ===
+  /** DON consensus proof (null if local evaluation only) */
+  donProof: DONConsensusProof | null;
+  /** ACE attestation ID from Chainlink DON */
+  aceAttestationId?: string;
+
+  // === Policy Module Results ===
+  /** Results from individual on-chain policy modules */
+  policyModuleResults: PolicyModuleResult[];
+  /** Aggregate policy hash from PolicyModuleRegistry */
+  aggregatePolicyHash?: string;
+
+  // === CCID Compatibility ===
+  /** CCID schema reference for DeFi composability */
+  ccidSchema: CCIDSchemaRef;
+  /** Whether this PDR is CCID-compliant */
+  ccidCompliant: boolean;
+
+  // === Subject Information ===
+  /** Type of subject */
+  subjectType: 'asset' | 'party' | 'transfer';
+  /** Subject identifier (address or asset ID) */
+  subjectId: string;
+  /** Actor who initiated the action */
+  actorId: string;
+  /** Recipient (for transfers) */
+  recipientId?: string;
+  /** Token address (for token operations) */
+  tokenAddress?: string;
+  /** Amount (for token operations) */
+  amount?: string;
+
+  // === Blockchain Reference ===
+  /** Chain ID where the decision was recorded */
+  chainId: number;
+  /** Block number at time of decision */
+  blockNumber?: number;
+  /** Block timestamp */
+  blockTimestamp?: number;
+
+  // === Timestamps ===
+  /** When the PDR was created */
+  createdAt: string;
+  /** When the PDR expires (based on attestation validity) */
+  validUntil: string;
+
+  // === Cryptographic Integrity ===
+  /** SHA-256 hash of PDR content (excluding signature) */
+  contentHash: string;
+  /** RSA-SHA256 signature of the content hash */
+  signature: string;
+
+  // === Audit Trail ===
+  /** Previous PDR hash for chain linkage */
+  previousPdrHash?: string;
+  /** Human-readable summary */
+  summary: string;
+  /** Denial reasons */
+  reasons: string[];
+  /** Any warnings */
+  warnings: string[];
+}
+
+/**
+ * PDR Verification Result
+ */
+export interface PDRVerificationResult {
+  /** Overall validity */
+  valid: boolean;
+  /** Local signature verification */
+  signatureValid: boolean;
+  /** Content hash matches */
+  contentHashValid: boolean;
+  /** DON consensus proof is valid (if present) */
+  donProofValid: boolean;
+  /** Policy module proofs are valid */
+  policyProofsValid: boolean;
+  /** Chain linkage is valid */
+  chainValid: boolean;
+  /** CCID compliance status */
+  ccidCompliant: boolean;
+  /** Issues found */
+  issues: string[];
+}
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -494,3 +681,481 @@ export class ReceiptChain {
  * Singleton receipt chain for SDK-wide usage
  */
 export const receiptChain = new ReceiptChain();
+
+// ============================================================================
+// PDR (Policy Decision Record) FUNCTIONS
+// ============================================================================
+
+/**
+ * CCID Schema IDs for different compliance actions
+ */
+export const CCID_SCHEMAS: Record<ComplianceAction, CCIDSchemaRef> = {
+  'asset:create': {
+    schemaId: 'ccid:schema:asset-creation:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+  'asset:verify': {
+    schemaId: 'ccid:schema:asset-verification:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+  'asset:activate': {
+    schemaId: 'ccid:schema:asset-activation:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+  'token:mint': {
+    schemaId: 'ccid:schema:token-mint:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+  'token:transfer': {
+    schemaId: 'ccid:schema:transfer-compliance:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+  'token:burn': {
+    schemaId: 'ccid:schema:token-burn:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+  'party:register': {
+    schemaId: 'ccid:schema:party-registration:v1',
+    version: '1.0.0',
+    registryUrl: 'https://ccid.chainlink.dev/schemas',
+  },
+};
+
+/**
+ * Hash PDR content for signature
+ */
+export function hashPDRContent(pdr: Omit<PolicyDecisionRecord, 'contentHash' | 'signature'>): string {
+  const payload = {
+    pdrId: pdr.pdrId,
+    action: pdr.action,
+    result: pdr.result,
+    policyVersion: pdr.policyVersion,
+    policyHash: pdr.policyHash,
+    aceAttestationId: pdr.aceAttestationId,
+    donProof: pdr.donProof,
+    policyModuleResults: pdr.policyModuleResults,
+    aggregatePolicyHash: pdr.aggregatePolicyHash,
+    ccidSchema: pdr.ccidSchema,
+    subjectType: pdr.subjectType,
+    subjectId: pdr.subjectId,
+    actorId: pdr.actorId,
+    recipientId: pdr.recipientId,
+    tokenAddress: pdr.tokenAddress,
+    amount: pdr.amount,
+    chainId: pdr.chainId,
+    blockNumber: pdr.blockNumber,
+    createdAt: pdr.createdAt,
+    validUntil: pdr.validUntil,
+    previousPdrHash: pdr.previousPdrHash,
+  };
+
+  const normalized = JSON.stringify(payload, Object.keys(payload).sort());
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+/**
+ * Sign a PDR
+ */
+export function signPDR(pdr: Omit<PolicyDecisionRecord, 'signature'>): string {
+  const { privateKey } = getKeyPair();
+  const hash = pdr.contentHash;
+
+  const sign = createSign('RSA-SHA256');
+  sign.update(hash);
+  return sign.sign(privateKey, 'base64');
+}
+
+/**
+ * Verify PDR signature
+ */
+export function verifyPDRSignature(pdr: PolicyDecisionRecord): boolean {
+  const { publicKey } = getKeyPair();
+
+  const verify = createVerify('RSA-SHA256');
+  verify.update(pdr.contentHash);
+
+  try {
+    return verify.verify(publicKey, pdr.signature, 'base64');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create a PDR from a policy decision and optional ACE data
+ */
+export function createPDR(
+  decision: PolicyDecision,
+  context: ComplianceContext,
+  options?: {
+    donProof?: DONConsensusProof;
+    aceAttestationId?: string;
+    policyModuleResults?: PolicyModuleResult[];
+    aggregatePolicyHash?: string;
+    chainId?: number;
+    blockNumber?: number;
+    blockTimestamp?: number;
+    validUntil?: string;
+    previousPdrHash?: string;
+  }
+): PolicyDecisionRecord {
+  const pdrId = options?.aceAttestationId || uuidv4();
+  const createdAt = new Date().toISOString();
+
+  // Default validity: 1 hour for local decisions, or from DON attestation
+  const validUntil = options?.validUntil ||
+    new Date(Date.now() + 3600000).toISOString();
+
+  // Determine subject type
+  const subjectType: 'asset' | 'party' | 'transfer' = context.recipientId
+    ? 'transfer'
+    : context.assetId
+      ? 'asset'
+      : 'party';
+  const subjectId = context.assetId || context.actorId;
+
+  // Get CCID schema for this action
+  const ccidSchema = CCID_SCHEMAS[decision.action];
+
+  // Determine CCID compliance
+  const ccidCompliant = Boolean(
+    options?.donProof &&
+    options.donProof.signatures.length >= options.donProof.threshold &&
+    ccidSchema
+  );
+
+  // Create summary and reasons
+  const summary = createPDRSummary(decision, context);
+  const reasons = decision.violations.map((v) => v.message);
+  const warnings = decision.warnings.map((w) => w.message);
+
+  // Build PDR without signature
+  const pdrWithoutSig: Omit<PolicyDecisionRecord, 'contentHash' | 'signature'> = {
+    pdrId,
+    action: decision.action,
+    result: decision.result,
+    policyVersion: decision.policyVersion,
+    policyHash: decision.policyHash,
+    donProof: options?.donProof || null,
+    aceAttestationId: options?.aceAttestationId,
+    policyModuleResults: options?.policyModuleResults || [],
+    aggregatePolicyHash: options?.aggregatePolicyHash,
+    ccidSchema,
+    ccidCompliant,
+    subjectType,
+    subjectId,
+    actorId: context.actorId,
+    recipientId: context.recipientId,
+    tokenAddress: context.assetId,
+    amount: context.amount?.toString(),
+    chainId: options?.chainId || 1,
+    blockNumber: options?.blockNumber,
+    blockTimestamp: options?.blockTimestamp,
+    createdAt,
+    validUntil,
+    previousPdrHash: options?.previousPdrHash,
+    summary,
+    reasons,
+    warnings,
+  };
+
+  // Calculate content hash
+  const contentHash = hashPDRContent(pdrWithoutSig);
+
+  const pdrWithHash: Omit<PolicyDecisionRecord, 'signature'> = {
+    ...pdrWithoutSig,
+    contentHash,
+  };
+
+  // Sign and return
+  const signature = signPDR(pdrWithHash);
+
+  return {
+    ...pdrWithHash,
+    signature,
+  };
+}
+
+/**
+ * Create a PDR summary
+ */
+function createPDRSummary(decision: PolicyDecision, context: ComplianceContext): string {
+  const actionLabels: Record<ComplianceAction, string> = {
+    'asset:create': 'Asset creation',
+    'asset:verify': 'Asset verification',
+    'asset:activate': 'Asset activation',
+    'token:mint': 'Token minting',
+    'token:transfer': 'Token transfer',
+    'token:burn': 'Token burning',
+    'party:register': 'Party registration',
+  };
+
+  const actionLabel = actionLabels[decision.action] || decision.action;
+  const resultLabel = decision.result === 'ALLOW' ? 'allowed' : decision.result === 'DENY' ? 'denied' : 'conditional';
+
+  if (context.recipientId) {
+    return `PDR: ${actionLabel} ${resultLabel} - ${context.actorId} → ${context.recipientId}`;
+  }
+
+  return `PDR: ${actionLabel} ${resultLabel} for ${context.actorId}`;
+}
+
+/**
+ * Verify a PDR's integrity
+ */
+export function verifyPDR(
+  pdr: PolicyDecisionRecord,
+  options?: {
+    expectedPolicyHash?: string;
+    previousPdr?: PolicyDecisionRecord;
+    verifyDONProof?: boolean;
+  }
+): PDRVerificationResult {
+  const issues: string[] = [];
+  let signatureValid = false;
+  let contentHashValid = true;
+  let donProofValid = true;
+  let policyProofsValid = true;
+  let chainValid = true;
+
+  // Verify signature
+  try {
+    signatureValid = verifyPDRSignature(pdr);
+    if (!signatureValid) {
+      issues.push('Invalid PDR signature');
+    }
+  } catch (error) {
+    issues.push(`PDR signature verification failed: ${error}`);
+  }
+
+  // Verify content hash
+  const { contentHash: _ch, signature: _sig, ...pdrForHash } = pdr;
+  const expectedHash = hashPDRContent(pdrForHash);
+  contentHashValid = pdr.contentHash === expectedHash;
+  if (!contentHashValid) {
+    issues.push('Content hash mismatch');
+  }
+
+  // Verify policy hash if provided
+  if (options?.expectedPolicyHash && pdr.policyHash !== options.expectedPolicyHash) {
+    issues.push(`Policy hash mismatch: expected ${options.expectedPolicyHash}`);
+  }
+
+  // Verify DON proof if present and requested
+  if (pdr.donProof && options?.verifyDONProof !== false) {
+    if (pdr.donProof.signatures.length < pdr.donProof.threshold) {
+      donProofValid = false;
+      issues.push(`Insufficient DON signatures: ${pdr.donProof.signatures.length}/${pdr.donProof.threshold}`);
+    }
+    // Additional DON signature verification would go here in production
+  }
+
+  // Verify policy module proofs
+  for (const result of pdr.policyModuleResults) {
+    if (!result.proof || result.proof.length === 0) {
+      policyProofsValid = false;
+      issues.push(`Missing proof from module ${result.moduleName}`);
+    }
+  }
+
+  // Verify chain linkage
+  if (options?.previousPdr) {
+    const expectedPrevHash = options.previousPdr.contentHash;
+    if (pdr.previousPdrHash !== expectedPrevHash) {
+      chainValid = false;
+      issues.push('PDR chain linkage invalid');
+    }
+  }
+
+  // Check CCID compliance
+  const ccidCompliant = pdr.ccidCompliant &&
+    pdr.donProof !== null &&
+    pdr.ccidSchema !== undefined;
+
+  return {
+    valid: signatureValid && contentHashValid && donProofValid && policyProofsValid && chainValid,
+    signatureValid,
+    contentHashValid,
+    donProofValid,
+    policyProofsValid,
+    chainValid,
+    ccidCompliant,
+    issues,
+  };
+}
+
+/**
+ * Convert a DecisionReceipt to a PDR
+ */
+export function receiptToPDR(
+  receipt: DecisionReceipt,
+  decision: PolicyDecision,
+  context: ComplianceContext,
+  options?: {
+    chainId?: number;
+    policyModuleResults?: PolicyModuleResult[];
+  }
+): PolicyDecisionRecord {
+  // Build DON proof from ACE data if available
+  let donProof: DONConsensusProof | null = null;
+  if (receipt.aceConsensusInfo && receipt.aceAttestationId) {
+    donProof = {
+      requestId: receipt.aceAttestationId,
+      nodeCount: receipt.aceConsensusInfo.nodeCount,
+      threshold: receipt.aceConsensusInfo.threshold,
+      signatures: [], // Would be populated from on-chain data
+      blockNumber: 0, // Would be populated from on-chain data
+      blockHash: '',
+    };
+  }
+
+  return createPDR(decision, context, {
+    donProof: donProof || undefined,
+    aceAttestationId: receipt.aceAttestationId,
+    policyModuleResults: options?.policyModuleResults,
+    chainId: options?.chainId,
+    previousPdrHash: receipt.previousReceiptHash,
+  });
+}
+
+/**
+ * PDR Chain Manager - Manages a chain of PDRs
+ */
+export class PDRChain {
+  private pdrs: PolicyDecisionRecord[] = [];
+  private pdrsBySubject: Map<string, string[]> = new Map();
+
+  /**
+   * Add a PDR to the chain
+   */
+  append(pdr: PolicyDecisionRecord): void {
+    this.pdrs.push(pdr);
+
+    const subjectPdrs = this.pdrsBySubject.get(pdr.subjectId) || [];
+    subjectPdrs.push(pdr.pdrId);
+    this.pdrsBySubject.set(pdr.subjectId, subjectPdrs);
+  }
+
+  /**
+   * Get the last PDR
+   */
+  getLastPDR(): PolicyDecisionRecord | undefined {
+    return this.pdrs[this.pdrs.length - 1];
+  }
+
+  /**
+   * Get the last PDR content hash for chain linkage
+   */
+  getLastPDRHash(): string | undefined {
+    const lastPdr = this.getLastPDR();
+    return lastPdr?.contentHash;
+  }
+
+  /**
+   * Get a PDR by ID
+   */
+  getById(pdrId: string): PolicyDecisionRecord | undefined {
+    return this.pdrs.find((p) => p.pdrId === pdrId);
+  }
+
+  /**
+   * Get PDRs for a subject
+   */
+  getBySubject(subjectId: string): PolicyDecisionRecord[] {
+    const ids = this.pdrsBySubject.get(subjectId) || [];
+    return ids
+      .map((id) => this.pdrs.find((p) => p.pdrId === id))
+      .filter((p): p is PolicyDecisionRecord => p !== undefined);
+  }
+
+  /**
+   * Get all PDRs
+   */
+  getAll(): PolicyDecisionRecord[] {
+    return [...this.pdrs];
+  }
+
+  /**
+   * Get only CCID-compliant PDRs
+   */
+  getCCIDCompliant(): PolicyDecisionRecord[] {
+    return this.pdrs.filter((p) => p.ccidCompliant);
+  }
+
+  /**
+   * Verify the entire PDR chain
+   */
+  verifyChain(): { valid: boolean; issues: string[] } {
+    const issues: string[] = [];
+
+    for (let i = 0; i < this.pdrs.length; i++) {
+      const pdr = this.pdrs[i];
+      const previousPdr = i > 0 ? this.pdrs[i - 1] : undefined;
+
+      const verification = verifyPDR(pdr, { previousPdr });
+
+      if (!verification.valid) {
+        issues.push(`PDR ${i + 1} (${pdr.pdrId}): ${verification.issues.join(', ')}`);
+      }
+    }
+
+    return {
+      valid: issues.length === 0,
+      issues,
+    };
+  }
+
+  /**
+   * Export PDRs for external verification
+   */
+  export(): PolicyDecisionRecord[] {
+    return this.pdrs.map((pdr) => ({ ...pdr }));
+  }
+
+  /**
+   * Import PDRs and verify chain integrity
+   */
+  import(pdrs: PolicyDecisionRecord[]): { success: boolean; issues: string[] } {
+    const issues: string[] = [];
+
+    for (let i = 0; i < pdrs.length; i++) {
+      const pdr = pdrs[i];
+      const previousPdr = i > 0 ? pdrs[i - 1] : undefined;
+
+      const verification = verifyPDR(pdr, { previousPdr });
+      if (!verification.valid) {
+        issues.push(`PDR ${i + 1}: ${verification.issues.join(', ')}`);
+      }
+    }
+
+    if (issues.length === 0) {
+      for (const pdr of pdrs) {
+        this.append(pdr);
+      }
+    }
+
+    return {
+      success: issues.length === 0,
+      issues,
+    };
+  }
+
+  /**
+   * Clear all PDRs
+   */
+  clear(): void {
+    this.pdrs = [];
+    this.pdrsBySubject.clear();
+  }
+}
+
+/**
+ * Singleton PDR chain for SDK-wide usage
+ */
+export const pdrChain = new PDRChain();

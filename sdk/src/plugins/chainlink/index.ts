@@ -138,4 +138,19 @@ export {
   createSepoliaAcePlugin,
   createMumbaiAcePlugin,
   type AcePluginConfig,
+  type PolicyResult,
+  type FullComplianceResult,
 } from './ChainlinkAcePlugin.js';
+
+// Proof of Reserve (PoR) Plugin
+export {
+  ProofOfReservePlugin,
+  createProofOfReservePlugin,
+  createBaseSepoliaPoRPlugin,
+  createSepoliaPoRPlugin,
+  ReserveStatus,
+  type ProofOfReservePluginConfig,
+  type ReserveCheckResult,
+  type ReserveConfig,
+  type MintAllowance,
+} from './ProofOfReservePlugin.js';

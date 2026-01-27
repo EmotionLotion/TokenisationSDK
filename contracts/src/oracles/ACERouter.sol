@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
+import {IPolicyModule, IPolicyModuleRegistry} from "../compliance/policy/IPolicyModule.sol";
 
 /**
  * @title IACERouter
@@ -74,6 +75,15 @@ interface IACERouter {
     event DONNodeRegistered(address indexed node, uint256 weight);
     event DONNodeRemoved(address indexed node);
     event CacheTTLUpdated(AttestationType attestationType, uint256 ttl);
+    event PolicyEvaluated(
+        address indexed from,
+        address indexed to,
+        address indexed token,
+        uint256 amount,
+        bool allowed,
+        uint256 moduleCount
+    );
+    event PolicyRegistryUpdated(address indexed registry);
 
     // Core functions
     function requestAttestation(AttestationRequest calldata request) external returns (bytes32 requestId);
@@ -173,6 +183,12 @@ contract ACERouter is IACERouter, FunctionsClient, ConfirmedOwner {
 
     /// @notice All attestation IDs for enumeration
     bytes32[] public attestationIds;
+
+    /// @notice Policy Module Registry for on-chain policy enforcement
+    IPolicyModuleRegistry public policyRegistry;
+
+    /// @notice Whether to use policy modules for authorization (DON enforcement)
+    bool public usePolicyModules = false;
 
     // ============================================================================
     // Structs
@@ -303,6 +319,24 @@ contract ACERouter is IACERouter, FunctionsClient, ConfirmedOwner {
      */
     function setRequestTimeout(uint256 timeout) external onlyOwner {
         requestTimeout = timeout;
+    }
+
+    /**
+     * @notice Set policy module registry
+     * @param registry The registry address
+     */
+    function setPolicyRegistry(address registry) external onlyOwner {
+        if (registry == address(0)) revert ZeroAddress();
+        policyRegistry = IPolicyModuleRegistry(registry);
+        emit PolicyRegistryUpdated(registry);
+    }
+
+    /**
+     * @notice Enable/disable policy module usage for DON enforcement
+     * @param enabled Whether to use policy modules
+     */
+    function setUsePolicyModules(bool enabled) external onlyOwner {
+        usePolicyModules = enabled;
     }
 
     // ============================================================================
@@ -452,6 +486,124 @@ contract ACERouter is IACERouter, FunctionsClient, ConfirmedOwner {
         });
 
         return this.requestAttestation(request);
+    }
+
+    /**
+     * @notice Evaluate transfer against on-chain policy modules
+     * @dev This provides authoritative on-chain policy enforcement by the DON
+     * @param from Sender address
+     * @param to Recipient address
+     * @param amount Transfer amount
+     * @param token Token address
+     * @return allowed Whether the transfer is allowed
+     * @return results Array of policy evaluation results
+     */
+    function evaluatePolicies(
+        address from,
+        address to,
+        uint256 amount,
+        address token
+    ) external view returns (bool allowed, IPolicyModule.PolicyResult[] memory results) {
+        if (address(policyRegistry) == address(0) || !usePolicyModules) {
+            // Policy modules not configured, allow by default
+            results = new IPolicyModule.PolicyResult[](0);
+            return (true, results);
+        }
+
+        IPolicyModule.PolicyContext memory context = IPolicyModule.PolicyContext({
+            from: from,
+            to: to,
+            amount: amount,
+            token: token,
+            assetId: bytes32(0),
+            additionalData: ""
+        });
+
+        return policyRegistry.evaluateAll(context);
+    }
+
+    /**
+     * @notice Check transfer compliance using both attestations and policy modules
+     * @dev Combines DON attestation validation with on-chain policy evaluation
+     * @param from Sender address
+     * @param to Recipient address
+     * @param amount Transfer amount
+     * @param token Token address
+     * @return compliant Whether the transfer is compliant
+     * @return attestationId The attestation ID used for compliance
+     * @return policyResults Array of policy results
+     */
+    function checkFullCompliance(
+        address from,
+        address to,
+        uint256 amount,
+        address token
+    ) external view returns (
+        bool compliant,
+        bytes32 attestationId,
+        IPolicyModule.PolicyResult[] memory policyResults
+    ) {
+        // Step 1: Check attestations for both parties
+        bytes32 fromAttestation = latestAttestation[from][AttestationType.TRANSFER_COMPLIANCE];
+        bytes32 toAttestation = latestAttestation[to][AttestationType.TRANSFER_COMPLIANCE];
+
+        bool attestationsValid = _isAttestationValidInternal(fromAttestation) &&
+                                 _isAttestationValidInternal(toAttestation);
+
+        // Step 2: Evaluate policy modules if configured
+        bool policiesPass = true;
+        if (address(policyRegistry) != address(0) && usePolicyModules) {
+            IPolicyModule.PolicyContext memory context = IPolicyModule.PolicyContext({
+                from: from,
+                to: to,
+                amount: amount,
+                token: token,
+                assetId: bytes32(0),
+                additionalData: ""
+            });
+
+            (policiesPass, policyResults) = policyRegistry.evaluateAll(context);
+        } else {
+            policyResults = new IPolicyModule.PolicyResult[](0);
+        }
+
+        // Transfer is compliant only if both attestations are valid and policies pass
+        compliant = attestationsValid && policiesPass;
+        attestationId = fromAttestation;
+    }
+
+    /**
+     * @notice Get policy evaluation with early termination
+     * @dev Useful for gas optimization when only the first failure matters
+     * @param from Sender address
+     * @param to Recipient address
+     * @param amount Transfer amount
+     * @param token Token address
+     * @return allowed Whether transfer is allowed
+     * @return failedModule Address of first failing module (or zero)
+     * @return reason Failure reason if any
+     */
+    function evaluatePoliciesEarly(
+        address from,
+        address to,
+        uint256 amount,
+        address token
+    ) external view returns (bool allowed, address failedModule, string memory reason) {
+        if (address(policyRegistry) == address(0) || !usePolicyModules) {
+            return (true, address(0), "");
+        }
+
+        IPolicyModule.PolicyContext memory context = IPolicyModule.PolicyContext({
+            from: from,
+            to: to,
+            amount: amount,
+            token: token,
+            assetId: bytes32(0),
+            additionalData: ""
+        });
+
+        // Use the registry's early termination evaluation
+        return IPolicyModuleRegistry(address(policyRegistry)).evaluateWithEarlyTermination(context);
     }
 
     /**
