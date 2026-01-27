@@ -118,6 +118,36 @@ export interface AirlineTicketMetadata {
   };
   /** Transfer history */
   transferHistory: TicketTransferRecord[];
+
+  // ========== NEW: Airline Policy Flags (Requirement A) ==========
+  /** Airline policy flags governing ticket behavior */
+  policyFlags: AirlinePolicyFlags;
+  /** Custody model for this ticket */
+  custodyModel: CustodyModel;
+  /** Whether ticket is currently frozen */
+  frozen: boolean;
+  /** Freeze details if frozen */
+  freezeInfo?: {
+    frozenAt: string;
+    reason: string;
+    expiresAt?: string;
+  };
+  /** Whether ticket has been revoked */
+  revoked: boolean;
+  /** Revocation details if revoked */
+  revocationInfo?: {
+    revokedAt: string;
+    reason: RevocationReason;
+    refundIssued: boolean;
+  };
+  /** KYC verification status */
+  kycStatus: {
+    verified: boolean;
+    verifiedAt?: string;
+    expiresAt?: string;
+    sanctionsCleared: boolean;
+    sanctionsClearedAt?: string;
+  };
 }
 
 export interface TicketTransferRecord {
@@ -146,6 +176,10 @@ export interface TransferRequest {
     name: string;
     identity?: AirlineTicketMetadata['passengerIdentity'];
   };
+  /** Reason for transfer (Requirement B) */
+  reason: TransferReason;
+  /** Supporting documentation for reason */
+  supportingDocumentation?: string;
   requestedAt: string;
   status: TransferApprovalStatus;
   approvedAt?: string;
@@ -153,6 +187,10 @@ export interface TransferRequest {
   rejectionReason?: string;
   nameChangeFee: string;
   expiresAt: string;
+  /** Whether re-KYC was required and completed */
+  reKycRequired: boolean;
+  reKycCompleted: boolean;
+  reKycCompletedAt?: string;
 }
 
 // ============================================================================
@@ -300,6 +338,243 @@ export interface VerificationLog {
 }
 
 // ============================================================================
+// AIRLINE POLICY FLAGS (Requirement A)
+// ============================================================================
+
+export interface AirlinePolicyFlags {
+  /** Whether ticket can be transferred at all */
+  transferable: boolean;
+  /** Whether ticket is refundable */
+  refundable: boolean;
+  /** Whether ticket can be upgraded */
+  upgradeable: boolean;
+  /** Whether standby is allowed */
+  standbyAllowed: boolean;
+  /** Whether seat selection is locked */
+  seatLocked: boolean;
+  /** Whether ticket can be used for same-day changes */
+  sameDayChangeAllowed: boolean;
+  /** Minimum hours before departure for changes */
+  changeDeadlineHours: number;
+  /** Whether re-KYC is required for transfer */
+  reKycRequiredForTransfer: boolean;
+  /** Jurisdiction-specific rules */
+  jurisdictionRules?: {
+    /** EU261 passenger rights applicable */
+    eu261Applicable: boolean;
+    /** US DOT rules applicable */
+    usDotApplicable: boolean;
+    /** UAE GCAA rules applicable */
+    uaeGcaaApplicable: boolean;
+  };
+  /** Custom airline-specific flags */
+  customFlags?: Record<string, boolean | string | number>;
+}
+
+// ============================================================================
+// TRANSFER REASON (Requirement B)
+// ============================================================================
+
+export enum TransferReason {
+  RESALE = 'RESALE',           // Secondary market sale
+  GIFT = 'GIFT',               // Gift to another person
+  ILLNESS = 'ILLNESS',         // Medical inability to travel
+  DEATH_IN_FAMILY = 'DEATH_IN_FAMILY',
+  WORK_CONFLICT = 'WORK_CONFLICT',
+  VISA_DENIED = 'VISA_DENIED',
+  CORPORATE_REASSIGNMENT = 'CORPORATE_REASSIGNMENT',
+  NAME_CORRECTION = 'NAME_CORRECTION',  // Typo fix
+  OTHER = 'OTHER',
+}
+
+// ============================================================================
+// REVOCATION & OVERRIDE (Requirement F)
+// ============================================================================
+
+export enum RevocationReason {
+  FRAUD_DETECTED = 'FRAUD_DETECTED',
+  PAYMENT_CHARGEBACK = 'PAYMENT_CHARGEBACK',
+  REGULATORY_ORDER = 'REGULATORY_ORDER',
+  SANCTIONS_MATCH = 'SANCTIONS_MATCH',
+  AIRLINE_DISCRETION = 'AIRLINE_DISCRETION',
+  SYSTEM_ERROR = 'SYSTEM_ERROR',
+  DUPLICATE_BOOKING = 'DUPLICATE_BOOKING',
+  SECURITY_THREAT = 'SECURITY_THREAT',
+}
+
+export interface RevocationRecord {
+  id: string;
+  ticketId: string;
+  revokedAt: string;
+  revokedBy: string;
+  reason: RevocationReason;
+  description?: string;
+  /** Whether passenger was notified */
+  passengerNotified: boolean;
+  /** Whether refund was issued */
+  refundIssued: boolean;
+  refundAmount?: string;
+  /** Can be appealed */
+  appealable: boolean;
+  appealDeadline?: string;
+}
+
+export interface OverrideRecord {
+  id: string;
+  ticketId: string;
+  overrideType: 'REASSIGN' | 'STATUS_CHANGE' | 'POLICY_OVERRIDE' | 'FREEZE' | 'UNFREEZE';
+  previousState: Record<string, unknown>;
+  newState: Record<string, unknown>;
+  overriddenAt: string;
+  overriddenBy: string;
+  authorizedBy: string;  // Senior approval
+  reason: string;
+  /** Regulatory reference if applicable */
+  regulatoryReference?: string;
+}
+
+export interface FreezeRecord {
+  id: string;
+  ticketId: string;
+  frozenAt: string;
+  frozenBy: string;
+  reason: 'REGULATORY' | 'FRAUD_INVESTIGATION' | 'DISPUTE' | 'SANCTIONS' | 'SECURITY';
+  description?: string;
+  unfrozenAt?: string;
+  unfrozenBy?: string;
+  /** Auto-expire the freeze */
+  expiresAt?: string;
+}
+
+// ============================================================================
+// CUSTODY & RECOVERY (Requirement E)
+// ============================================================================
+
+export enum CustodyModel {
+  AIRLINE_CUSTODY = 'AIRLINE_CUSTODY',     // Airline controls wallet
+  PASSENGER_CUSTODY = 'PASSENGER_CUSTODY', // User wallet
+  HYBRID_ESCROW = 'HYBRID_ESCROW',         // Airline escrow + user rights
+}
+
+export interface RecoveryRequest {
+  id: string;
+  ticketId: string;
+  requestedAt: string;
+  requestedBy: string;
+  reason: 'LOST_DEVICE' | 'STOLEN_DEVICE' | 'FORGOTTEN_PASSWORD' | 'ACCOUNT_COMPROMISE' | 'DEATH_OF_HOLDER';
+  /** Identity verification method used */
+  verificationMethod: 'IN_PERSON' | 'VIDEO_CALL' | 'DOCUMENT_UPLOAD' | 'AIRLINE_COUNTER';
+  /** Verification completed */
+  verified: boolean;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  /** New wallet/account for recovery */
+  recoveryDestination?: string;
+  status: 'PENDING' | 'VERIFIED' | 'COMPLETED' | 'REJECTED';
+  completedAt?: string;
+  rejectionReason?: string;
+}
+
+// ============================================================================
+// AIRLINE SYSTEM INTEGRATION (Requirement D)
+// ============================================================================
+
+export enum AirlineEventType {
+  // Ticket lifecycle
+  TICKET_ISSUED = 'TICKET_ISSUED',
+  TICKET_CONFIRMED = 'TICKET_CONFIRMED',
+  TICKET_CANCELLED = 'TICKET_CANCELLED',
+  TICKET_REFUNDED = 'TICKET_REFUNDED',
+  TICKET_TRANSFERRED = 'TICKET_TRANSFERRED',
+  TICKET_REVOKED = 'TICKET_REVOKED',
+
+  // Check-in & boarding
+  CHECK_IN_STARTED = 'CHECK_IN_STARTED',
+  CHECK_IN_COMPLETED = 'CHECK_IN_COMPLETED',
+  BOARDING_PASS_ISSUED = 'BOARDING_PASS_ISSUED',
+  BOARDING_COMPLETED = 'BOARDING_COMPLETED',
+
+  // Flight changes
+  SEAT_CHANGED = 'SEAT_CHANGED',
+  CLASS_UPGRADED = 'CLASS_UPGRADED',
+  CLASS_DOWNGRADED = 'CLASS_DOWNGRADED',
+  FLIGHT_REBOOKED = 'FLIGHT_REBOOKED',
+
+  // Disruptions
+  FLIGHT_DELAYED = 'FLIGHT_DELAYED',
+  FLIGHT_CANCELLED = 'FLIGHT_CANCELLED',
+  FLIGHT_DIVERTED = 'FLIGHT_DIVERTED',
+
+  // Compliance
+  KYC_REQUIRED = 'KYC_REQUIRED',
+  KYC_VERIFIED = 'KYC_VERIFIED',
+  SANCTIONS_ALERT = 'SANCTIONS_ALERT',
+  REGULATORY_HOLD = 'REGULATORY_HOLD',
+
+  // Recovery
+  RECOVERY_REQUESTED = 'RECOVERY_REQUESTED',
+  RECOVERY_COMPLETED = 'RECOVERY_COMPLETED',
+}
+
+export interface AirlineEvent {
+  id: string;
+  type: AirlineEventType;
+  ticketId: string;
+  occurredAt: string;
+  data: Record<string, unknown>;
+  /** For external system correlation */
+  externalReference?: string;
+  /** PSS record locator */
+  pnr?: string;
+}
+
+export interface AirlineWebhookConfig {
+  /** Unique endpoint ID */
+  endpointId: string;
+  /** Webhook URL */
+  url: string;
+  /** Events to subscribe to */
+  events: AirlineEventType[];
+  /** Signing secret */
+  secret: string;
+  /** Whether endpoint is active */
+  active: boolean;
+  /** Retry policy */
+  retryPolicy: {
+    maxRetries: number;
+    backoffMs: number;
+  };
+}
+
+/**
+ * Interface for Passenger Service System (PSS) integration
+ */
+export interface IPSSAdapter {
+  /** Sync ticket to PSS */
+  syncTicket(ticketId: string, metadata: AirlineTicketMetadata): Promise<{ pnr: string; success: boolean }>;
+  /** Get PNR from PSS */
+  getPNR(pnr: string): Promise<{ found: boolean; data?: Record<string, unknown> }>;
+  /** Update passenger in PSS */
+  updatePassenger(pnr: string, passenger: { name: string; identity?: AirlineTicketMetadata['passengerIdentity'] }): Promise<boolean>;
+  /** Cancel booking in PSS */
+  cancelBooking(pnr: string, reason: string): Promise<boolean>;
+}
+
+/**
+ * Interface for Departure Control System (DCS) integration
+ */
+export interface IDCSAdapter {
+  /** Check-in passenger */
+  checkIn(pnr: string, segmentIndex: number): Promise<{ boardingPass?: string; success: boolean }>;
+  /** Board passenger */
+  board(pnr: string, segmentIndex: number, gateAgent: string): Promise<boolean>;
+  /** Get boarding status */
+  getBoardingStatus(pnr: string, segmentIndex: number): Promise<'NOT_CHECKED_IN' | 'CHECKED_IN' | 'BOARDED' | 'NO_SHOW'>;
+  /** Mark no-show */
+  markNoShow(pnr: string, segmentIndex: number): Promise<boolean>;
+}
+
+// ============================================================================
 // IN-MEMORY DISTRIBUTED LOCK (TC-9)
 // ============================================================================
 
@@ -407,8 +682,26 @@ export class AirlineTicketEngine {
   private verificationLogs: Map<string, VerificationLog[]> = new Map();
   private ticketsByFlight: Map<string, Set<string>> = new Map(); // flightNumber -> ticketIds
 
-  constructor(distributedLock?: IDistributedLock) {
-    this.distributedLock = distributedLock ?? new InMemoryDistributedLock();
+  // New: Revocation, Override, Freeze, Recovery (Requirement E, F)
+  private revocationRecords: Map<string, RevocationRecord> = new Map();
+  private overrideRecords: Map<string, OverrideRecord[]> = new Map();
+  private freezeRecords: Map<string, FreezeRecord[]> = new Map();
+  private recoveryRequests: Map<string, RecoveryRequest[]> = new Map();
+  private events: AirlineEvent[] = [];
+  private webhookConfigs: Map<string, AirlineWebhookConfig> = new Map();
+
+  // External system adapters (Requirement D)
+  private pssAdapter?: IPSSAdapter;
+  private dcsAdapter?: IDCSAdapter;
+
+  constructor(config?: {
+    distributedLock?: IDistributedLock;
+    pssAdapter?: IPSSAdapter;
+    dcsAdapter?: IDCSAdapter;
+  }) {
+    this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
+    this.pssAdapter = config?.pssAdapter;
+    this.dcsAdapter = config?.dcsAdapter;
   }
 
   /**
@@ -501,7 +794,7 @@ export class AirlineTicketEngine {
   }
 
   /**
-   * Issue a ticket
+   * Issue a ticket with full airline policy support
    */
   issue(params: {
     airlineCode: string;
@@ -513,6 +806,10 @@ export class AirlineTicketEngine {
     fare: AirlineTicketMetadata['fare'];
     transferRules: AirlineTicketMetadata['transferRules'];
     cancellationRules: AirlineTicketMetadata['cancellationRules'];
+    /** Airline policy flags (Requirement A) */
+    policyFlags?: Partial<AirlinePolicyFlags>;
+    /** Custody model (Requirement E) */
+    custodyModel?: CustodyModel;
   }): { success: boolean; ticket?: RightModel; error?: string } {
     // Check airline authorization
     if (!this.authorizedAirlines.has(params.airlineCode)) {
@@ -522,6 +819,18 @@ export class AirlineTicketEngine {
     const now = new Date().toISOString();
     const firstDeparture = params.segments[0]?.departure.dateTime;
     const lastArrival = params.segments[params.segments.length - 1]?.arrival.dateTime;
+
+    // Default policy flags derived from transfer/cancellation rules
+    const defaultPolicyFlags: AirlinePolicyFlags = {
+      transferable: params.transferRules.maxTransfers > 0,
+      refundable: params.cancellationRules.refundable,
+      upgradeable: true,
+      standbyAllowed: false,
+      seatLocked: false,
+      sameDayChangeAllowed: true,
+      changeDeadlineHours: params.transferRules.transferDeadlineHours,
+      reKycRequiredForTransfer: params.transferRules.requiresIssuerApproval,
+    };
 
     const metadata: AirlineTicketMetadata = {
       assetType: 'AIRLINE_TICKET',
@@ -539,6 +848,16 @@ export class AirlineTicketEngine {
         name: params.airlineCode, // Would be looked up in real implementation
       },
       transferHistory: [],
+      // New policy fields (Requirement A, E, F)
+      policyFlags: { ...defaultPolicyFlags, ...params.policyFlags },
+      custodyModel: params.custodyModel ?? CustodyModel.AIRLINE_CUSTODY,
+      frozen: false,
+      revoked: false,
+      kycStatus: {
+        verified: !!params.passengerIdentity,
+        verifiedAt: params.passengerIdentity ? now : undefined,
+        sanctionsCleared: false, // Must be explicitly cleared
+      },
     };
 
     const ticket: RightModel = {
@@ -588,6 +907,25 @@ export class AirlineTicketEngine {
       currentHash: this.hashMetadata(metadata),
       changes: {},
     }]);
+
+    // Emit event (Requirement D)
+    this.emitEvent(AirlineEventType.TICKET_ISSUED, ticket.id, {
+      eTicketNumber: params.eTicketNumber,
+      bookingReference: params.bookingReference,
+      passengerName: params.passengerName,
+      segments: params.segments.map(s => ({
+        flightNumber: s.flightNumber,
+        departure: s.departure,
+        arrival: s.arrival,
+      })),
+    }, params.bookingReference);
+
+    // Sync to PSS if adapter available
+    if (this.pssAdapter) {
+      this.pssAdapter.syncTicket(ticket.id, metadata).catch(() => {
+        // Log but don't fail - PSS sync is async
+      });
+    }
 
     return { success: true, ticket };
   }
@@ -817,7 +1155,8 @@ export class AirlineTicketEngine {
   }
 
   /**
-   * Request ticket transfer (name change)
+   * Request ticket transfer (name change) with policy-driven validation
+   * Implements Requirement B: Policy-Driven Transfer Engine
    */
   requestTransfer(params: {
     ticketId: string;
@@ -826,6 +1165,10 @@ export class AirlineTicketEngine {
       name: string;
       identity?: AirlineTicketMetadata['passengerIdentity'];
     };
+    /** Reason for transfer (required per Requirement B) */
+    reason: TransferReason;
+    /** Supporting documentation for reason */
+    supportingDocumentation?: string;
   }): { success: boolean; request?: TransferRequest; error?: string } {
     const ticket = this.tickets.get(params.ticketId);
     if (!ticket) {
@@ -833,6 +1176,21 @@ export class AirlineTicketEngine {
     }
 
     const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    // Check if ticket is revoked (Requirement F)
+    if (metadata.revoked) {
+      return { success: false, error: 'Cannot transfer revoked ticket' };
+    }
+
+    // Check if ticket is frozen (Requirement F)
+    if (metadata.frozen) {
+      return { success: false, error: 'Cannot transfer frozen ticket - contact airline support' };
+    }
+
+    // Check policy flags - transferability (Requirement A)
+    if (!metadata.policyFlags.transferable) {
+      return { success: false, error: 'Ticket is non-transferable per airline policy' };
+    }
 
     // Check current passenger
     if (metadata.passengerName !== params.fromPassenger) {
@@ -849,12 +1207,18 @@ export class AirlineTicketEngine {
       return { success: false, error: `Maximum transfers (${metadata.transferRules.maxTransfers}) reached` };
     }
 
-    // Check transfer deadline
+    // Check transfer deadline (use policy flags deadline if set)
     const firstDeparture = new Date(metadata.segments[0]?.departure.dateTime);
-    const deadline = new Date(firstDeparture.getTime() - metadata.transferRules.transferDeadlineHours * 60 * 60 * 1000);
+    const deadlineHours = metadata.policyFlags.changeDeadlineHours ?? metadata.transferRules.transferDeadlineHours;
+    const deadline = new Date(firstDeparture.getTime() - deadlineHours * 60 * 60 * 1000);
     if (new Date() > deadline) {
       return { success: false, error: 'Transfer deadline has passed' };
     }
+
+    // Determine if re-KYC is required (Requirement C)
+    const reKycRequired = metadata.policyFlags.reKycRequiredForTransfer ||
+      params.reason === TransferReason.RESALE ||
+      !params.toPassenger.identity;
 
     const now = new Date();
     const request: TransferRequest = {
@@ -862,22 +1226,50 @@ export class AirlineTicketEngine {
       ticketId: params.ticketId,
       fromPassenger: params.fromPassenger,
       toPassenger: params.toPassenger,
+      reason: params.reason,
+      supportingDocumentation: params.supportingDocumentation,
       requestedAt: now.toISOString(),
       status: TransferApprovalStatus.PENDING,
       nameChangeFee: metadata.transferRules.nameChangeFee,
       expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(), // 24 hour expiry
+      reKycRequired,
+      reKycCompleted: !reKycRequired, // If not required, mark as complete
+      reKycCompletedAt: !reKycRequired ? now.toISOString() : undefined,
     };
+
+    // Emit KYC_REQUIRED event if re-KYC is needed (Requirement C)
+    if (request.reKycRequired && !request.reKycCompleted) {
+      this.emitEvent(AirlineEventType.KYC_REQUIRED, params.ticketId, {
+        transferRequestId: request.id,
+        reason: params.reason,
+        newPassenger: params.toPassenger.name,
+      }, metadata.bookingReference);
+    }
 
     // Check for auto-approval with verified identity
     if (metadata.transferRules.autoApproveWithIdentity && params.toPassenger.identity) {
       const identityHash = this.hashIdentity(params.toPassenger.identity);
       if (this.verifiedIdentities.get(identityHash)) {
+        // If re-KYC required, mark it as completed via verified identity
+        if (request.reKycRequired) {
+          request.reKycCompleted = true;
+          request.reKycCompletedAt = now.toISOString();
+        }
+
         request.status = TransferApprovalStatus.AUTO_APPROVED;
         request.approvedAt = now.toISOString();
         request.approvedBy = 'SYSTEM_AUTO_APPROVAL';
 
         // Execute transfer immediately
         this.executeTransfer(request);
+
+        // Emit transfer event
+        this.emitEvent(AirlineEventType.TICKET_TRANSFERRED, params.ticketId, {
+          from: params.fromPassenger,
+          to: params.toPassenger.name,
+          reason: params.reason,
+          autoApproved: true,
+        }, metadata.bookingReference);
 
         return { success: true, request };
       }
@@ -890,11 +1282,60 @@ export class AirlineTicketEngine {
     }
 
     // If no approval required and no identity verification, auto-approve
-    request.status = TransferApprovalStatus.AUTO_APPROVED;
-    request.approvedAt = now.toISOString();
-    this.executeTransfer(request);
+    // But only if re-KYC is not required or is completed
+    if (!request.reKycRequired || request.reKycCompleted) {
+      request.status = TransferApprovalStatus.AUTO_APPROVED;
+      request.approvedAt = now.toISOString();
+      this.executeTransfer(request);
 
+      // Emit transfer event
+      this.emitEvent(AirlineEventType.TICKET_TRANSFERRED, params.ticketId, {
+        from: params.fromPassenger,
+        to: params.toPassenger.name,
+        reason: params.reason,
+        autoApproved: true,
+      }, metadata.bookingReference);
+
+      return { success: true, request };
+    }
+
+    // Re-KYC required but not completed - hold for KYC verification
+    this.transferRequests.set(request.id, request);
     return { success: true, request };
+  }
+
+  /**
+   * Complete re-KYC for a transfer request
+   */
+  completeTransferKyc(params: {
+    requestId: string;
+    verifiedBy: string;
+    verificationReference?: string;
+  }): { success: boolean; error?: string } {
+    const request = this.transferRequests.get(params.requestId);
+    if (!request) {
+      return { success: false, error: 'Transfer request not found' };
+    }
+
+    if (!request.reKycRequired) {
+      return { success: false, error: 'Re-KYC not required for this transfer' };
+    }
+
+    if (request.reKycCompleted) {
+      return { success: false, error: 'Re-KYC already completed' };
+    }
+
+    request.reKycCompleted = true;
+    request.reKycCompletedAt = new Date().toISOString();
+
+    // Emit KYC verified event
+    this.emitEvent(AirlineEventType.KYC_VERIFIED, request.ticketId, {
+      transferRequestId: request.id,
+      verifiedBy: params.verifiedBy,
+      verificationReference: params.verificationReference,
+    });
+
+    return { success: true };
   }
 
   /**
@@ -920,11 +1361,27 @@ export class AirlineTicketEngine {
       return { success: false, error: 'Request has expired' };
     }
 
+    // Check re-KYC completion (Requirement C)
+    if (request.reKycRequired && !request.reKycCompleted) {
+      return { success: false, error: 'Re-KYC verification required before approval - call completeTransferKyc first' };
+    }
+
+    const ticket = this.tickets.get(request.ticketId);
+    const metadata = ticket?.metadata as unknown as AirlineTicketMetadata | undefined;
+
     request.status = TransferApprovalStatus.APPROVED;
     request.approvedAt = new Date().toISOString();
     request.approvedBy = params.approvedBy;
 
     this.executeTransfer(request);
+
+    // Emit transfer event
+    this.emitEvent(AirlineEventType.TICKET_TRANSFERRED, request.ticketId, {
+      from: request.fromPassenger,
+      to: request.toPassenger.name,
+      reason: request.reason,
+      approvedBy: params.approvedBy,
+    }, metadata?.bookingReference);
 
     return { success: true };
   }
@@ -1488,6 +1945,524 @@ export class AirlineTicketEngine {
    */
   getVerificationLogs(ticketId: string): VerificationLog[] {
     return this.verificationLogs.get(ticketId) ?? [];
+  }
+
+  // ============================================================================
+  // REVOCATION & OVERRIDE POWERS (Requirement F)
+  // ============================================================================
+
+  /**
+   * Revoke a ticket (forced invalidation by airline)
+   */
+  revokeTicket(params: {
+    ticketId: string;
+    actor: ActorContext;
+    reason: RevocationReason;
+    description?: string;
+    issueRefund: boolean;
+  }): { success: boolean; record?: RevocationRecord; error?: string } {
+    this.enforcePermission(params.actor, 'BULK_UPDATE', params.ticketId); // Admin-only
+
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    if (metadata.revoked) {
+      return { success: false, error: 'Ticket already revoked' };
+    }
+
+    // Calculate refund if applicable
+    let refundAmount: string | undefined;
+    if (params.issueRefund && metadata.cancellationRules.refundable) {
+      const fareTotal = parseFloat(metadata.fare.total);
+      // Full refund for fraud/regulatory - no fee
+      if ([RevocationReason.REGULATORY_ORDER, RevocationReason.SYSTEM_ERROR].includes(params.reason)) {
+        refundAmount = fareTotal.toFixed(2);
+      } else {
+        const fee = parseFloat(metadata.cancellationRules.cancellationFee);
+        refundAmount = Math.max(0, fareTotal - fee).toFixed(2);
+      }
+    }
+
+    // Update ticket
+    const previousMetadata = { ...metadata };
+    metadata.revoked = true;
+    metadata.revocationInfo = {
+      revokedAt: new Date().toISOString(),
+      reason: params.reason,
+      refundIssued: !!refundAmount,
+    };
+    metadata.status = TicketStatus.CANCELLED;
+    ticket.state = LifecycleState.REDEEMED;
+    ticket.updatedAt = new Date().toISOString();
+
+    // Record revocation
+    const record: RevocationRecord = {
+      id: uuidv4(),
+      ticketId: params.ticketId,
+      revokedAt: new Date().toISOString(),
+      revokedBy: params.actor.actorId,
+      reason: params.reason,
+      description: params.description,
+      passengerNotified: false, // Would be handled by notification system
+      refundIssued: !!refundAmount,
+      refundAmount,
+      appealable: ![RevocationReason.FRAUD_DETECTED, RevocationReason.SANCTIONS_MATCH].includes(params.reason),
+      appealDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+    };
+
+    this.revocationRecords.set(record.id, record);
+    this.recordMetadataChange(params.ticketId, previousMetadata, metadata, params.actor.actorId, `Revoked: ${params.reason}`);
+    this.emitEvent(AirlineEventType.TICKET_REVOKED, params.ticketId, { reason: params.reason, refundAmount });
+
+    return { success: true, record };
+  }
+
+  /**
+   * Force reassign a ticket to another passenger (override power)
+   */
+  forceReassign(params: {
+    ticketId: string;
+    actor: ActorContext;
+    authorizedBy: string;  // Senior approval required
+    newPassenger: {
+      name: string;
+      identity?: AirlineTicketMetadata['passengerIdentity'];
+    };
+    reason: string;
+    regulatoryReference?: string;
+  }): { success: boolean; override?: OverrideRecord; error?: string } {
+    this.enforcePermission(params.actor, 'BULK_UPDATE', params.ticketId);
+
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    if (metadata.revoked) {
+      return { success: false, error: 'Cannot reassign revoked ticket' };
+    }
+
+    if (metadata.frozen) {
+      return { success: false, error: 'Cannot reassign frozen ticket - unfreeze first' };
+    }
+
+    const previousState = {
+      passengerName: metadata.passengerName,
+      passengerIdentity: metadata.passengerIdentity,
+    };
+
+    // Update passenger
+    metadata.passengerName = params.newPassenger.name;
+    metadata.passengerIdentity = params.newPassenger.identity;
+    metadata.kycStatus = {
+      verified: !!params.newPassenger.identity,
+      verifiedAt: params.newPassenger.identity ? new Date().toISOString() : undefined,
+      sanctionsCleared: false, // Must be re-verified
+    };
+    ticket.name = `${metadata.issuingAirline.code} ${metadata.segments[0]?.flightNumber} - ${params.newPassenger.name}`;
+    ticket.updatedAt = new Date().toISOString();
+
+    // Record override
+    const override: OverrideRecord = {
+      id: uuidv4(),
+      ticketId: params.ticketId,
+      overrideType: 'REASSIGN',
+      previousState,
+      newState: {
+        passengerName: params.newPassenger.name,
+        passengerIdentity: params.newPassenger.identity,
+      },
+      overriddenAt: new Date().toISOString(),
+      overriddenBy: params.actor.actorId,
+      authorizedBy: params.authorizedBy,
+      reason: params.reason,
+      regulatoryReference: params.regulatoryReference,
+    };
+
+    const overrides = this.overrideRecords.get(params.ticketId) ?? [];
+    overrides.push(override);
+    this.overrideRecords.set(params.ticketId, overrides);
+
+    this.recordMetadataChange(
+      params.ticketId,
+      { ...metadata, passengerName: previousState.passengerName } as AirlineTicketMetadata,
+      metadata,
+      params.actor.actorId,
+      `Force reassign: ${params.reason}`
+    );
+
+    return { success: true, override };
+  }
+
+  /**
+   * Freeze a ticket (regulatory or security hold)
+   */
+  freezeTicket(params: {
+    ticketId: string;
+    actor: ActorContext;
+    reason: FreezeRecord['reason'];
+    description?: string;
+    expiresAt?: string;
+  }): { success: boolean; freeze?: FreezeRecord; error?: string } {
+    this.enforcePermission(params.actor, 'BULK_UPDATE', params.ticketId);
+
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    if (metadata.frozen) {
+      return { success: false, error: 'Ticket already frozen' };
+    }
+
+    if (metadata.revoked) {
+      return { success: false, error: 'Cannot freeze revoked ticket' };
+    }
+
+    // Freeze the ticket
+    metadata.frozen = true;
+    metadata.freezeInfo = {
+      frozenAt: new Date().toISOString(),
+      reason: params.description ?? params.reason,
+      expiresAt: params.expiresAt,
+    };
+    ticket.updatedAt = new Date().toISOString();
+
+    // Record freeze
+    const freeze: FreezeRecord = {
+      id: uuidv4(),
+      ticketId: params.ticketId,
+      frozenAt: new Date().toISOString(),
+      frozenBy: params.actor.actorId,
+      reason: params.reason,
+      description: params.description,
+      expiresAt: params.expiresAt,
+    };
+
+    const freezes = this.freezeRecords.get(params.ticketId) ?? [];
+    freezes.push(freeze);
+    this.freezeRecords.set(params.ticketId, freezes);
+
+    this.emitEvent(AirlineEventType.REGULATORY_HOLD, params.ticketId, { reason: params.reason });
+
+    return { success: true, freeze };
+  }
+
+  /**
+   * Unfreeze a ticket
+   */
+  unfreezeTicket(params: {
+    ticketId: string;
+    actor: ActorContext;
+  }): { success: boolean; error?: string } {
+    this.enforcePermission(params.actor, 'BULK_UPDATE', params.ticketId);
+
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    if (!metadata.frozen) {
+      return { success: false, error: 'Ticket is not frozen' };
+    }
+
+    // Unfreeze
+    metadata.frozen = false;
+    metadata.freezeInfo = undefined;
+    ticket.updatedAt = new Date().toISOString();
+
+    // Update freeze record
+    const freezes = this.freezeRecords.get(params.ticketId) ?? [];
+    const lastFreeze = freezes[freezes.length - 1];
+    if (lastFreeze) {
+      lastFreeze.unfrozenAt = new Date().toISOString();
+      lastFreeze.unfrozenBy = params.actor.actorId;
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Emergency invalidation (immediate, no refund)
+   */
+  emergencyInvalidate(params: {
+    ticketId: string;
+    actor: ActorContext;
+    authorizedBy: string;
+    reason: string;
+  }): { success: boolean; error?: string } {
+    return this.revokeTicket({
+      ticketId: params.ticketId,
+      actor: params.actor,
+      reason: RevocationReason.SECURITY_THREAT,
+      description: `EMERGENCY: ${params.reason} (Authorized by: ${params.authorizedBy})`,
+      issueRefund: false,
+    });
+  }
+
+  // ============================================================================
+  // CUSTODY & RECOVERY (Requirement E)
+  // ============================================================================
+
+  /**
+   * Initiate recovery for lost/stolen device
+   */
+  initiateRecovery(params: {
+    ticketId: string;
+    requestedBy: string;
+    reason: RecoveryRequest['reason'];
+    verificationMethod: RecoveryRequest['verificationMethod'];
+    recoveryDestination?: string;
+  }): { success: boolean; request?: RecoveryRequest; error?: string } {
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+
+    if (metadata.revoked) {
+      return { success: false, error: 'Cannot recover revoked ticket' };
+    }
+
+    // Check if there's already a pending recovery
+    const existingRequests = this.recoveryRequests.get(params.ticketId) ?? [];
+    const pendingRequest = existingRequests.find(r => r.status === 'PENDING' || r.status === 'VERIFIED');
+    if (pendingRequest) {
+      return { success: false, error: 'Recovery already in progress' };
+    }
+
+    const request: RecoveryRequest = {
+      id: uuidv4(),
+      ticketId: params.ticketId,
+      requestedAt: new Date().toISOString(),
+      requestedBy: params.requestedBy,
+      reason: params.reason,
+      verificationMethod: params.verificationMethod,
+      verified: false,
+      recoveryDestination: params.recoveryDestination,
+      status: 'PENDING',
+    };
+
+    existingRequests.push(request);
+    this.recoveryRequests.set(params.ticketId, existingRequests);
+
+    this.emitEvent(AirlineEventType.RECOVERY_REQUESTED, params.ticketId, {
+      reason: params.reason,
+      method: params.verificationMethod,
+    });
+
+    return { success: true, request };
+  }
+
+  /**
+   * Verify recovery request (called after identity verification)
+   */
+  verifyRecovery(params: {
+    requestId: string;
+    actor: ActorContext;
+  }): { success: boolean; error?: string } {
+    // Find the request
+    for (const [ticketId, requests] of Array.from(this.recoveryRequests.entries())) {
+      const request = requests.find(r => r.id === params.requestId);
+      if (request) {
+        this.enforcePermission(params.actor, 'BULK_UPDATE', ticketId);
+
+        if (request.status !== 'PENDING') {
+          return { success: false, error: `Cannot verify request in status ${request.status}` };
+        }
+
+        request.verified = true;
+        request.verifiedAt = new Date().toISOString();
+        request.verifiedBy = params.actor.actorId;
+        request.status = 'VERIFIED';
+
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: 'Recovery request not found' };
+  }
+
+  /**
+   * Complete recovery (transfer ticket to new wallet/account)
+   */
+  completeRecovery(params: {
+    requestId: string;
+    actor: ActorContext;
+    newDestination?: string;
+  }): { success: boolean; error?: string } {
+    for (const [ticketId, requests] of Array.from(this.recoveryRequests.entries())) {
+      const request = requests.find(r => r.id === params.requestId);
+      if (request) {
+        this.enforcePermission(params.actor, 'BULK_UPDATE', ticketId);
+
+        if (request.status !== 'VERIFIED') {
+          return { success: false, error: 'Recovery must be verified first' };
+        }
+
+        request.status = 'COMPLETED';
+        request.completedAt = new Date().toISOString();
+        if (params.newDestination) {
+          request.recoveryDestination = params.newDestination;
+        }
+
+        this.emitEvent(AirlineEventType.RECOVERY_COMPLETED, ticketId, {
+          requestId: params.requestId,
+          destination: request.recoveryDestination,
+        });
+
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: 'Recovery request not found' };
+  }
+
+  /**
+   * Get recovery requests for a ticket
+   */
+  getRecoveryRequests(ticketId: string): RecoveryRequest[] {
+    return this.recoveryRequests.get(ticketId) ?? [];
+  }
+
+  /**
+   * Get override history for a ticket
+   */
+  getOverrideHistory(ticketId: string): OverrideRecord[] {
+    return this.overrideRecords.get(ticketId) ?? [];
+  }
+
+  /**
+   * Get freeze history for a ticket
+   */
+  getFreezeHistory(ticketId: string): FreezeRecord[] {
+    return this.freezeRecords.get(ticketId) ?? [];
+  }
+
+  // ============================================================================
+  // SANCTIONS & KYC (Requirement C)
+  // ============================================================================
+
+  /**
+   * Clear sanctions check for a ticket
+   */
+  clearSanctionsCheck(params: {
+    ticketId: string;
+    actor: ActorContext;
+    clearanceReference?: string;
+  }): { success: boolean; error?: string } {
+    this.enforcePermission(params.actor, 'BULK_UPDATE', params.ticketId);
+
+    const ticket = this.tickets.get(params.ticketId);
+    if (!ticket) {
+      return { success: false, error: 'Ticket not found' };
+    }
+
+    const metadata = ticket.metadata as unknown as AirlineTicketMetadata;
+    metadata.kycStatus.sanctionsCleared = true;
+    metadata.kycStatus.sanctionsClearedAt = new Date().toISOString();
+    ticket.updatedAt = new Date().toISOString();
+
+    return { success: true };
+  }
+
+  /**
+   * Flag sanctions alert (blocks ticket operations)
+   */
+  flagSanctionsAlert(params: {
+    ticketId: string;
+    actor: ActorContext;
+    matchDetails: string;
+  }): { success: boolean; error?: string } {
+    this.enforcePermission(params.actor, 'BULK_UPDATE', params.ticketId);
+
+    // Freeze the ticket
+    this.freezeTicket({
+      ticketId: params.ticketId,
+      actor: params.actor,
+      reason: 'SANCTIONS',
+      description: params.matchDetails,
+    });
+
+    this.emitEvent(AirlineEventType.SANCTIONS_ALERT, params.ticketId, { matchDetails: params.matchDetails });
+
+    return { success: true };
+  }
+
+  // ============================================================================
+  // WEBHOOK & EVENT MANAGEMENT (Requirement D)
+  // ============================================================================
+
+  /**
+   * Register a webhook endpoint
+   */
+  registerWebhook(config: AirlineWebhookConfig): void {
+    this.webhookConfigs.set(config.endpointId, config);
+  }
+
+  /**
+   * Unregister a webhook endpoint
+   */
+  unregisterWebhook(endpointId: string): boolean {
+    return this.webhookConfigs.delete(endpointId);
+  }
+
+  /**
+   * Get all events for a ticket
+   */
+  getTicketEvents(ticketId: string): AirlineEvent[] {
+    return this.events.filter(e => e.ticketId === ticketId);
+  }
+
+  /**
+   * Get events by type
+   */
+  getEventsByType(type: AirlineEventType, since?: string): AirlineEvent[] {
+    return this.events.filter(e => {
+      if (e.type !== type) return false;
+      if (since && e.occurredAt < since) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Emit an event and trigger webhooks
+   */
+  private emitEvent(
+    type: AirlineEventType,
+    ticketId: string,
+    data: Record<string, unknown>,
+    pnr?: string
+  ): void {
+    const event: AirlineEvent = {
+      id: uuidv4(),
+      type,
+      ticketId,
+      occurredAt: new Date().toISOString(),
+      data,
+      pnr,
+    };
+
+    this.events.push(event);
+
+    // Trigger webhooks (in real implementation, this would be async/queued)
+    for (const config of Array.from(this.webhookConfigs.values())) {
+      if (config.active && config.events.includes(type)) {
+        // Would send webhook in real implementation
+        // this.sendWebhook(config, event);
+      }
+    }
   }
 
   // ============================================================================
