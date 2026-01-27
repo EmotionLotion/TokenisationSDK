@@ -42,7 +42,9 @@ if (DB_MODE === 'sqlite') {
 // Re-export all schema tables for convenience
 export const {
   // IAM
-  orgs, users, roles, userRoles, apiKeys, oauthClients,
+  orgs, users, roles, userRoles, apiKeys, oauthClients, oauthTokens,
+  // Billing & Usage
+  billingPlans, orgBilling, usageRecords, usageQuotas,
   // Projects & Documents
   projects, documents,
   // Parties
@@ -79,6 +81,8 @@ export const {
   distributions, distributionPayments, corporateActions, corporateActionEntitlements,
   // Vesting
   vestingSchedules, vestingMilestones, vestingReleases,
+  // State Transitions & Compliance
+  stateTransitions, complianceReceipts, complianceAuditLog, policyRulesets,
 } = schema;
 
 // Export schema for query builder access
@@ -86,6 +90,20 @@ export { schema };
 
 // Export database instance and pool
 export { db, pool };
+
+/**
+ * Execute raw SQL query (works for both SQLite and PostgreSQL)
+ */
+export async function rawQuery<T = any>(query: string, params: any[] = []): Promise<T[]> {
+  if (DB_MODE === 'sqlite' && sqliteDb) {
+    const stmt = sqliteDb.prepare(query);
+    return stmt.all(...params) as T[];
+  } else if (pool) {
+    const result = await pool.query(query, params);
+    return result.rows as T[];
+  }
+  throw new Error('No database connection available');
+}
 
 /**
  * Test database connection

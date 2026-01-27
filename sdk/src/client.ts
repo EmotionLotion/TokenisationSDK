@@ -23,6 +23,34 @@ export type { SDKConfig, AssetManager, PartyManager, EvidenceManager, TokenManag
 // API Client (Stripe-like interface)
 export { ApiClient, createApiClient, TokenizationError } from './ApiClient.js';
 
+// OAuth Token Manager
+export {
+  OAuthTokenManager,
+  createOAuthTokenManager,
+  createOAuthFetch,
+} from './auth/OAuthTokenManager.js';
+export type {
+  OAuthTokenManagerConfig,
+  TokenResponse as OAuthTokenResponse,
+  OAuthTokenManagerEvents,
+} from './auth/OAuthTokenManager.js';
+
+// Pagination Utilities
+export {
+  paginate,
+  collectAll,
+  collectBatches,
+  Paginator,
+  createCursorFetcher,
+  createPageFetcher,
+  sleep,
+} from './utils/pagination.js';
+export type {
+  PaginatedResponse as PaginationResponse,
+  PageInfo,
+  PaginationOptions,
+} from './utils/pagination.js';
+
 // Error Classes
 export {
   // Base class

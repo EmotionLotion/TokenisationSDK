@@ -42,6 +42,7 @@ import { sdkCompatRouter } from './routes/sdk-compat.routes.js';
 import { issuanceRouter } from './routes/issuance.routes.js';
 import { exportRouter } from './routes/export.routes.js';
 import { transitionRouter } from './routes/transition.routes.js';
+import { oauthRouter } from './routes/oauth.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
@@ -56,6 +57,7 @@ import {
 import { requestLogger, errorLogger, logger } from './middleware/logger.js';
 import { tenantContextMiddleware, optionalTenantContextMiddleware } from './middleware/context.js';
 import { traceMiddleware } from './middleware/traceMiddleware.js';
+import { usageMiddleware } from './middleware/usage.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -125,6 +127,7 @@ app.use('/api/v1', sdkCompatRouter);
 // ============================================================================
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/chains', chainRouter); // Public chain config
+app.use('/oauth', oauthRouter); // OAuth2 Authorization Server
 
 // ============================================================================
 // Protected API routes with tenant context enforcement

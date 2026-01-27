@@ -1,0 +1,583 @@
+{
+  "info": {
+    "_postman_id": "tokenisation-sdk-collection",
+    "name": "Tokenisation SDK API",
+    "description": "Complete API collection for the Tokenisation SDK platform.\n\nThis collection includes all endpoints for:\n- Asset management\n- Token operations\n- Investor management\n- Transfers & compliance\n- Webhooks\n- OAuth2 authentication",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "sk_test_your_key_here",
+      "type": "string"
+    },
+    {
+      "key": "org_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "asset_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "investor_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "OAuth2",
+      "item": [
+        {
+          "name": "Get Token (Client Credentials)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{oauth_client_id}}"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{oauth_client_secret}}"
+                },
+                {
+                  "key": "scope",
+                  "value": "read:assets write:transfers"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/oauth/token",
+              "host": ["{{base_url}}"],
+              "path": ["oauth", "token"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "refresh_token"
+                },
+                {
+                  "key": "refresh_token",
+                  "value": "{{refresh_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/oauth/token",
+              "host": ["{{base_url}}"],
+              "path": ["oauth", "token"]
+            }
+          }
+        },
+        {
+          "name": "Server Metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/oauth/.well-known/oauth-authorization-server",
+              "host": ["{{base_url}}"],
+              "path": ["oauth", ".well-known", "oauth-authorization-server"]
+            }
+          }
+        },
+        {
+          "name": "List Scopes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/oauth/scopes",
+              "host": ["{{base_url}}"],
+              "path": ["oauth", "scopes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects"]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Project\",\n  \"description\": \"Project description\",\n  \"jurisdiction\": \"DUBAI\",\n  \"assetType\": \"REAL_ESTATE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects"]
+            }
+          }
+        },
+        {
+          "name": "Get Project",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assets",
+      "item": [
+        {
+          "name": "List Assets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assets?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "assets"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Asset",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Property Token\",\n  \"description\": \"Tokenized real estate property\",\n  \"projectId\": \"{{project_id}}\",\n  \"rightType\": \"OWNERSHIP\",\n  \"jurisdiction\": {\n    \"country\": \"AE\",\n    \"subdivision\": \"DUBAI\"\n  },\n  \"attributes\": {\n    \"propertyType\": \"residential\",\n    \"location\": {\n      \"address\": \"123 Marina Walk\",\n      \"city\": \"Dubai\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/assets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "assets"]
+            }
+          }
+        },
+        {
+          "name": "Get Asset",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assets/{{asset_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "assets", "{{asset_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tokens",
+      "item": [
+        {
+          "name": "List Tokens",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tokens"]
+            }
+          }
+        },
+        {
+          "name": "Create Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Property Token\",\n  \"symbol\": \"PROP\",\n  \"projectId\": \"{{project_id}}\",\n  \"assetId\": \"{{asset_id}}\",\n  \"standard\": \"ERC3643\",\n  \"chainId\": 137,\n  \"decimals\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tokens"]
+            }
+          }
+        },
+        {
+          "name": "Get Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tokens/{{token_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tokens", "{{token_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Deploy Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tokens/{{token_id}}/deploy",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tokens", "{{token_id}}", "deploy"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Investors",
+      "item": [
+        {
+          "name": "List Investors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/investors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "investors"]
+            }
+          }
+        },
+        {
+          "name": "Create Investor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"individual\",\n  \"email\": \"investor@example.com\",\n  \"jurisdiction\": \"US\",\n  \"classification\": \"accredited\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/investors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "investors"]
+            }
+          }
+        },
+        {
+          "name": "Get Investor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/investors/{{investor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "investors", "{{investor_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Add Investor Wallet",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"0x1234567890abcdef1234567890abcdef12345678\",\n  \"chainId\": 137,\n  \"label\": \"Primary Wallet\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/investors/{{investor_id}}/wallets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "investors", "{{investor_id}}", "wallets"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfers",
+      "item": [
+        {
+          "name": "List Transfers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transfers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "Create Transfer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenId\": \"{{token_id}}\",\n  \"fromWallet\": \"0x1111111111111111111111111111111111111111\",\n  \"toWallet\": \"0x2222222222222222222222222222222222222222\",\n  \"amount\": \"100\",\n  \"idempotencyKey\": \"transfer-123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transfers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "Get Transfer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transfers/{{transfer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transfers", "{{transfer_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Compliance",
+      "item": [
+        {
+          "name": "Evaluate Transfer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenId\": \"{{token_id}}\",\n  \"fromWallet\": \"0x1111111111111111111111111111111111111111\",\n  \"toWallet\": \"0x2222222222222222222222222222222222222222\",\n  \"amount\": \"100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/evaluate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "evaluate"]
+            }
+          }
+        },
+        {
+          "name": "List Policies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/policies",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "policies"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "List Endpoints",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks"]
+            }
+          }
+        },
+        {
+          "name": "Create Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://your-app.com/webhooks\",\n  \"events\": [\"transfer.*\", \"token.deployed\"],\n  \"description\": \"Production webhook\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ledger",
+      "item": [
+        {
+          "name": "Get Positions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ledger/positions?tokenId={{token_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ledger", "positions"],
+              "query": [
+                {
+                  "key": "tokenId",
+                  "value": "{{token_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ledger/events?tokenId={{token_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ledger", "events"],
+              "query": [
+                {
+                  "key": "tokenId",
+                  "value": "{{token_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

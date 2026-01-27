@@ -107,6 +107,84 @@ export const oauthClients = pgTable('oauth_clients', {
   orgIdx: index('idx_oauth_clients_org').on(table.orgId),
 }));
 
+// OAuth Tokens - For OAuth2 token storage (refresh tokens)
+export const oauthTokens = pgTable('oauth_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+  tokenType: varchar('token_type', { length: 20 }).notNull(), // 'access' | 'refresh'
+  tokenHash: varchar('token_hash', { length: 128 }).notNull(), // SHA-256 of token
+  scopes: text('scopes').notNull(), // space-separated
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index('idx_oauth_tokens_org').on(table.orgId),
+  clientIdx: index('idx_oauth_tokens_client').on(table.clientId),
+  tokenHashIdx: index('idx_oauth_tokens_hash').on(table.tokenHash),
+  expiresIdx: index('idx_oauth_tokens_expires').on(table.expiresAt),
+}));
+
+// ============================================================================
+// SECTION 1b: Billing & Usage Tracking
+// ============================================================================
+
+// Billing Plans - Available subscription plans
+export const billingPlans = pgTable('billing_plans', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  quotas: jsonb('quotas').notNull(), // { api_calls: 10000, webhooks: 1000, ... }
+  features: jsonb('features').notNull(), // { oauth: true, priority_support: false, ... }
+  priceMonthly: integer('price_monthly'), // cents, null for custom/enterprise
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Organization Billing - Billing status per organization
+export const orgBilling = pgTable('org_billing', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }).unique(),
+  planId: varchar('plan_id', { length: 64 }).notNull().references(() => billingPlans.id),
+  status: varchar('status', { length: 20 }).notNull().default('active'), // active, suspended, cancelled
+  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }).notNull(),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }).notNull(),
+  stripeCustomerId: varchar('stripe_customer_id', { length: 100 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index('idx_org_billing_org').on(table.orgId),
+  statusIdx: index('idx_org_billing_status').on(table.status),
+}));
+
+// Usage Records - Aggregated API usage per day/endpoint
+export const usageRecords = pgTable('usage_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  date: varchar('date', { length: 10 }).notNull(), // YYYY-MM-DD
+  endpoint: varchar('endpoint', { length: 255 }).notNull(),
+  method: varchar('method', { length: 10 }).notNull(),
+  callCount: integer('call_count').notNull().default(0),
+  errorCount: integer('error_count').notNull().default(0),
+  totalResponseTimeMs: integer('total_response_time_ms').notNull().default(0),
+  totalRequestBytes: bigint('total_request_bytes', { mode: 'bigint' }).notNull().default(BigInt(0)),
+  totalResponseBytes: bigint('total_response_bytes', { mode: 'bigint' }).notNull().default(BigInt(0)),
+}, (table) => ({
+  orgDateIdx: index('idx_usage_org_date').on(table.orgId, table.date),
+  uniqueRecord: uniqueIndex('idx_usage_unique').on(table.orgId, table.date, table.endpoint, table.method),
+}));
+
+// Usage Quotas - Per-resource quota tracking
+export const usageQuotas = pgTable('usage_quotas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  resource: varchar('resource', { length: 50 }).notNull(), // api_calls, webhooks, tokens, etc
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  limitValue: integer('limit_value').notNull(),
+  usedValue: integer('used_value').notNull().default(0),
+}, (table) => ({
+  orgResourceIdx: index('idx_quota_org_resource').on(table.orgId, table.resource),
+  uniqueQuota: uniqueIndex('idx_quota_unique').on(table.orgId, table.resource),
+}));
+
 // ============================================================================
 // SECTION 2: Projects & Assets
 // ============================================================================
@@ -1709,12 +1787,24 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Role = typeof roles.$inferSelect;
 export type NewRole = typeof roles.$inferInsert;
+export type OAuthToken = typeof oauthTokens.$inferSelect;
+export type NewOAuthToken = typeof oauthTokens.$inferInsert;
 export type UserRole = typeof userRoles.$inferSelect;
 export type NewUserRole = typeof userRoles.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type OAuthClient = typeof oauthClients.$inferSelect;
 export type NewOAuthClient = typeof oauthClients.$inferInsert;
+
+// Billing & Usage Types
+export type BillingPlan = typeof billingPlans.$inferSelect;
+export type NewBillingPlan = typeof billingPlans.$inferInsert;
+export type OrgBilling = typeof orgBilling.$inferSelect;
+export type NewOrgBilling = typeof orgBilling.$inferInsert;
+export type UsageRecord = typeof usageRecords.$inferSelect;
+export type NewUsageRecord = typeof usageRecords.$inferInsert;
+export type UsageQuota = typeof usageQuotas.$inferSelect;
+export type NewUsageQuota = typeof usageQuotas.$inferInsert;
 
 // Project & Document Types
 export type Project = typeof projects.$inferSelect;

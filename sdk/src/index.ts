@@ -24,6 +24,33 @@ export type { SDKConfig, AssetManager, PartyManager, EvidenceManager, TokenManag
 export { ApiClient, createApiClient, TokenizationError } from './ApiClient.js';
 export { HttpClient } from './utils/http.js';
 
+// OAuth Token Manager
+export {
+  OAuthTokenManager,
+  createOAuthTokenManager,
+  createOAuthFetch,
+} from './auth/OAuthTokenManager.js';
+export type {
+  OAuthTokenManagerConfig,
+  TokenResponse as OAuthTokenResponse,
+  OAuthTokenManagerEvents,
+} from './auth/OAuthTokenManager.js';
+
+// Pagination Utilities
+export {
+  paginate,
+  collectAll,
+  collectBatches,
+  Paginator,
+  createCursorFetcher,
+  createPageFetcher,
+} from './utils/pagination.js';
+export type {
+  PaginatedResponse as PaginationResponse,
+  PageInfo,
+  PaginationOptions,
+} from './utils/pagination.js';
+
 // API Types
 export type {
   TokenizationSDKConfig,

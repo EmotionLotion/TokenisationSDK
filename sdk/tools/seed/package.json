@@ -1,0 +1,24 @@
+{
+  "name": "@tokenisation-sdk/seed-tools",
+  "version": "0.1.0",
+  "description": "Sandbox seeding tools for TokenisationSDK",
+  "type": "module",
+  "main": "index.ts",
+  "bin": {
+    "seed": "./index.ts"
+  },
+  "scripts": {
+    "seed": "npx ts-node --esm index.ts",
+    "seed:all": "npx ts-node --esm index.ts --all",
+    "seed:airline": "npx ts-node --esm index.ts --airline",
+    "seed:realestate": "npx ts-node --esm index.ts --realestate",
+    "seed:dry": "npx ts-node --esm index.ts --all --dry-run"
+  },
+  "dependencies": {
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0"
+  }
+}
