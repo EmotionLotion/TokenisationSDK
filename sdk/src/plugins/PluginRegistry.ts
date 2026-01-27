@@ -15,6 +15,7 @@ import type {
   IStoragePlugin,
   IChainPlugin,
   ITokenAdapter,
+  IAcePlugin,
 } from '../core/interfaces.js';
 import { ValidationError, SDKError, ErrorCode } from '../errors/index.js';
 
@@ -53,6 +54,7 @@ export class PluginRegistry implements IPluginRegistry {
       'storage',
       'chain',
       'token',
+      'ace',
     ];
 
     for (const type of types) {
@@ -227,6 +229,9 @@ export class PluginRegistry implements IPluginRegistry {
       case 'token':
         this.validateTokenPlugin(plugin as ITokenAdapter);
         break;
+      case 'ace':
+        this.validateAcePlugin(plugin as IAcePlugin);
+        break;
     }
   }
 
@@ -312,6 +317,40 @@ export class PluginRegistry implements IPluginRegistry {
         constraints: { type: 'function', required: 'true' },
       });
     }
+  }
+
+  private validateAcePlugin(plugin: IAcePlugin): void {
+    if (typeof plugin.requestAttestation !== 'function') {
+      throw new ValidationError('ACE plugin must implement requestAttestation', {
+        field: 'requestAttestation',
+        constraints: { type: 'function', required: 'true' },
+      });
+    }
+    if (typeof plugin.getAttestation !== 'function') {
+      throw new ValidationError('ACE plugin must implement getAttestation', {
+        field: 'getAttestation',
+        constraints: { type: 'function', required: 'true' },
+      });
+    }
+    if (typeof plugin.checkTransferCompliance !== 'function') {
+      throw new ValidationError('ACE plugin must implement checkTransferCompliance', {
+        field: 'checkTransferCompliance',
+        constraints: { type: 'function', required: 'true' },
+      });
+    }
+    if (!plugin.routerAddress || typeof plugin.routerAddress !== 'string') {
+      throw new ValidationError('ACE plugin must have a valid routerAddress', {
+        field: 'routerAddress',
+        constraints: { required: 'true', type: 'string' },
+      });
+    }
+  }
+
+  /**
+   * Get ACE plugin
+   */
+  getAce(pluginId: string): IAcePlugin | undefined {
+    return this.get<IAcePlugin>('ace', pluginId);
   }
 }
 

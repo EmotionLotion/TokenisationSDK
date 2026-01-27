@@ -129,3 +129,13 @@ export {
   type OracleAggregatorConfig,
   type AggregatedResult,
 } from './OracleAggregator.js';
+
+// ACE (Automated Compliance Engine) Plugin
+export {
+  ChainlinkAcePlugin,
+  createAcePlugin,
+  createBaseSepoliaAcePlugin,
+  createSepoliaAcePlugin,
+  createMumbaiAcePlugin,
+  type AcePluginConfig,
+} from './ChainlinkAcePlugin.js';

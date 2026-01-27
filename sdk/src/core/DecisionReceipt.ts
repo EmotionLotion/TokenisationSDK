@@ -10,6 +10,10 @@ import { createHash, createSign, createVerify, generateKeyPairSync } from 'crypt
 import { v4 as uuidv4 } from 'uuid';
 import type { PolicyDecision, ComplianceAction, ComplianceContext } from './types.js';
 import { hashPolicy } from './PolicyHash.js';
+import type { ACEConsensusInfo } from './interfaces.js';
+
+// Re-export for consumers who import from DecisionReceipt
+export type { ACEConsensusInfo };
 
 // ============================================================================
 // TYPES
@@ -63,6 +67,14 @@ export interface DecisionReceipt {
   summary: string;
   /** Reasons for denial (if denied) */
   reasons: string[];
+
+  // ACE (Automated Compliance Engine) fields
+  /** ACE attestation ID if decision was made via Chainlink DON */
+  aceAttestationId?: string;
+  /** ACE consensus information for decentralized compliance verification */
+  aceConsensusInfo?: ACEConsensusInfo;
+  /** CCID schema ID for DeFi composability */
+  aceSchemaId?: string;
 }
 
 /**

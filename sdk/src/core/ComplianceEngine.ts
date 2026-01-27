@@ -29,6 +29,9 @@ import type {
   ICompliancePlugin,
   IEventStore,
   PartyComplianceStatus,
+  IAcePlugin,
+  ACEAttestation,
+  ACEAttestationType,
 } from './interfaces.js';
 import { hashPolicy, PolicyVersionManager, policyVersionManager } from './PolicyHash.js';
 import {
@@ -36,12 +39,29 @@ import {
   ReceiptChain,
   receiptChain,
   createReceipt,
+  type ACEConsensusInfo,
 } from './DecisionReceipt.js';
 import { PolicyEvaluator } from './PolicyEvaluator.js';
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
+
+/**
+ * ACE (Automated Compliance Engine) configuration
+ */
+export interface ACEConfig {
+  /** Enable ACE integration */
+  enabled: boolean;
+  /** Evaluate with ACE first before local plugins */
+  aceFirst: boolean;
+  /** Fallback to local compliance if ACE fails */
+  fallbackOnAceFailure: boolean;
+  /** ACE request timeout in milliseconds */
+  timeoutMs?: number;
+  /** Required attestation types for transfers */
+  requiredAttestations?: ACEAttestationType[];
+}
 
 /**
  * Configuration for the ComplianceEngine
@@ -59,6 +79,10 @@ export interface ComplianceEngineConfig {
   issuerId?: string;
   /** Enable strict mode (require all plugins) */
   strictMode?: boolean;
+  /** ACE (Automated Compliance Engine) plugin for decentralized compliance */
+  acePlugin?: IAcePlugin;
+  /** ACE configuration */
+  aceConfig?: ACEConfig;
 }
 
 /**
@@ -69,6 +93,8 @@ export interface ComplianceResult {
   decision: PolicyDecision;
   /** The decision receipt (signed proof) */
   receipt: DecisionReceipt;
+  /** ACE attestation if decision was made via Chainlink DON */
+  aceAttestation?: ACEAttestation;
 }
 
 // ============================================================================
@@ -88,6 +114,10 @@ export class ComplianceEngine {
   private issuerId: string;
   private strictMode: boolean;
 
+  // ACE (Automated Compliance Engine) integration
+  private acePlugin?: IAcePlugin;
+  private aceConfig: ACEConfig;
+
   // Default policy for when no custom policy is configured
   private defaultPolicy = {
     rules: [
@@ -105,6 +135,14 @@ export class ComplianceEngine {
     this.policyVersionManager = policyVersionManager;
     this.issuerId = config.issuerId || 'compliance-engine';
     this.strictMode = config.strictMode || false;
+
+    // ACE configuration
+    this.acePlugin = config.acePlugin;
+    this.aceConfig = config.aceConfig || {
+      enabled: false,
+      aceFirst: false,
+      fallbackOnAceFailure: true,
+    };
   }
 
   // ============================================================================
@@ -131,7 +169,104 @@ export class ComplianceEngine {
     const policyHash = hashPolicy(policy);
     const policyVersion = '1.0.0'; // Would come from policy version manager in production
 
-    // 3. Evaluate based on action type
+    // 3. Try ACE-first evaluation for transfers if enabled
+    let aceAttestation: ACEAttestation | undefined;
+    let aceConsensusInfo: ACEConsensusInfo | undefined;
+
+    if (this.aceConfig.enabled && this.acePlugin && action === 'token:transfer') {
+      if (this.aceConfig.aceFirst) {
+        const aceResult = await this.evaluateWithAce(context);
+        if (aceResult.success) {
+          aceAttestation = aceResult.attestation;
+          aceConsensusInfo = {
+            nodeCount: aceResult.attestation.nodeCount,
+            threshold: aceResult.attestation.threshold,
+            timestamp: aceResult.attestation.timestamp,
+          };
+
+          // If ACE passed, create decision based on attestation
+          if (aceResult.attestation.passed) {
+            const decision = this.buildDecision(action, [], []);
+            decision.policyVersion = policyVersion;
+            decision.policyHash = policyHash;
+
+            const receipt = createReceipt(decision, context, {
+              previousReceiptHash: this.receiptChain.getLastReceiptHash(),
+              issuedBy: this.issuerId,
+            });
+
+            // Enrich receipt with ACE info
+            receipt.aceAttestationId = aceResult.attestation.attestationId;
+            receipt.aceConsensusInfo = aceConsensusInfo;
+            receipt.aceSchemaId = aceResult.attestation.schemaId;
+
+            this.receiptChain.append(receipt);
+
+            if (this.eventStore) {
+              await this.emitDecisionEvent(decision, receipt, context);
+            }
+
+            return { decision, receipt, aceAttestation };
+          } else {
+            // ACE attestation failed - create DENY decision
+            const decision = this.buildDecision(action, [
+              {
+                code: 'ACE_ATTESTATION_FAILED',
+                message: 'ACE compliance attestation did not pass',
+                severity: 'CRITICAL',
+                rule: 'ace.attestation',
+              },
+            ], []);
+            decision.policyVersion = policyVersion;
+            decision.policyHash = policyHash;
+
+            const receipt = createReceipt(decision, context, {
+              previousReceiptHash: this.receiptChain.getLastReceiptHash(),
+              issuedBy: this.issuerId,
+            });
+
+            receipt.aceAttestationId = aceResult.attestation.attestationId;
+            receipt.aceConsensusInfo = aceConsensusInfo;
+
+            this.receiptChain.append(receipt);
+
+            if (this.eventStore) {
+              await this.emitDecisionEvent(decision, receipt, context);
+            }
+
+            return { decision, receipt, aceAttestation };
+          }
+        } else if (!this.aceConfig.fallbackOnAceFailure) {
+          // ACE failed and no fallback allowed
+          const decision = this.buildDecision(action, [
+            {
+              code: 'ACE_UNAVAILABLE',
+              message: `ACE evaluation failed: ${aceResult.error}`,
+              severity: 'CRITICAL',
+              rule: 'ace.availability',
+            },
+          ], []);
+          decision.policyVersion = policyVersion;
+          decision.policyHash = policyHash;
+
+          const receipt = createReceipt(decision, context, {
+            previousReceiptHash: this.receiptChain.getLastReceiptHash(),
+            issuedBy: this.issuerId,
+          });
+
+          this.receiptChain.append(receipt);
+
+          if (this.eventStore) {
+            await this.emitDecisionEvent(decision, receipt, context);
+          }
+
+          return { decision, receipt };
+        }
+        // Fallback to local evaluation below
+      }
+    }
+
+    // 4. Evaluate based on action type (local evaluation)
     let decision: PolicyDecision;
 
     switch (action) {
@@ -167,25 +302,66 @@ export class ComplianceEngine {
         ], []);
     }
 
-    // 4. Enrich decision with policy info
+    // 5. Enrich decision with policy info
     decision.policyVersion = policyVersion;
     decision.policyHash = policyHash;
 
-    // 5. Create receipt
+    // 6. Create receipt
     const receipt = createReceipt(decision, context, {
       previousReceiptHash: this.receiptChain.getLastReceiptHash(),
       issuedBy: this.issuerId,
     });
 
-    // 6. Store receipt in chain
+    // Add ACE info if we have it (from attempted ACE evaluation)
+    if (aceAttestation) {
+      receipt.aceAttestationId = aceAttestation.attestationId;
+      receipt.aceConsensusInfo = aceConsensusInfo;
+      receipt.aceSchemaId = aceAttestation.schemaId;
+    }
+
+    // 7. Store receipt in chain
     this.receiptChain.append(receipt);
 
-    // 7. Emit event to event store
+    // 8. Emit event to event store
     if (this.eventStore) {
       await this.emitDecisionEvent(decision, receipt, context);
     }
 
-    return { decision, receipt };
+    return { decision, receipt, aceAttestation };
+  }
+
+  /**
+   * Evaluate transfer compliance using ACE (Automated Compliance Engine)
+   *
+   * @param context - Compliance context for the transfer
+   * @returns ACE evaluation result
+   */
+  private async evaluateWithAce(
+    context: ComplianceContext
+  ): Promise<{ success: true; attestation: ACEAttestation } | { success: false; error: string }> {
+    if (!this.acePlugin) {
+      return { success: false, error: 'ACE plugin not configured' };
+    }
+
+    try {
+      const result = await this.acePlugin.checkTransferCompliance({
+        from: context.actorId,
+        to: context.recipientId || '',
+        assetId: context.assetId || context.asset?.id || '',
+        amount: context.amount || '0',
+      });
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return { success: true, attestation: result.data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown ACE error',
+      };
+    }
   }
 
   // ============================================================================
@@ -867,6 +1043,52 @@ export class ComplianceEngine {
    */
   setEventStore(eventStore: IEventStore): void {
     this.eventStore = eventStore;
+  }
+
+  /**
+   * Set the ACE plugin
+   */
+  setAcePlugin(plugin: IAcePlugin): void {
+    this.acePlugin = plugin;
+  }
+
+  /**
+   * Update ACE configuration
+   */
+  updateAceConfig(config: Partial<ACEConfig>): void {
+    this.aceConfig = {
+      ...this.aceConfig,
+      ...config,
+    };
+  }
+
+  /**
+   * Get current ACE configuration
+   */
+  getAceConfig(): ACEConfig {
+    return { ...this.aceConfig };
+  }
+
+  /**
+   * Check if ACE is enabled
+   */
+  isAceEnabled(): boolean {
+    return this.aceConfig.enabled && !!this.acePlugin;
+  }
+
+  /**
+   * Enable ACE-first evaluation
+   */
+  enableAceFirst(): void {
+    this.aceConfig.aceFirst = true;
+    this.aceConfig.enabled = true;
+  }
+
+  /**
+   * Disable ACE-first evaluation (use local compliance first)
+   */
+  disableAceFirst(): void {
+    this.aceConfig.aceFirst = false;
   }
 
   /**

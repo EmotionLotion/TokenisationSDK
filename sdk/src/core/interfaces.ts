@@ -484,7 +484,8 @@ export type PluginType =
   | 'oracle'
   | 'storage'
   | 'chain'
-  | 'token';
+  | 'token'
+  | 'ace';
 
 /**
  * Any plugin interface
@@ -495,7 +496,8 @@ export type AnyPlugin =
   | IOraclePlugin
   | IStoragePlugin
   | IChainPlugin
-  | ITokenAdapter;
+  | ITokenAdapter
+  | IAcePlugin;
 
 /**
  * IPluginRegistry - Central registry for all plugins
@@ -657,4 +659,193 @@ export interface IEventStore {
    * Get event count
    */
   count(): Promise<number>;
+}
+
+// ============================================================================
+// ACE (AUTOMATED COMPLIANCE ENGINE) INTERFACES
+// ============================================================================
+
+/**
+ * ACE Attestation types - matches on-chain enum
+ */
+export enum ACEAttestationType {
+  /** KYC/AML verification */
+  IDENTITY_VERIFICATION = 'IDENTITY_VERIFICATION',
+  /** Investor accreditation status */
+  ACCREDITATION = 'ACCREDITATION',
+  /** OFAC/sanctions check */
+  SANCTIONS_SCREENING = 'SANCTIONS_SCREENING',
+  /** Geographic eligibility */
+  JURISDICTION_CHECK = 'JURISDICTION_CHECK',
+  /** Per-transfer compliance check */
+  TRANSFER_COMPLIANCE = 'TRANSFER_COMPLIANCE',
+  /** Custom attestation type */
+  CUSTOM = 'CUSTOM',
+}
+
+/**
+ * ACE Attestation status
+ */
+export enum ACEAttestationStatus {
+  PENDING = 'PENDING',
+  VALID = 'VALID',
+  EXPIRED = 'EXPIRED',
+  REVOKED = 'REVOKED',
+  FAILED = 'FAILED',
+}
+
+/**
+ * ACE Attestation - Decentralized compliance attestation from Chainlink DON
+ * Provides CCID-compatible attestations for DeFi composability
+ */
+export interface ACEAttestation {
+  /** Unique attestation identifier */
+  attestationId: string;
+  /** Subject address the attestation is for */
+  subject: string;
+  /** Type of attestation */
+  type: ACEAttestationType;
+  /** Whether the compliance check passed */
+  passed: boolean;
+  /** ISO 8601 timestamp when attestation expires */
+  validUntil: string;
+  /** CCID-compatible schema ID for DeFi integration */
+  schemaId: string;
+  /** DON multi-sig signature */
+  signature: string;
+  /** ISO 8601 timestamp of attestation creation */
+  timestamp: string;
+  /** Number of DON nodes that confirmed */
+  nodeCount: number;
+  /** Required threshold for consensus */
+  threshold: number;
+  /** Current attestation status */
+  status: ACEAttestationStatus;
+}
+
+/**
+ * ACE Attestation Request
+ */
+export interface ACERequest {
+  /** Subject address for the attestation */
+  subject: string;
+  /** Type of attestation requested */
+  attestationType: ACEAttestationType;
+  /** Hash of transfer context (for transfer compliance) */
+  contextHash?: string;
+  /** Additional data for the request */
+  additionalData?: Record<string, unknown>;
+}
+
+/**
+ * ACE Consensus info for audit trail
+ */
+export interface ACEConsensusInfo {
+  /** Number of nodes that participated */
+  nodeCount: number;
+  /** Required threshold for consensus */
+  threshold: number;
+  /** ISO 8601 timestamp of consensus */
+  timestamp: string;
+}
+
+/**
+ * ACE Transfer compliance check parameters
+ */
+export interface ACETransferCheckParams {
+  /** Sender address */
+  from: string;
+  /** Recipient address */
+  to: string;
+  /** Asset ID */
+  assetId: string;
+  /** Transfer amount as string (BigNumber compatible) */
+  amount: string;
+  /** Optional: token contract address */
+  tokenAddress?: string;
+}
+
+/**
+ * IAcePlugin - Plugin interface for Chainlink ACE integration
+ * Provides decentralized compliance attestations via Chainlink DON
+ *
+ * Integration Points:
+ * - ACERouter.sol for on-chain attestation storage
+ * - ACEComplianceModule.sol for transfer compliance
+ * - CCID compatibility for DeFi protocol integration
+ */
+export interface IAcePlugin {
+  /** Plugin identifier */
+  readonly pluginId: string;
+
+  /** ACE Router contract address */
+  readonly routerAddress: string;
+
+  /**
+   * Request a new attestation from the ACE DON
+   * @param request The attestation request
+   * @returns Request ID for tracking
+   */
+  requestAttestation(request: ACERequest): Promise<Result<string, string>>;
+
+  /**
+   * Get an attestation by ID
+   * @param attestationId The attestation ID
+   * @returns The attestation data
+   */
+  getAttestation(attestationId: string): Promise<Result<ACEAttestation, string>>;
+
+  /**
+   * Check if an attestation is currently valid
+   * @param attestationId The attestation ID
+   * @returns Whether the attestation is valid
+   */
+  isAttestationValid(attestationId: string): Promise<boolean>;
+
+  /**
+   * Get a cached attestation for a subject and type
+   * @param subject The subject address
+   * @param type The attestation type
+   * @returns The cached attestation or null if none exists
+   */
+  getCachedAttestation(
+    subject: string,
+    type: ACEAttestationType
+  ): Promise<ACEAttestation | null>;
+
+  /**
+   * Check transfer compliance with fresh or cached attestation
+   * @param params Transfer parameters
+   * @returns The attestation result for the transfer
+   */
+  checkTransferCompliance(
+    params: ACETransferCheckParams
+  ): Promise<Result<ACEAttestation, string>>;
+
+  /**
+   * Check if subject has all required attestations for a transfer
+   * @param subject The subject address
+   * @param requiredTypes Array of required attestation types
+   * @returns Whether all attestations are valid
+   */
+  hasRequiredAttestations(
+    subject: string,
+    requiredTypes: ACEAttestationType[]
+  ): Promise<boolean>;
+
+  /**
+   * Subscribe to attestation events
+   * @param callback Callback for attestation events
+   * @returns Unsubscribe function
+   */
+  subscribeToAttestations(
+    callback: (attestation: ACEAttestation) => void
+  ): Promise<{ unsubscribe: () => void }>;
+
+  /**
+   * Get consensus info for an attestation
+   * @param attestationId The attestation ID
+   * @returns Consensus info
+   */
+  getConsensusInfo(attestationId: string): Promise<ACEConsensusInfo | null>;
 }
