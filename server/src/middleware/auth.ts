@@ -18,8 +18,21 @@ const MIN_SECRET_LENGTH = 32;
  * CRITICAL: Dev mode auth bypass
  * This should NEVER be enabled in production or staging environments.
  * Even in development, use with extreme caution.
+ *
+ * SECURITY: This is evaluated at module load time and cannot be changed at runtime.
+ * The check is intentionally redundant for defense-in-depth.
  */
-const DEV_MODE = !IS_PRODUCTION && !IS_STAGING && process.env.AUTH_DEV_MODE === 'true';
+const DEV_MODE = (() => {
+  // Double-check environment to prevent any possibility of bypass
+  if (IS_PRODUCTION || IS_STAGING) {
+    if (process.env.AUTH_DEV_MODE === 'true') {
+      logger.error('SECURITY ALERT: Attempted to enable AUTH_DEV_MODE in production/staging!');
+      // Force disable - never allow in production regardless of env var
+    }
+    return false;
+  }
+  return process.env.AUTH_DEV_MODE === 'true';
+})();
 
 /**
  * Allowed IP addresses for dev mode bypass (localhost only by default)
@@ -70,8 +83,22 @@ if (IS_PRODUCTION || IS_STAGING) {
   }
 }
 
-// Use provided secret or generate a dev-only secret (never in production)
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'INSECURE_DEV_SECRET_DO_NOT_USE_IN_PRODUCTION';
+// SECURITY: JWT secret must be provided - no fallback allowed
+// In development, generate a random secret if not provided (logged as warning)
+const EFFECTIVE_JWT_SECRET = (() => {
+  if (JWT_SECRET) {
+    return JWT_SECRET;
+  }
+  if (IS_PRODUCTION || IS_STAGING) {
+    // This should never happen due to earlier exit, but defense in depth
+    throw new Error('FATAL: JWT_SECRET is required in production/staging');
+  }
+  // Development only: generate ephemeral secret (will invalidate tokens on restart)
+  const crypto = require('crypto');
+  const devSecret = crypto.randomBytes(64).toString('hex');
+  logger.warn('SECURITY: Using auto-generated JWT secret. Tokens will be invalidated on server restart.');
+  return devSecret;
+})();
 
 // Track dev mode usage for audit purposes
 const devModeUsageLog: Array<{ timestamp: Date; ip: string; orgId?: string; partyId?: string }> = [];
@@ -92,6 +119,7 @@ export function getDevModeUsageLog(): typeof devModeUsageLog {
 export interface JwtPayload {
   partyId: string;
   address: string;
+  orgId?: string;
   iat: number;
   exp: number;
   iss?: string;

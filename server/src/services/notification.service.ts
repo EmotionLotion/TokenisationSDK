@@ -61,6 +61,7 @@ export interface NotificationResult {
 export interface EmailConfig {
   provider: 'sendgrid' | 'ses' | 'smtp';
   apiKey?: string;
+  apiUrl?: string; // Provider API URL (defaults based on provider)
   fromEmail: string;
   fromName: string;
   region?: string;
@@ -327,7 +328,8 @@ export class NotificationService {
     html: string,
     text: string
   ): Promise<NotificationResult> {
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    const apiUrl = this.config.email?.apiUrl || 'https://api.sendgrid.com/v3/mail/send';
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

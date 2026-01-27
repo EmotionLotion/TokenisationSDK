@@ -60,8 +60,18 @@ export interface AddWalletInput {
 // KYC Provider Adapters
 // ============================================================================
 
+/** Investor data needed for KYC session creation */
+interface InvestorKycData {
+  id: string;
+  email: string | null;
+  phone?: string | null;
+  type: string;
+  countryCode: string | null;
+  profile?: Record<string, unknown> | null;
+}
+
 interface KycProviderAdapter {
-  createSession(investor: any, level: string): Promise<{
+  createSession(investor: InvestorKycData, level: string): Promise<{
     externalSessionId: string;
     redirectUrl?: string;
     webhookUrl?: string;
@@ -83,7 +93,7 @@ class SumsubAdapter implements KycProviderAdapter {
   private appToken = process.env.SUMSUB_APP_TOKEN || '';
   private secretKey = process.env.SUMSUB_SECRET_KEY || '';
 
-  async createSession(investor: any, level: string): Promise<{ externalSessionId: string; redirectUrl?: string }> {
+  async createSession(_investor: InvestorKycData, _level: string): Promise<{ externalSessionId: string; redirectUrl?: string }> {
     // In production, this would make actual API calls to Sumsub
     const externalId = `sums_${randomBytes(16).toString('hex')}`;
 
@@ -102,7 +112,7 @@ class SumsubAdapter implements KycProviderAdapter {
     };
   }
 
-  async handleWebhook(payload: any, signature: string): Promise<{
+  async handleWebhook(payload: unknown, _signature: string): Promise<{
     externalSessionId: string;
     status: KycStatus;
     data?: Record<string, unknown>;
@@ -119,10 +129,13 @@ class SumsubAdapter implements KycProviderAdapter {
       'PENDING': 'in_review',
     };
 
+    const typedPayload = payload as Record<string, unknown>;
+    const reviewResult = typedPayload.reviewResult as Record<string, unknown> | undefined;
+
     return {
-      externalSessionId: payload.applicantId || payload.externalUserId,
-      status: statusMap[payload.reviewResult?.reviewAnswer] || 'pending',
-      data: payload,
+      externalSessionId: (typedPayload.applicantId || typedPayload.externalUserId) as string,
+      status: statusMap[(reviewResult?.reviewAnswer as string) || ''] || 'pending',
+      data: typedPayload,
     };
   }
 }
@@ -132,7 +145,7 @@ class OnfidoAdapter implements KycProviderAdapter {
   private apiUrl = process.env.ONFIDO_API_URL || 'https://api.onfido.com/v3';
   private apiToken = process.env.ONFIDO_API_TOKEN || '';
 
-  async createSession(investor: any, level: string): Promise<{ externalSessionId: string; redirectUrl?: string }> {
+  async createSession(_investor: InvestorKycData, _level: string): Promise<{ externalSessionId: string; redirectUrl?: string }> {
     const externalId = `onfido_${randomBytes(16).toString('hex')}`;
 
     return {
@@ -148,7 +161,7 @@ class OnfidoAdapter implements KycProviderAdapter {
     };
   }
 
-  async handleWebhook(payload: any, signature: string): Promise<{
+  async handleWebhook(payload: unknown, _signature: string): Promise<{
     externalSessionId: string;
     status: KycStatus;
     data?: Record<string, unknown>;
@@ -160,17 +173,21 @@ class OnfidoAdapter implements KycProviderAdapter {
       'withdrawn': 'rejected',
     };
 
+    const typedPayload = payload as Record<string, unknown>;
+    const obj = typedPayload.object as Record<string, unknown> | undefined;
+    const payloadData = typedPayload.payload as Record<string, unknown> | undefined;
+
     return {
-      externalSessionId: payload.object?.id || payload.check_id,
-      status: statusMap[payload.payload?.result] || 'pending',
-      data: payload,
+      externalSessionId: (obj?.id || typedPayload.check_id) as string,
+      status: statusMap[(payloadData?.result as string) || ''] || 'pending',
+      data: typedPayload,
     };
   }
 }
 
 // Manual Review Adapter
 class ManualAdapter implements KycProviderAdapter {
-  async createSession(investor: any, level: string): Promise<{ externalSessionId: string }> {
+  async createSession(_investor: InvestorKycData, _level: string): Promise<{ externalSessionId: string }> {
     return {
       externalSessionId: `manual_${randomBytes(16).toString('hex')}`,
     };
@@ -314,7 +331,7 @@ export async function listInvestors(orgId: string, params: {
 export async function updateInvestor(id: string, orgId: string, input: UpdateInvestorInput) {
   await getInvestor(id, orgId);
 
-  const updateData: any = { ...input, updatedAt: new Date() };
+  const updateData: UpdateInvestorInput & { updatedAt: Date } = { ...input, updatedAt: new Date() };
   if (input.email) updateData.email = input.email.toLowerCase();
   if (input.countryCode) updateData.countryCode = input.countryCode.toUpperCase();
   if (input.taxResidency) updateData.taxResidency = input.taxResidency.toUpperCase();
@@ -458,7 +475,7 @@ export async function refreshKycSessionStatus(sessionId: string, orgId: string) 
     const [updated] = await db.update(kycSessions)
       .set({
         status: providerStatus.status,
-        providerData: providerStatus.data as any,
+        providerData: providerStatus.data ?? null,
         updatedAt: new Date(),
         completedAt: ['approved', 'rejected'].includes(providerStatus.status) ? new Date() : null,
       })
@@ -496,7 +513,7 @@ export async function processKycWebhook(provider: KycProvider, payload: unknown,
   const [updated] = await db.update(kycSessions)
     .set({
       status: result.status,
-      providerData: result.data as any,
+      providerData: result.data ?? null,
       updatedAt: new Date(),
       completedAt: ['approved', 'rejected'].includes(result.status) ? new Date() : null,
     })
@@ -519,7 +536,13 @@ async function updateInvestorKycStatus(
   kycStatus: KycStatus,
   kycLevel?: string | null
 ) {
-  const updateData: any = {
+  const updateData: {
+    kycStatus: KycStatus;
+    updatedAt: Date;
+    kycVerifiedAt?: Date;
+    kycLevel?: string | null;
+    status?: InvestorStatus;
+  } = {
     kycStatus,
     updatedAt: new Date(),
   };

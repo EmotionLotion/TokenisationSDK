@@ -248,8 +248,12 @@ async function generateCapTableReport(request: ReportRequest): Promise<string> {
       };
 
       return formatReport(data, request.format);
-    } catch {
-      // Fall back to mock data if database query fails
+    } catch (error) {
+      // Log database errors but fall back to mock data for development/demo
+      logger.warn('Cap table snapshot query failed, falling back to mock data', {
+        error: error instanceof Error ? error : undefined,
+        metadata: { tokenId },
+      });
     }
   }
 

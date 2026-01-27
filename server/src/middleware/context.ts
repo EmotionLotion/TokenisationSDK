@@ -103,7 +103,7 @@ export function contextMiddleware(
     actorType = 'user';
     // User's orgId would need to be looked up from party/user table
     // For now, check if it's in the JWT
-    orgId = (req.user as any).orgId;
+    orgId = req.user.orgId;
   }
 
   // Get idempotency key if present

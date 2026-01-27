@@ -293,10 +293,12 @@ export function createExternalServiceCheck(
 
 // ==================== EXPRESS MIDDLEWARE ====================
 
+import type { Request, Response } from 'express';
+
 /**
  * Health check endpoint handler
  */
-export async function healthHandler(req: any, res: any): Promise<void> {
+export async function healthHandler(_req: Request, res: Response): Promise<void> {
   const health = await healthChecks.check();
   const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
 
@@ -306,7 +308,7 @@ export async function healthHandler(req: any, res: any): Promise<void> {
 /**
  * Liveness endpoint handler
  */
-export function liveHandler(req: any, res: any): void {
+export function liveHandler(_req: Request, res: Response): void {
   if (healthChecks.isLive()) {
     res.status(200).json({ status: 'live' });
   } else {
@@ -317,7 +319,7 @@ export function liveHandler(req: any, res: any): void {
 /**
  * Readiness endpoint handler
  */
-export async function readyHandler(req: any, res: any): Promise<void> {
+export async function readyHandler(_req: Request, res: Response): Promise<void> {
   const ready = await healthChecks.isReady();
 
   if (ready) {

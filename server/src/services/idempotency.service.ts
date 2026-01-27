@@ -10,6 +10,9 @@ const { idempotencyKeys } = schema;
 // Types & Interfaces
 // ============================================================================
 
+import type { Request, Response, NextFunction } from 'express';
+import type { ApiKeyRequest } from '../middleware/auth.js';
+
 export interface IdempotencyRecord {
   id: string;
   orgId: string;
@@ -36,6 +39,12 @@ export interface ExecuteResult<T> {
   result: T;
   wasIdempotent: boolean;
   idempotencyKey: string;
+}
+
+/** Extended request type with idempotency tracking data */
+export interface IdempotentRequest extends ApiKeyRequest {
+  idempotencyRecordId?: string;
+  idempotencyKey?: string;
 }
 
 // ============================================================================
@@ -243,17 +252,35 @@ export async function getIdempotencyStats(orgId: string): Promise<{
 // Idempotency Middleware Helper
 // ============================================================================
 
-import { Request, Response, NextFunction } from 'express';
-import type { ApiKeyRequest } from '../middleware/auth.js';
+interface IdempotencyMiddlewareOptions {
+  /** Operation name for logging */
+  operation: string;
+  /** If true, reject requests without an idempotency key */
+  required?: boolean;
+}
 
 /**
  * Express middleware for idempotency key handling.
+ *
+ * @param options Configuration options or just operation name for backwards compatibility
  */
-export function idempotencyMiddleware(operation: string) {
+export function idempotencyMiddleware(options: string | IdempotencyMiddlewareOptions) {
+  const config: IdempotencyMiddlewareOptions = typeof options === 'string'
+    ? { operation: options, required: false }
+    : options;
+
   return async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     const idempotencyKey = req.headers['idempotency-key'] as string;
 
     if (!idempotencyKey) {
+      if (config.required) {
+        // Idempotency key is required for this operation
+        return res.status(400).json({
+          error: 'Idempotency-Key header is required for this operation',
+          code: 'IDEMPOTENCY_KEY_REQUIRED',
+          operation: config.operation,
+        });
+      }
       // No idempotency key provided, continue normally
       return next();
     }
@@ -277,15 +304,16 @@ export function idempotencyMiddleware(operation: string) {
       }
 
       // Store record ID for later completion
-      (req as any).idempotencyRecordId = record?.id;
-      (req as any).idempotencyKey = idempotencyKey;
+      const idempotentReq = req as IdempotentRequest;
+      idempotentReq.idempotencyRecordId = record?.id;
+      idempotentReq.idempotencyKey = idempotencyKey;
 
       // Wrap res.json to capture response
       const originalJson = res.json.bind(res);
-      res.json = function (body: any) {
-        const recordId = (req as any).idempotencyRecordId;
+      res.json = function (body: unknown) {
+        const recordId = idempotentReq.idempotencyRecordId;
         if (recordId) {
-          completeIdempotencyKey(recordId, res.statusCode, body).catch(err => {
+          completeIdempotencyKey(recordId, res.statusCode, body as Record<string, unknown>).catch(err => {
             logger.error('Failed to save idempotency response', { error: err as Error });
           });
         }

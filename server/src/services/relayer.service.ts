@@ -50,6 +50,19 @@ export interface SignedTransaction {
   chainId: number;
 }
 
+/** EVM log entry from transaction receipt */
+export interface TransactionLog {
+  address: string;
+  topics: string[];
+  data: string;
+  blockNumber: string;
+  transactionHash: string;
+  transactionIndex: string;
+  blockHash: string;
+  logIndex: string;
+  removed: boolean;
+}
+
 export interface TransactionReceipt {
   transactionHash: string;
   blockNumber: number;
@@ -58,7 +71,7 @@ export interface TransactionReceipt {
   gasUsed: string;
   effectiveGasPrice: string;
   contractAddress?: string;
-  logs: any[];
+  logs: TransactionLog[];
 }
 
 export interface GasEstimate {
@@ -68,6 +81,25 @@ export interface GasEstimate {
   maxPriorityFeePerGas: string;
   estimatedCost: string;
   estimatedCostUSD?: string;
+}
+
+/** RPC response types for proper typing */
+interface EthFeeHistory {
+  baseFeePerGas: string[];
+  gasUsedRatio: number[];
+  oldestBlock: string;
+  reward?: string[][];
+}
+
+interface EthTransactionReceipt {
+  transactionHash: string;
+  blockNumber: string;
+  blockHash: string;
+  status: string;
+  gasUsed: string;
+  effectiveGasPrice?: string;
+  contractAddress?: string;
+  logs: TransactionLog[];
 }
 
 // ============================================================================
@@ -133,7 +165,10 @@ export function listSupportedChains(): ChainConfig[] {
 // JSON-RPC Client
 // ============================================================================
 
-async function jsonRpcCall(rpcUrl: string, method: string, params: any[]): Promise<any> {
+/** Generic JSON-RPC parameter types */
+type RpcParam = string | number | boolean | null | Record<string, unknown> | RpcParam[];
+
+async function jsonRpcCall<T = unknown>(rpcUrl: string, method: string, params: RpcParam[]): Promise<T> {
   const response = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -145,13 +180,13 @@ async function jsonRpcCall(rpcUrl: string, method: string, params: any[]): Promi
     }),
   });
 
-  const result = await response.json() as { error?: { message: string }; result?: unknown };
+  const result = await response.json() as { error?: { message: string }; result?: T };
 
   if (result.error) {
     throw new Error(`RPC Error: ${result.error.message}`);
   }
 
-  return result.result;
+  return result.result as T;
 }
 
 // ============================================================================
@@ -162,7 +197,7 @@ export async function estimateGas(tx: TransactionRequest): Promise<GasEstimate> 
   const chain = getChainConfig(tx.chainId);
 
   // Get gas limit estimate
-  const gasLimit = await jsonRpcCall(chain.rpcUrl, 'eth_estimateGas', [{
+  const gasLimit = await jsonRpcCall<string>(chain.rpcUrl, 'eth_estimateGas', [{
     from: tx.from,
     to: tx.to,
     data: tx.data,
@@ -170,14 +205,14 @@ export async function estimateGas(tx: TransactionRequest): Promise<GasEstimate> 
   }]);
 
   // Get current gas prices
-  const gasPrice = await jsonRpcCall(chain.rpcUrl, 'eth_gasPrice', []);
+  const gasPrice = await jsonRpcCall<string>(chain.rpcUrl, 'eth_gasPrice', []);
 
   // Get fee history for EIP-1559 chains
   let maxFeePerGas = gasPrice;
   let maxPriorityFeePerGas = '0x59682f00'; // 1.5 gwei default
 
   try {
-    const feeHistory = await jsonRpcCall(chain.rpcUrl, 'eth_feeHistory', [4, 'latest', [25, 50, 75]]);
+    const feeHistory = await jsonRpcCall<EthFeeHistory>(chain.rpcUrl, 'eth_feeHistory', [4, 'latest', [25, 50, 75]]);
     if (feeHistory && feeHistory.baseFeePerGas) {
       const baseFee = BigInt(feeHistory.baseFeePerGas[feeHistory.baseFeePerGas.length - 1]);
       maxFeePerGas = `0x${(baseFee * 2n).toString(16)}`;
@@ -188,12 +223,12 @@ export async function estimateGas(tx: TransactionRequest): Promise<GasEstimate> 
   }
 
   // Calculate estimated cost
-  const gasLimitBn = BigInt(gasLimit);
+  const gasLimitBn = BigInt(gasLimit as string);
   const gasPriceBn = BigInt(gasPrice);
   const estimatedCost = (gasLimitBn * gasPriceBn).toString();
 
   return {
-    gasLimit: BigInt(gasLimit).toString(),
+    gasLimit: BigInt(gasLimit as string).toString(),
     gasPrice: BigInt(gasPrice).toString(),
     maxFeePerGas: BigInt(maxFeePerGas).toString(),
     maxPriorityFeePerGas: BigInt(maxPriorityFeePerGas).toString(),
@@ -213,7 +248,7 @@ export async function getNextNonce(chainId: number, address: string): Promise<nu
   const key = `${chainId}:${address.toLowerCase()}`;
 
   // Get on-chain nonce
-  const onChainNonce = await jsonRpcCall(
+  const onChainNonce = await jsonRpcCall<string>(
     chain.rpcUrl,
     'eth_getTransactionCount',
     [address, 'pending']
@@ -361,7 +396,7 @@ export async function submitTransaction(
   const chain = getChainConfig(chainId);
 
   // Submit to RPC
-  const txHash = await jsonRpcCall(chain.rpcUrl, 'eth_sendRawTransaction', [signedTx]);
+  const txHash = await jsonRpcCall<string>(chain.rpcUrl, 'eth_sendRawTransaction', [signedTx]);
 
   // Emit event for indexer
   await db.insert(eventBusQueue).values({
@@ -379,13 +414,13 @@ export async function getTransactionReceipt(
 ): Promise<TransactionReceipt | null> {
   const chain = getChainConfig(chainId);
 
-  const receipt = await jsonRpcCall(chain.rpcUrl, 'eth_getTransactionReceipt', [txHash]);
+  const receipt = await jsonRpcCall<EthTransactionReceipt | null>(chain.rpcUrl, 'eth_getTransactionReceipt', [txHash]);
 
   if (!receipt) return null;
 
   return {
     transactionHash: receipt.transactionHash,
-    blockNumber: parseInt(receipt.txBlock, 16),
+    blockNumber: parseInt(receipt.blockNumber, 16),
     blockHash: receipt.blockHash,
     status: receipt.status === '0x1' ? 'success' : 'failed',
     gasUsed: BigInt(receipt.gasUsed).toString(),
@@ -409,7 +444,7 @@ export async function waitForTransaction(
 
     if (receipt) {
       // Check confirmations
-      const currentBlock = await jsonRpcCall(chain.rpcUrl, 'eth_blockNumber', []);
+      const currentBlock = await jsonRpcCall<string>(chain.rpcUrl, 'eth_blockNumber', []);
       const currentBlockNum = parseInt(currentBlock, 16);
       const txBlockNum = receipt.blockNumber;
 
@@ -431,23 +466,23 @@ export async function waitForTransaction(
 
 export async function getBalance(chainId: number, address: string): Promise<string> {
   const chain = getChainConfig(chainId);
-  const balance = await jsonRpcCall(chain.rpcUrl, 'eth_getBalance', [address, 'latest']);
+  const balance = await jsonRpcCall<string>(chain.rpcUrl, 'eth_getBalance', [address, 'latest']);
   return BigInt(balance).toString();
 }
 
 export async function getCode(chainId: number, address: string): Promise<string> {
   const chain = getChainConfig(chainId);
-  return jsonRpcCall(chain.rpcUrl, 'eth_getCode', [address, 'latest']);
+  return jsonRpcCall<string>(chain.rpcUrl, 'eth_getCode', [address, 'latest']);
 }
 
 export async function call(chainId: number, to: string, data: string): Promise<string> {
   const chain = getChainConfig(chainId);
-  return jsonRpcCall(chain.rpcUrl, 'eth_call', [{ to, data }, 'latest']);
+  return jsonRpcCall<string>(chain.rpcUrl, 'eth_call', [{ to, data }, 'latest']);
 }
 
 export async function getBlockNumber(chainId: number): Promise<number> {
   const chain = getChainConfig(chainId);
-  const blockNumber = await jsonRpcCall(chain.rpcUrl, 'eth_blockNumber', []);
+  const blockNumber = await jsonRpcCall<string>(chain.rpcUrl, 'eth_blockNumber', []);
   return parseInt(blockNumber, 16);
 }
 
@@ -502,8 +537,8 @@ export async function checkChainHealth(chainId: number): Promise<{
     const chain = getChainConfig(chainId);
 
     const [blockNumber, gasPrice] = await Promise.all([
-      jsonRpcCall(chain.rpcUrl, 'eth_blockNumber', []),
-      jsonRpcCall(chain.rpcUrl, 'eth_gasPrice', []),
+      jsonRpcCall<string>(chain.rpcUrl, 'eth_blockNumber', []),
+      jsonRpcCall<string>(chain.rpcUrl, 'eth_gasPrice', []),
     ]);
 
     return {

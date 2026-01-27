@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as transferService from '../services/transfer.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { idempotencyMiddleware } from '../services/idempotency.service.js';
 
 export const transferRouter = Router();
 
@@ -377,7 +378,11 @@ const confirmTransferSchema = z.object({
 // ============================================================================
 
 // Create transfer (Step 1)
-transferRouter.post('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post(
+  '/',
+  apiKeyMiddleware,
+  idempotencyMiddleware({ operation: 'transfer.create', required: true }),
+  async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

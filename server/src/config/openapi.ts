@@ -1,5 +1,10 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 
+// Server URL configuration from environment
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api/v1';
+const SANDBOX_URL = process.env.SANDBOX_API_URL || 'https://sandbox.api.ahoy.fund/v1';
+const PRODUCTION_URL = process.env.PRODUCTION_API_URL || 'https://api.ahoy.fund/v1';
+
 const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.3',
@@ -76,15 +81,15 @@ Common HTTP status codes:
     },
     servers: [
       {
-        url: 'http://localhost:3001/api/v1',
-        description: 'Local Development',
+        url: API_BASE_URL,
+        description: 'Current Environment',
       },
       {
-        url: 'https://sandbox.api.ahoy.fund/v1',
+        url: SANDBOX_URL,
         description: 'Sandbox Environment',
       },
       {
-        url: 'https://api.ahoy.fund/v1',
+        url: PRODUCTION_URL,
         description: 'Production',
       },
     ],

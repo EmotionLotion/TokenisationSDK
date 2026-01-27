@@ -6,6 +6,25 @@
 
 import { AuthenticationError, NetworkError, ErrorCode } from '../../errors/index.js';
 import type { EventType } from '../../core/types.js';
+import {
+  validate,
+  createPartySchema,
+  updatePartySchema,
+  updateKycSchema,
+  createAssetSchema,
+  updateAssetSchema,
+  transitionAssetSchema,
+  mintSchema,
+  burnSchema,
+  transferSchema,
+  createDeploymentSchema,
+  createEventSchema,
+  siweNonceSchema,
+  siweVerifySchema,
+  refreshTokenSchema,
+  uuidSchema,
+  chainIdSchema,
+} from '../../validation/index.js';
 
 export interface ApiClientConfig {
   baseUrl: string;
@@ -248,6 +267,7 @@ export class ApiClient {
   }
 
   async getParty(id: string): Promise<PartyInfo> {
+    validate(uuidSchema, id);
     return this.get(`/api/v1/parties/${id}`);
   }
 
@@ -258,7 +278,8 @@ export class ApiClient {
     jurisdiction: string;
     metadata?: Record<string, unknown>;
   }): Promise<PartyInfo> {
-    return this.post('/api/v1/parties', data);
+    const validated = validate(createPartySchema, data);
+    return this.post('/api/v1/parties', validated);
   }
 
   async updateParty(id: string, data: Partial<{
@@ -276,7 +297,9 @@ export class ApiClient {
     verificationLevel?: string;
     accreditedInvestor?: boolean;
   }): Promise<PartyInfo> {
-    return this.post(`/api/v1/parties/${partyId}/kyc`, data);
+    validate(uuidSchema, partyId);
+    const validated = validate(updateKycSchema, data);
+    return this.post(`/api/v1/parties/${partyId}/kyc`, validated);
   }
 
   async freezeParty(partyId: string, reason?: string): Promise<PartyInfo> {
@@ -319,7 +342,8 @@ export class ApiClient {
     decimals?: number;
     metadata?: Record<string, unknown>;
   }): Promise<AssetInfo> {
-    return this.post('/api/v1/assets', data);
+    const validated = validate(createAssetSchema, data);
+    return this.post('/api/v1/assets', validated);
   }
 
   async updateAsset(id: string, data: Partial<{
@@ -364,7 +388,9 @@ export class ApiClient {
     event: EventInfo;
     newBalance: string;
   }> {
-    return this.post(`/api/v1/tokens/${assetId}/mint`, { to, amount });
+    validate(uuidSchema, assetId);
+    const validated = validate(mintSchema, { to, amount });
+    return this.post(`/api/v1/tokens/${assetId}/mint`, validated);
   }
 
   async transfer(assetId: string, from: string, to: string, amount: string): Promise<{
@@ -374,7 +400,9 @@ export class ApiClient {
     fromBalance: string;
     toBalance: string;
   }> {
-    return this.post(`/api/v1/tokens/${assetId}/transfer`, { from, to, amount });
+    validate(uuidSchema, assetId);
+    const validated = validate(transferSchema, { from, to, amount });
+    return this.post(`/api/v1/tokens/${assetId}/transfer`, validated);
   }
 
   async burn(assetId: string, from: string, amount: string): Promise<{
@@ -383,7 +411,9 @@ export class ApiClient {
     event: EventInfo;
     newBalance: string;
   }> {
-    return this.post(`/api/v1/tokens/${assetId}/burn`, { from, amount });
+    validate(uuidSchema, assetId);
+    const validated = validate(burnSchema, { from, amount });
+    return this.post(`/api/v1/tokens/${assetId}/burn`, validated);
   }
 
   // Event methods

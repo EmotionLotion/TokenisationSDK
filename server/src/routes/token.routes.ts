@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as tokenService from '../services/token.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { idempotencyMiddleware } from '../services/idempotency.service.js';
 
 export const tokenRouter = Router();
 
@@ -79,7 +80,11 @@ const confirmIssuanceSchema = z.object({
 // ============================================================================
 
 // Create token
-tokenRouter.post('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post(
+  '/',
+  apiKeyMiddleware,
+  idempotencyMiddleware({ operation: 'token.create', required: true }),
+  async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -163,7 +168,11 @@ tokenRouter.patch('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Resp
 // ============================================================================
 
 // Deploy token
-tokenRouter.post('/:id/deploy', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post(
+  '/:id/deploy',
+  apiKeyMiddleware,
+  idempotencyMiddleware({ operation: 'token.deploy', required: true }),
+  async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -522,7 +531,11 @@ tokenRouter.get('/:tokenId/balance', apiKeyMiddleware, async (req: ApiKeyRequest
 });
 
 // Burn tokens (for redemption/exit)
-tokenRouter.post('/:tokenId/burn', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post(
+  '/:tokenId/burn',
+  apiKeyMiddleware,
+  idempotencyMiddleware({ operation: 'token.burn', required: true }),
+  async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

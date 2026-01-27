@@ -1,8 +1,9 @@
-import { Router, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as investorService from '../services/investor.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { logger } from '../middleware/logger.js';
 
 export const investorRouter = Router();
 
@@ -806,11 +807,33 @@ investorRouter.get('/:id/redemption-eligibility', apiKeyMiddleware, async (req: 
 // KYC Webhook Route (for external providers)
 // ============================================================================
 
+/** Get the appropriate signature header for each KYC provider */
+function getKycWebhookSignature(provider: string, req: Request): string {
+  switch (provider) {
+    case 'sumsub':
+      return (req.headers['x-payload-digest'] as string) || '';
+    case 'onfido':
+      return (req.headers['x-sha2-signature'] as string) || '';
+    case 'jumio':
+      return (req.headers['x-jumio-signature'] as string) || '';
+    default:
+      return (req.headers['x-webhook-signature'] as string) || '';
+  }
+}
+
 // KYC provider webhook handler
+// Note: For production use, prefer the dedicated endpoints in /api/v1/kyc/webhooks/:provider
+// which have more robust signature verification
 investorRouter.post('/kyc/webhook/:provider', async (req, res, next) => {
   try {
-    const provider = req.params.provider as any;
-    const signature = req.headers['x-webhook-signature'] as string || '';
+    const provider = req.params.provider as investorService.KycProvider;
+    const signature = getKycWebhookSignature(provider, req);
+
+    // Reject if no signature provided (security requirement)
+    if (!signature) {
+      logger.warn('KYC webhook rejected: missing signature', { metadata: { provider } });
+      return res.status(401).json({ error: 'Missing webhook signature' });
+    }
 
     const result = await investorService.processKycWebhook(provider, req.body, signature);
     res.json(result);
