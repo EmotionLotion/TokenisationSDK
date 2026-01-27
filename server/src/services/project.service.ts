@@ -7,6 +7,13 @@ import {
   isProviderAvailable,
   type StorageProviderType,
 } from './storage/index.js';
+import {
+  hasAssetPack,
+  derivePackId,
+  getAvailablePackIds,
+  type AssetType,
+  type Jurisdiction,
+} from '../config/asset-packs.js';
 
 const { projects, documents, assets } = schema;
 
@@ -18,8 +25,21 @@ export interface CreateProjectInput {
   orgId: string;
   name: string;
   description?: string;
-  jurisdiction?: string;
-  assetType?: string;
+  /**
+   * Jurisdiction code (e.g., 'AE', 'US', 'SG', 'GLOBAL')
+   * Required - no default to ensure asset-agnostic behavior
+   */
+  jurisdiction: string;
+  /**
+   * Asset type (e.g., 'REAL_ESTATE', 'SECURITIES', 'LOYALTY')
+   * Required - no default to ensure asset-agnostic behavior
+   */
+  assetType: string;
+  /**
+   * Optional: Explicit asset pack ID (e.g., 'REAL_ESTATE_AE')
+   * If not provided, will be derived from assetType + jurisdiction
+   */
+  assetPackId?: string;
   settings?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
@@ -45,14 +65,37 @@ export interface ListProjectsParams {
 }
 
 export async function createProject(input: CreateProjectInput) {
+  // Validate jurisdiction and assetType are provided (no defaults)
+  if (!input.jurisdiction) {
+    throw new ValidationError('jurisdiction is required - no default value to ensure asset-agnostic behavior');
+  }
+  if (!input.assetType) {
+    throw new ValidationError('assetType is required - no default value to ensure asset-agnostic behavior');
+  }
+
+  // Determine asset pack ID
+  const assetPackId = input.assetPackId || derivePackId(input.assetType, input.jurisdiction);
+
+  // Validate that the asset pack exists (if a pack ID was derived or provided)
+  if (assetPackId && !hasAssetPack(assetPackId)) {
+    const availablePacks = getAvailablePackIds().join(', ');
+    throw new ValidationError(
+      `No asset pack found for assetType='${input.assetType}' and jurisdiction='${input.jurisdiction}'. ` +
+      `Available packs: ${availablePacks}`
+    );
+  }
+
   const [project] = await db.insert(projects).values({
     orgId: input.orgId,
     name: input.name,
     description: input.description,
-    jurisdiction: input.jurisdiction || 'DUBAI',
-    assetType: input.assetType || 'REAL_ESTATE',
+    jurisdiction: input.jurisdiction,
+    assetType: input.assetType,
     settings: input.settings || {},
-    metadata: input.metadata || {},
+    metadata: {
+      ...input.metadata,
+      assetPackId: assetPackId || null,
+    },
   }).returning();
 
   return project;

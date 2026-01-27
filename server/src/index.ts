@@ -6,6 +6,7 @@ import compression from 'compression';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/openapi.js';
 import { testConnection, getDbMode } from './config/database.js';
+import { bootstrapRegistry, isBootstrapped } from './config/bootstrap.js';
 import { validateEnvironmentOrExit, getEnvironmentSummary } from './config/environment.js';
 import { authRouter } from './routes/auth.routes.js';
 import { partyRouter } from './routes/party.routes.js';
@@ -187,6 +188,12 @@ async function start() {
   try {
     // Validate environment configuration first
     validateEnvironmentOrExit();
+
+    // Bootstrap the RegistryService with adapters and asset pack configurations
+    await bootstrapRegistry();
+    logger.info('RegistryService bootstrapped', {
+      metadata: { isBootstrapped: isBootstrapped() },
+    });
 
     // Test database connection
     const dbOk = await testConnection();

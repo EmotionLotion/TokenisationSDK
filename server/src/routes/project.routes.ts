@@ -13,8 +13,12 @@ export const projectRouter = Router();
 const createProjectSchema = z.object({
   name: z.string().min(1).max(256),
   description: z.string().optional(),
-  jurisdiction: z.string().max(32).optional(),
-  assetType: z.string().max(32).optional(),
+  /** Jurisdiction code (e.g., 'AE', 'US', 'SG', 'GLOBAL') - Required */
+  jurisdiction: z.string().min(1).max(32),
+  /** Asset type (e.g., 'REAL_ESTATE', 'SECURITIES', 'LOYALTY') - Required */
+  assetType: z.string().min(1).max(32),
+  /** Optional explicit asset pack ID */
+  assetPackId: z.string().max(64).optional(),
   settings: z.record(z.unknown()).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
