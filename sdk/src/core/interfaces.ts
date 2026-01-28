@@ -472,6 +472,42 @@ export interface ITokenAdapter {
 }
 
 // ============================================================================
+// PROOF OF RESERVE PLUGIN INTERFACE
+// ============================================================================
+
+/**
+ * IProofOfReservePlugin - Interface for Chainlink Proof of Reserve integration
+ * Verifies that tokens are adequately backed by their underlying reserves.
+ */
+export interface IProofOfReservePlugin {
+  /** Plugin identifier */
+  readonly pluginId: string;
+
+  /**
+   * Check if a mint operation is compliant with PoR requirements
+   */
+  checkMintCompliance(
+    tokenAddress: string,
+    amount: string
+  ): Promise<{
+    compliant: boolean;
+    status: number;
+    reason: string;
+    currentRatio: number;
+    requiredRatio: number;
+  }>;
+
+  /**
+   * Check if transfers are compliant with PoR requirements
+   */
+  checkTransferCompliance(tokenAddress: string): Promise<{
+    compliant: boolean;
+    status: number;
+    reason: string;
+  }>;
+}
+
+// ============================================================================
 // PLUGIN REGISTRY INTERFACE
 // ============================================================================
 
@@ -485,7 +521,8 @@ export type PluginType =
   | 'storage'
   | 'chain'
   | 'token'
-  | 'ace';
+  | 'ace'
+  | 'por';
 
 /**
  * Any plugin interface
@@ -497,7 +534,8 @@ export type AnyPlugin =
   | IStoragePlugin
   | IChainPlugin
   | ITokenAdapter
-  | IAcePlugin;
+  | IAcePlugin
+  | IProofOfReservePlugin;
 
 /**
  * IPluginRegistry - Central registry for all plugins

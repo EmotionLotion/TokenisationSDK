@@ -2,6 +2,7 @@ import { db, schema } from '../config/database.js';
 import { eq, and, desc, lt, gt, or, sql } from 'drizzle-orm';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
 import * as complianceService from './compliance.service.js';
+import * as relayerService from './relayer.service.js';
 import { randomUUID } from 'crypto';
 import { logger } from '../middleware/logger.js';
 
@@ -49,6 +50,16 @@ const VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   EXPIRED: ['VOID'],
   BURNED: [],
   VOID: [],
+};
+
+/**
+ * On-chain function selectors for NFT contract lifecycle calls.
+ * Only statuses that require an on-chain transaction are listed.
+ */
+const ON_CHAIN_SELECTORS: Record<string, string> = {
+  CHECKED_IN: '0x183ff085',   // checkIn(uint256)
+  BOARDED:    '0x6223258e',   // board(uint256)
+  BURNED:     '0x42966c68',   // burn(uint256)
 };
 
 // ============================================================================
@@ -237,10 +248,75 @@ async function transitionTicket(orgId: string, ticketId: string, newStatus: Tick
   if (newStatus === 'CANCELLED') updateData.cancelledAt = new Date();
   if (newStatus === 'BURNED') updateData.burnedAt = new Date();
 
+  // Optimistic DB update
   const [updated] = await db.update(airlineTickets)
     .set(updateData)
     .where(and(eq(airlineTickets.id, ticketId), eq(airlineTickets.orgId, orgId)))
     .returning();
+
+  // On-chain saga: submit NFT contract call if this status has a selector
+  const selector = ON_CHAIN_SELECTORS[newStatus];
+  if (selector && ticket.contractAddress && ticket.chainTokenId != null) {
+    const chainId = ticket.chainId as number | undefined;
+    const relayerAddress = process.env.RELAYER_ADDRESS;
+
+    if (chainId && relayerAddress) {
+      try {
+        // ABI-encode: selector + uint256(chainTokenId)
+        const tokenIdHex = BigInt(ticket.chainTokenId).toString(16).padStart(64, '0');
+        const calldata = `${selector}${tokenIdHex}`;
+
+        const txRequest = await relayerService.buildTransaction({
+          to: ticket.contractAddress,
+          from: relayerAddress,
+          data: calldata,
+          chainId,
+        });
+
+        const { signedTx, hash } = await relayerService.signTransaction(txRequest, orgId);
+        const { txHash } = await relayerService.submitTransaction(chainId, signedTx, orgId);
+        const receipt = await relayerService.waitForTransaction(chainId, txHash);
+
+        if (receipt.status === 'failed') {
+          // Rollback: revert DB to previous status
+          await db.update(airlineTickets)
+            .set({ status: currentStatus, updatedAt: new Date() })
+            .where(eq(airlineTickets.id, ticketId));
+
+          logger.error('On-chain tx reverted, rolling back', { ticketId, txHash, from: currentStatus, to: newStatus });
+          throw new AppError(`On-chain transaction reverted for ${newStatus} (tx: ${txHash})`, 502);
+        }
+
+        // Persist txHash in ticket metadata
+        const existingMeta = (ticket.metadata as Record<string, unknown>) ?? {};
+        await db.update(airlineTickets)
+          .set({
+            metadata: { ...existingMeta, lastTxHash: txHash },
+          })
+          .where(eq(airlineTickets.id, ticketId));
+
+        // For burn, also record burnedAt if not already set
+        if (newStatus === 'BURNED') {
+          await db.update(airlineTickets)
+            .set({ burnedAt: new Date() })
+            .where(and(eq(airlineTickets.id, ticketId), sql`burned_at IS NULL`));
+        }
+
+        logger.info('On-chain lifecycle tx confirmed', { ticketId, txHash, status: newStatus });
+      } catch (error) {
+        // If the error is our own AppError (rollback case), re-throw
+        if (error instanceof AppError) throw error;
+
+        // Network / relayer failure: rollback DB
+        await db.update(airlineTickets)
+          .set({ status: currentStatus, updatedAt: new Date() })
+          .where(eq(airlineTickets.id, ticketId));
+
+        logger.error('On-chain lifecycle call failed, rolling back', { ticketId, error });
+        throw new AppError(`On-chain call failed for ${newStatus}: ${error instanceof Error ? error.message : 'Unknown error'}`, 502);
+      }
+    }
+  }
 
   await recordTicketEvent(orgId, ticketId, `TICKET_${newStatus}`, actor, actorRole, currentStatus, newStatus, details);
 

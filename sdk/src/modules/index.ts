@@ -39,6 +39,14 @@ export { EventsModule } from './events.js';
 export { WebhooksModule } from './webhooks.js';
 export { AuditModule } from './audit.js';
 export { TicketsClient } from './TicketsClient.js';
+export { ResaleModule } from './ResaleModule.js';
+export type {
+  ResaleListParams,
+  ResaleOffer,
+  ResalePurchaseInput,
+  ResalePurchaseResult,
+  ResaleOfferInput,
+} from './ResaleModule.js';
 export type {
   Ticket,
   IssueTicketInput,

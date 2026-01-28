@@ -52,6 +52,7 @@ import { EscrowModule } from './modules/EscrowClient.js';
 import { CashFlowModule } from './modules/CashFlowClient.js';
 import { DLDModule } from './modules/DLDClient.js';
 import { TicketsClient } from './modules/TicketsClient.js';
+import { ResaleModule } from './modules/ResaleModule.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -103,6 +104,9 @@ export class ApiClient {
   /** Tickets - Airline ticket NFT lifecycle (issue, check-in, board, transfer, burn) */
   public readonly tickets: TicketsClient;
 
+  /** Resale - Unified facade for ticket resale (list, offer, purchase, cancel) */
+  public readonly resale: ResaleModule;
+
   constructor(config: TokenizationSDKConfig) {
     // Validate API key format
     if (!config.apiKey || !config.apiKey.startsWith('sk_')) {
@@ -144,6 +148,7 @@ export class ApiClient {
     this.cashflow = new CashFlowModule(this.http);
     this.dld = new DLDModule(this.http);
     this.tickets = new TicketsClient(this.http);
+    this.resale = new ResaleModule(this.http);
   }
 
   /**

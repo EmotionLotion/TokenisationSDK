@@ -23,7 +23,7 @@ import type {
   RightModel,
   BaseEvent,
 } from './types.js';
-import { EventType, ComplianceAction } from './types.js';
+import { EventType, ComplianceAction, LifecycleState } from './types.js';
 import type {
   IJurisdictionPlugin,
   ICompliancePlugin,
@@ -32,6 +32,7 @@ import type {
   IAcePlugin,
   ACEAttestation,
   ACEAttestationType,
+  IProofOfReservePlugin,
 } from './interfaces.js';
 import { hashPolicy, PolicyVersionManager, policyVersionManager } from './PolicyHash.js';
 import {
@@ -83,6 +84,10 @@ export interface ComplianceEngineConfig {
   acePlugin?: IAcePlugin;
   /** ACE configuration */
   aceConfig?: ACEConfig;
+  /** Proof of Reserve plugin for reserve verification */
+  porPlugin?: IProofOfReservePlugin;
+  /** Proof of Reserve configuration */
+  porConfig?: { enabled: boolean; blockOnUndercollateralized?: boolean };
 }
 
 /**
@@ -118,6 +123,10 @@ export class ComplianceEngine {
   private acePlugin?: IAcePlugin;
   private aceConfig: ACEConfig;
 
+  // Proof of Reserve integration
+  private porPlugin?: IProofOfReservePlugin;
+  private porConfig: { enabled: boolean; blockOnUndercollateralized?: boolean };
+
   // Default policy for when no custom policy is configured
   private defaultPolicy = {
     rules: [
@@ -143,6 +152,10 @@ export class ComplianceEngine {
       aceFirst: false,
       fallbackOnAceFailure: true,
     };
+
+    // PoR configuration
+    this.porPlugin = config.porPlugin;
+    this.porConfig = config.porConfig || { enabled: false };
   }
 
   // ============================================================================
@@ -628,6 +641,34 @@ export class ComplianceEngine {
       });
     }
 
+    // Proof of Reserve check for minting
+    if (this.porPlugin && this.porConfig?.enabled) {
+      try {
+        const tokenAddress = context.metadata?.tokenAddress as string
+          || context.asset?.metadata?.tokenAddress as string
+          || '';
+        const amount = context.amount || '0';
+
+        if (tokenAddress) {
+          const porResult = await this.porPlugin.checkMintCompliance(tokenAddress, amount);
+          if (!porResult.compliant) {
+            violations.push({
+              code: 'POR_MINT_BLOCKED',
+              message: porResult.reason || 'Mint blocked: insufficient reserves',
+              severity: 'CRITICAL',
+              rule: 'por.mint_compliance',
+            });
+          }
+        }
+      } catch (error) {
+        warnings.push({
+          code: 'POR_CHECK_FAILED',
+          message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          rule: 'por.availability',
+        });
+      }
+    }
+
     // Check jurisdiction allows minting to recipient
     if (this.jurisdictionPlugin && context.asset && context.recipientId) {
       try {
@@ -674,6 +715,36 @@ export class ComplianceEngine {
   private async evaluateTransfer(context: ComplianceContext): Promise<PolicyDecision> {
     const violations: PolicyViolation[] = [];
     const warnings: PolicyWarning[] = [];
+
+    // Check asset lifecycle state - transfers blocked from terminal/redeemed states
+    if (context.asset) {
+      const nonTransferableStates: LifecycleState[] = [
+        LifecycleState.REDEEMED,
+        LifecycleState.PARTIALLY_REDEEMED,
+        LifecycleState.EXPIRED,
+        LifecycleState.CLOSED,
+        LifecycleState.BURNED,
+      ];
+
+      if (nonTransferableStates.includes(context.asset.state)) {
+        violations.push({
+          code: 'ASSET_NOT_TRANSFERABLE',
+          message: `Asset in ${context.asset.state} state cannot be transferred`,
+          severity: 'CRITICAL',
+          rule: 'lifecycle.transfer_restriction',
+        });
+      }
+
+      // Also check frozen state
+      if (context.asset.state === LifecycleState.FROZEN) {
+        violations.push({
+          code: 'ASSET_FROZEN',
+          message: 'Asset is frozen and cannot be transferred',
+          severity: 'CRITICAL',
+          rule: 'lifecycle.frozen_restriction',
+        });
+      }
+    }
 
     // Get sender and recipient status
     const senderStatus = context.actorId
@@ -818,6 +889,73 @@ export class ComplianceEngine {
           message: 'Jurisdiction check could not be performed for transfer',
           rule: 'jurisdiction.availability',
         });
+      }
+    }
+
+    // Proof of Reserve check for transfers
+    if (this.porPlugin && this.porConfig?.enabled) {
+      try {
+        const tokenAddress = context.metadata?.tokenAddress as string
+          || context.asset?.metadata?.tokenAddress as string
+          || '';
+
+        if (tokenAddress) {
+          const porResult = await this.porPlugin.checkTransferCompliance(tokenAddress);
+          if (!porResult.compliant && this.porConfig.blockOnUndercollateralized) {
+            violations.push({
+              code: 'POR_TRANSFER_BLOCKED',
+              message: porResult.reason || 'Transfer blocked: reserves undercollateralized',
+              severity: 'CRITICAL',
+              rule: 'por.transfer_compliance',
+            });
+          }
+        }
+      } catch (error) {
+        warnings.push({
+          code: 'POR_CHECK_FAILED',
+          message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          rule: 'por.availability',
+        });
+      }
+    }
+
+    // Price cap check for anti-scalping (110% rule)
+    // Check if asset has a mint price and transfer has a price specified
+    if (context.asset?.metadata) {
+      const mintPrice = context.asset.metadata.mintPrice as string | undefined;
+      const maxResalePrice = context.asset.metadata.maxResalePrice as string | undefined;
+      const transferPrice = context.metadata?.transferPrice as string | undefined;
+
+      if (transferPrice) {
+        const transferPriceBigInt = BigInt(transferPrice);
+
+        // Check explicit max resale price first
+        if (maxResalePrice) {
+          const maxResalePriceBigInt = BigInt(maxResalePrice);
+          if (transferPriceBigInt > maxResalePriceBigInt) {
+            violations.push({
+              code: 'MAX_RESALE_PRICE_EXCEEDED',
+              message: `Transfer price ${transferPrice} exceeds maximum resale price ${maxResalePrice}`,
+              severity: 'CRITICAL',
+              rule: 'anti_scalping.max_resale_price',
+            });
+          }
+        }
+        // Fallback to 110% of mint price rule
+        else if (mintPrice) {
+          const mintPriceBigInt = BigInt(mintPrice);
+          const priceCap = context.asset.metadata.priceCapPercent as number | undefined ?? 110;
+          const maxAllowedPrice = (mintPriceBigInt * BigInt(priceCap)) / 100n;
+
+          if (transferPriceBigInt > maxAllowedPrice) {
+            violations.push({
+              code: 'PRICE_CAP_EXCEEDED',
+              message: `Transfer price ${transferPrice} exceeds ${priceCap}% of mint price ${mintPrice} (max: ${maxAllowedPrice})`,
+              severity: 'CRITICAL',
+              rule: 'anti_scalping.price_cap',
+            });
+          }
+        }
       }
     }
 
@@ -1050,6 +1188,20 @@ export class ComplianceEngine {
    */
   setAcePlugin(plugin: IAcePlugin): void {
     this.acePlugin = plugin;
+  }
+
+  /**
+   * Set the Proof of Reserve plugin
+   */
+  setPoRPlugin(plugin: IProofOfReservePlugin): void {
+    this.porPlugin = plugin;
+  }
+
+  /**
+   * Update PoR configuration
+   */
+  updatePoRConfig(config: Partial<{ enabled: boolean; blockOnUndercollateralized?: boolean }>): void {
+    this.porConfig = { ...this.porConfig, ...config };
   }
 
   /**

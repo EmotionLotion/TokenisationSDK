@@ -316,6 +316,82 @@ ticketRouter.post('/transfers/:transferId/pay-fee', async (req: ApiKeyRequest, r
 });
 
 // ============================================================================
+// Resale Routes
+// ============================================================================
+
+const ResalePurchaseSchema = z.object({
+  buyerWallet: z.string().min(1).max(42),
+  buyerPassengerId: z.string().uuid().optional(),
+  kycData: z.record(z.unknown()).optional(),
+  paymentDetails: z.object({
+    txHash: z.string().optional(),
+    method: z.string().optional(),
+  }).optional(),
+  idempotencyKey: z.string().max(128).optional(),
+});
+
+// POST /api/v1/tickets/:id/resale/purchase — Single-call resale orchestration
+ticketRouter.post('/:id/resale/purchase', async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.apiKey!.orgId;
+    const ticketId = req.params.id;
+    const body = ResalePurchaseSchema.parse(req.body);
+
+    // Step 1: Request transfer
+    const transfer = await ticketService.requestTransfer({
+      orgId,
+      ticketId,
+      toWallet: body.buyerWallet,
+      toPassengerId: body.buyerPassengerId,
+      idempotencyKey: body.idempotencyKey ?? `resale-${ticketId}-${Date.now()}`,
+      kycRequired: !!body.kycData,
+    });
+
+    try {
+      // Step 2: Complete KYC if data provided
+      if (body.kycData) {
+        await ticketService.completeTransferKyc(orgId, transfer.id);
+      }
+
+      // Step 3: Pay resale fee if applicable
+      if (transfer.resaleFee && parseFloat(transfer.resaleFee) > 0) {
+        await ticketService.payResaleFee(orgId, transfer.id, body.paymentDetails?.txHash);
+      }
+
+      // Step 4: Approve transfer
+      const completed = await ticketService.approveTransfer(orgId, transfer.id, 'resale-orchestrator');
+
+      res.status(200).json({
+        data: {
+          transferId: completed.id,
+          ticketId,
+          status: completed.status,
+          fromWallet: completed.fromWallet,
+          toWallet: completed.toWallet,
+          price: completed.resaleFee ?? '0',
+          currency: completed.resaleFeeCurrency ?? 'ETH',
+        },
+      });
+    } catch (stepError) {
+      // Rollback: reject the transfer if any step after creation fails
+      try {
+        await ticketService.rejectTransfer(
+          orgId,
+          transfer.id,
+          `Resale orchestration failed: ${stepError instanceof Error ? stepError.message : 'Unknown error'}`,
+          'resale-orchestrator',
+        );
+      } catch {
+        // Best-effort rollback
+      }
+      throw stepError;
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================================================
 // Metadata Update Routes
 // ============================================================================
 
