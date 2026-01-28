@@ -51,6 +51,7 @@ import { GovernanceModule } from './modules/GovernanceClient.js';
 import { EscrowModule } from './modules/EscrowClient.js';
 import { CashFlowModule } from './modules/CashFlowClient.js';
 import { DLDModule } from './modules/DLDClient.js';
+import { TicketsClient } from './modules/TicketsClient.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -99,6 +100,9 @@ export class ApiClient {
   /** DLD - Dubai Land Department integration */
   public readonly dld: DLDModule;
 
+  /** Tickets - Airline ticket NFT lifecycle (issue, check-in, board, transfer, burn) */
+  public readonly tickets: TicketsClient;
+
   constructor(config: TokenizationSDKConfig) {
     // Validate API key format
     if (!config.apiKey || !config.apiKey.startsWith('sk_')) {
@@ -139,6 +143,7 @@ export class ApiClient {
     this.escrow = new EscrowModule(this.http);
     this.cashflow = new CashFlowModule(this.http);
     this.dld = new DLDModule(this.http);
+    this.tickets = new TicketsClient(this.http);
   }
 
   /**

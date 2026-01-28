@@ -378,7 +378,7 @@ export function createCursorFetcher<T, P extends Record<string, any>>(
   method: (params: P) => Promise<PaginatedResponse<T>>,
   baseParams: Omit<P, 'cursor'>
 ): (cursor?: string) => Promise<PaginatedResponse<T>> {
-  return (cursor?: string) => method({ ...baseParams, cursor } as P);
+  return (cursor?: string) => method({ ...baseParams, cursor } as unknown as P);
 }
 
 /**
@@ -389,7 +389,7 @@ export function createPageFetcher<T, P extends Record<string, any>>(
   baseParams: Omit<P, 'page' | 'limit'>
 ): (page: number, limit: number) => Promise<PaginatedResponse<T>> {
   return (page: number, limit: number) =>
-    method({ ...baseParams, page, limit } as P);
+    method({ ...baseParams, page, limit } as unknown as P);
 }
 
 /**

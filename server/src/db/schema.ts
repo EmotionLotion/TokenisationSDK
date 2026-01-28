@@ -1777,6 +1777,185 @@ export const stateTransitions = pgTable('state_transitions', {
 }));
 
 // ============================================================================
+// SECTION 15: Airline Tickets (NFT Utility Tokens)
+// ============================================================================
+
+// Airline Tickets - Core ticket records
+export const airlineTickets = pgTable('airline_tickets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').references(() => tokens.id, { onDelete: 'set null' }),
+  // On-chain reference
+  chainTokenId: varchar('chain_token_id', { length: 78 }), // On-chain NFT token ID
+  contractAddress: varchar('contract_address', { length: 42 }),
+  chainId: integer('chain_id'),
+  // Flight info
+  flightNumber: varchar('flight_number', { length: 16 }).notNull(),
+  airline: varchar('airline', { length: 8 }).notNull(),
+  departureTime: timestamp('departure_time', { withTimezone: true }).notNull(),
+  arrivalTime: timestamp('arrival_time', { withTimezone: true }).notNull(),
+  departureAirport: varchar('departure_airport', { length: 4 }).notNull(),
+  arrivalAirport: varchar('arrival_airport', { length: 4 }).notNull(),
+  gate: varchar('gate', { length: 16 }),
+  seat: varchar('seat', { length: 8 }),
+  ticketClass: varchar('ticket_class', { length: 20 }).notNull().default('ECONOMY'), // ECONOMY, PREMIUM_ECONOMY, BUSINESS, FIRST
+  // Passenger
+  passengerId: uuid('passenger_id').references(() => investors.id, { onDelete: 'set null' }),
+  passengerWallet: varchar('passenger_wallet', { length: 42 }),
+  passengerName: varchar('passenger_name', { length: 256 }),
+  eTicketNumber: varchar('e_ticket_number', { length: 64 }),
+  bookingReference: varchar('booking_reference', { length: 16 }),
+  // Lifecycle
+  status: varchar('status', { length: 32 }).notNull().default('ISSUED'),
+  // ISSUED, CONFIRMED, CHECKED_IN, BOARDED, COMPLETED, CANCELLED, REFUNDED, EXPIRED, BURNED, VOID
+  issuedAt: timestamp('issued_at', { withTimezone: true }).defaultNow(),
+  checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+  boardedAt: timestamp('boarded_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  burnedAt: timestamp('burned_at', { withTimezone: true }),
+  // Transfer rules
+  transferable: boolean('transferable').default(true),
+  maxTransfers: integer('max_transfers').default(3),
+  transferCount: integer('transfer_count').default(0),
+  // Pricing
+  pricePaid: numeric('price_paid', { precision: 18, scale: 8 }),
+  currency: varchar('currency', { length: 8 }).default('ETH'),
+  // Metadata
+  metadataVersion: integer('metadata_version').default(1),
+  metadataUri: text('metadata_uri'), // IPFS/S3 pointer for rich metadata
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_airline_tickets_org').on(table.orgId),
+  flightIdx: index('idx_airline_tickets_flight').on(table.flightNumber, table.departureTime),
+  statusIdx: index('idx_airline_tickets_status').on(table.status),
+  passengerIdx: index('idx_airline_tickets_passenger').on(table.passengerId),
+  walletIdx: index('idx_airline_tickets_wallet').on(table.passengerWallet),
+  eTicketIdx: uniqueIndex('idx_airline_tickets_eticket').on(table.orgId, table.eTicketNumber),
+  bookingIdx: index('idx_airline_tickets_booking').on(table.bookingReference),
+  departureIdx: index('idx_airline_tickets_departure').on(table.departureTime),
+  chainTokenIdx: index('idx_airline_tickets_chain_token').on(table.contractAddress, table.chainTokenId),
+}));
+
+// Ticket Transfers - Transfer request history
+export const ticketTransfers = pgTable('ticket_transfers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  ticketId: uuid('ticket_id').notNull().references(() => airlineTickets.id, { onDelete: 'cascade' }),
+  // Transfer details
+  fromWallet: varchar('from_wallet', { length: 42 }).notNull(),
+  toWallet: varchar('to_wallet', { length: 42 }).notNull(),
+  fromPassengerId: uuid('from_passenger_id').references(() => investors.id, { onDelete: 'set null' }),
+  toPassengerId: uuid('to_passenger_id').references(() => investors.id, { onDelete: 'set null' }),
+  // Approval
+  status: varchar('status', { length: 32 }).notNull().default('PENDING'), // PENDING, KYC_REQUIRED, APPROVED, REJECTED, COMPLETED, EXPIRED
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+  // Re-KYC
+  kycRequired: boolean('kyc_required').default(false),
+  kycCompleted: boolean('kyc_completed').default(false),
+  kycCompletedAt: timestamp('kyc_completed_at', { withTimezone: true }),
+  // Resale fee
+  resaleFee: numeric('resale_fee', { precision: 18, scale: 8 }),
+  resaleFeeCurrency: varchar('resale_fee_currency', { length: 8 }),
+  resaleFeePaid: boolean('resale_fee_paid').default(false),
+  // Idempotency
+  idempotencyKey: varchar('idempotency_key', { length: 128 }),
+  // On-chain
+  txHash: varchar('tx_hash', { length: 66 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_ticket_transfers_org').on(table.orgId),
+  ticketIdx: index('idx_ticket_transfers_ticket').on(table.ticketId),
+  statusIdx: index('idx_ticket_transfers_status').on(table.status),
+  idempotencyIdx: uniqueIndex('idx_ticket_transfers_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
+// Ticket Events - Audit trail for ticket operations
+export const ticketEvents = pgTable('ticket_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  ticketId: uuid('ticket_id').notNull().references(() => airlineTickets.id, { onDelete: 'cascade' }),
+  eventType: varchar('event_type', { length: 64 }).notNull(),
+  // TICKET_ISSUED, CHECK_IN_COMPLETED, BOARDING_COMPLETED, TICKET_TRANSFERRED,
+  // TICKET_CANCELLED, TICKET_REFUNDED, TICKET_EXPIRED, TICKET_BURNED,
+  // GATE_CHANGED, SEAT_CHANGED, FLIGHT_DELAYED, METADATA_UPDATED, KYC_VERIFIED
+  actor: varchar('actor', { length: 256 }), // Who performed the action
+  actorRole: varchar('actor_role', { length: 32 }), // AIRLINE_ADMIN, AIRLINE_AGENT, PASSENGER, SYSTEM
+  previousState: varchar('previous_state', { length: 32 }),
+  newState: varchar('new_state', { length: 32 }),
+  details: jsonb('details').default({}), // Event-specific data
+  correlationId: varchar('correlation_id', { length: 64 }),
+  txHash: varchar('tx_hash', { length: 66 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_ticket_events_org').on(table.orgId),
+  ticketIdx: index('idx_ticket_events_ticket').on(table.ticketId),
+  eventTypeIdx: index('idx_ticket_events_type').on(table.eventType),
+  correlationIdx: index('idx_ticket_events_correlation').on(table.correlationId),
+  createdAtIdx: index('idx_ticket_events_created').on(table.createdAt),
+}));
+
+// Ticket Metadata Versions - Track metadata changes (gate, seat, etc.)
+export const ticketMetadataVersions = pgTable('ticket_metadata_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  ticketId: uuid('ticket_id').notNull().references(() => airlineTickets.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  field: varchar('field', { length: 64 }).notNull(), // gate, seat, ticketClass, departureTime, status
+  oldValue: text('old_value'),
+  newValue: text('new_value'),
+  changedBy: varchar('changed_by', { length: 256 }),
+  changeReason: varchar('change_reason', { length: 256 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  ticketVersionIdx: index('idx_ticket_metadata_versions_ticket').on(table.ticketId, table.version),
+  fieldIdx: index('idx_ticket_metadata_versions_field').on(table.ticketId, table.field),
+}));
+
+// Resale Fee Ledger - Track resale fees collected
+export const resaleFeeLedger = pgTable('resale_fee_ledger', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  ticketId: uuid('ticket_id').notNull().references(() => airlineTickets.id, { onDelete: 'cascade' }),
+  transferId: uuid('transfer_id').notNull().references(() => ticketTransfers.id, { onDelete: 'cascade' }),
+  amount: numeric('amount', { precision: 18, scale: 8 }).notNull(),
+  currency: varchar('currency', { length: 8 }).notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('PENDING'), // PENDING, COLLECTED, FAILED, REFUNDED
+  collectedAt: timestamp('collected_at', { withTimezone: true }),
+  txHash: varchar('tx_hash', { length: 66 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_resale_fee_org').on(table.orgId),
+  ticketIdx: index('idx_resale_fee_ticket').on(table.ticketId),
+  statusIdx: index('idx_resale_fee_status').on(table.status),
+}));
+
+// Ticket Webhooks - Webhook configurations for ticket events
+export const ticketWebhooks = pgTable('ticket_webhooks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  events: text('events').array().notNull().default([]), // Which event types to subscribe to
+  secret: varchar('secret', { length: 256 }).notNull(), // HMAC-SHA256 signing secret
+  status: varchar('status', { length: 32 }).notNull().default('active'), // active, paused, disabled
+  failureCount: integer('failure_count').default(0),
+  lastDeliveredAt: timestamp('last_delivered_at', { withTimezone: true }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_ticket_webhooks_org').on(table.orgId),
+  statusIdx: index('idx_ticket_webhooks_status').on(table.status),
+}));
+
+// ============================================================================
 // TYPE EXPORTS
 // ============================================================================
 
@@ -1959,3 +2138,17 @@ export type NewComplianceAuditLogEntry = typeof complianceAuditLog.$inferInsert;
 // State Transition Types
 export type StateTransition = typeof stateTransitions.$inferSelect;
 export type NewStateTransition = typeof stateTransitions.$inferInsert;
+
+// Airline Ticket Types
+export type AirlineTicket = typeof airlineTickets.$inferSelect;
+export type NewAirlineTicket = typeof airlineTickets.$inferInsert;
+export type TicketTransfer = typeof ticketTransfers.$inferSelect;
+export type NewTicketTransfer = typeof ticketTransfers.$inferInsert;
+export type TicketEvent = typeof ticketEvents.$inferSelect;
+export type NewTicketEvent = typeof ticketEvents.$inferInsert;
+export type TicketMetadataVersion = typeof ticketMetadataVersions.$inferSelect;
+export type NewTicketMetadataVersion = typeof ticketMetadataVersions.$inferInsert;
+export type ResaleFeeEntry = typeof resaleFeeLedger.$inferSelect;
+export type NewResaleFeeEntry = typeof resaleFeeLedger.$inferInsert;
+export type TicketWebhook = typeof ticketWebhooks.$inferSelect;
+export type NewTicketWebhook = typeof ticketWebhooks.$inferInsert;

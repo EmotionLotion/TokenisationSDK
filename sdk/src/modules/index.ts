@@ -26,6 +26,7 @@ export * from './Escrow.js';
 export * from './Vesting.js';
 export * from './Offerings.js';
 export * from './RegulatoryReports.js';
+export * from './Redemption.js';
 
 // API Client Modules
 export { ProjectsModule } from './projects.js';
@@ -37,6 +38,20 @@ export { AssetsModule } from './assets.js';
 export { EventsModule } from './events.js';
 export { WebhooksModule } from './webhooks.js';
 export { AuditModule } from './audit.js';
+export { TicketsClient } from './TicketsClient.js';
+export type {
+  Ticket,
+  IssueTicketInput,
+  TransferTicketInput,
+  TicketTransferRequest,
+  TicketEvent as TicketAuditEvent,
+  MetadataVersion as ApiMetadataVersion,
+  UpdateMetadataInput,
+  ReconciliationReport as ApiReconciliationReport,
+  ListTicketsParams,
+  TicketStatus as ApiTicketStatus,
+  TicketClass as ApiTicketClass,
+} from './TicketsClient.js';
 
 // Thin API Client Modules (Production-ready, server-backed)
 export { GovernanceModule } from './GovernanceClient.js';

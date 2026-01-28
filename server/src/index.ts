@@ -43,6 +43,7 @@ import { issuanceRouter } from './routes/issuance.routes.js';
 import { exportRouter } from './routes/export.routes.js';
 import { transitionRouter } from './routes/transition.routes.js';
 import { oauthRouter } from './routes/oauth.routes.js';
+import { ticketRouter } from './routes/ticket.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
@@ -180,6 +181,9 @@ app.use('/api/v1/export', apiKeyMiddleware, tenantContextMiddleware, exportRoute
 
 // State Transitions & Audit Trail
 app.use('/api/v1/transitions', apiKeyMiddleware, tenantContextMiddleware, transitionRouter);
+
+// Airline Tickets (NFT Utility Tokens)
+app.use('/api/v1/tickets', apiKeyMiddleware, tenantContextMiddleware, ticketRouter);
 
 // External Integrations
 app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);

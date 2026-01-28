@@ -201,8 +201,9 @@ function log(
     requestId?: string;
     orgId?: string;
     userId?: string;
-    error?: Error;
+    error?: Error | unknown;
     metadata?: Record<string, unknown>;
+    [key: string]: unknown;
   }
 ): void {
   // Check log level
@@ -221,10 +222,13 @@ function log(
   };
 
   if (context?.error) {
+    const err = context.error instanceof Error
+      ? context.error
+      : new Error(String(context.error));
     entry.error = {
-      name: context.error.name,
-      message: context.error.message,
-      stack: currentConfig.includeStack ? context.error.stack : undefined,
+      name: err.name,
+      message: err.message,
+      stack: currentConfig.includeStack ? err.stack : undefined,
     };
   }
 

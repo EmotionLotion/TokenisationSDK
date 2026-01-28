@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "../src/factory/TokenFactory.sol";
 import "../src/identity/IdentityRegistry.sol";
 import "../src/tokens/ComplianceToken.sol";
+import "../src/tokens/AirlineTicketNFT.sol";
 
 /**
  * @title Deploy
@@ -16,6 +17,7 @@ contract Deploy is Script {
     address public identityRegistry;
     address public tokenFactory;
     address public sampleToken;
+    address public airlineTicketNFT;
 
     function run() external {
         uint256 deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
@@ -77,6 +79,22 @@ contract Deploy is Script {
 
         console.log("   Registered 3 test accounts");
 
+        // 5. Deploy AirlineTicketNFT
+        console.log("5. Deploying AirlineTicketNFT...");
+        AirlineTicketNFT ticketNFT = new AirlineTicketNFT(
+            "AHOY Airline Tickets",
+            "AHOY-TKT",
+            "https://api.ahoy.io/tickets/metadata/"
+        );
+        airlineTicketNFT = address(ticketNFT);
+        console.log("   AirlineTicketNFT:", airlineTicketNFT);
+
+        // Configure ticket operators
+        ticketNFT.addAirline(testAccount1);
+        ticketNFT.addAgent(testAccount2);
+        console.log("   Added airline operator:", testAccount1);
+        console.log("   Added booking agent:", testAccount2);
+
         vm.stopBroadcast();
 
         // Output summary
@@ -89,6 +107,7 @@ contract Deploy is Script {
         console.log("  IdentityRegistry:", identityRegistry);
         console.log("  TokenFactory:", tokenFactory);
         console.log("  SampleToken:", sampleToken);
+        console.log("  AirlineTicketNFT:", airlineTicketNFT);
         console.log("");
         console.log("Test Accounts (pre-verified):");
         console.log("  Account 1:", testAccount1, "(UAE)");

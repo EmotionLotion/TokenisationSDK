@@ -1,5 +1,6 @@
 import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import Database from 'better-sqlite3';
 import * as schema from '../db/schema.js';
@@ -11,8 +12,8 @@ const { Pool } = pg;
 const DB_MODE = process.env.DB_MODE || 'postgresql';
 const SQLITE_PATH = process.env.SQLITE_PATH || './data/ahoy.db';
 
-// Database instances
-let db: ReturnType<typeof drizzlePg> | ReturnType<typeof drizzleSqlite>;
+// Database instances — typed as PostgreSQL with schema for relational query access
+let db: NodePgDatabase<typeof schema>;
 let pool: pg.Pool | null = null;
 let sqliteDb: Database.Database | null = null;
 

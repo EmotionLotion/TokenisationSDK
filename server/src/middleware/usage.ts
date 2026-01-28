@@ -37,12 +37,12 @@ export function usageMiddleware() {
     let responseSize = 0;
 
     // Override end to capture response size
-    res.end = function(chunk?: any, ...args: any[]): Response {
+    res.end = function(this: Response, chunk?: any, encoding?: BufferEncoding | (() => void), cb?: () => void): Response {
       if (chunk) {
         responseSize = Buffer.byteLength(chunk);
       }
-      return originalEnd.call(this, chunk, ...args) as Response;
-    };
+      return (originalEnd as Function).call(this, chunk, encoding, cb) as Response;
+    } as typeof res.end;
 
     // Capture when response finishes
     res.on('finish', async () => {

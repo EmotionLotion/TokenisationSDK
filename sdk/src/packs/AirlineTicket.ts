@@ -2753,7 +2753,8 @@ export class AirlineTicketEngine {
       }
 
       currency = metadata.fare.currency;
-      statusCounts[metadata.status]++;
+      const statusKey = metadata.status as keyof typeof statusCounts;
+      if (statusKey in statusCounts) statusCounts[statusKey] = (statusCounts[statusKey] ?? 0) + 1;
 
       entries.push({
         ticketId,

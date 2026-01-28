@@ -15,7 +15,7 @@ export interface HmacOptions {
 }
 
 export interface HashOptions {
-  algorithm: 'sha256' | 'sha512' | 'md5';
+  algorithm: 'sha256' | 'sha512' | 'md5' | 'sha1';
   encoding?: 'hex' | 'base64';
 }
 
