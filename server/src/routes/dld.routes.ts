@@ -162,6 +162,20 @@ dldRouter.post('/titles/:id/verify', apiKeyMiddleware, async (req: ApiKeyRequest
   }
 });
 
+// Verify title on-chain via Chainlink Functions
+dldRouter.post('/titles/:id/verify-onchain', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const result = await dldService.verifyTitleOnChain(req.params.id, req.apiKey.orgId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get title events
 dldRouter.get('/titles/:id/events', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {

@@ -272,6 +272,192 @@ export async function linkTitleToAsset(titleId: string, assetId: string, orgId: 
 }
 
 // ============================================================================
+// On-Chain Verification (Chainlink Functions)
+// ============================================================================
+
+export interface OnChainVerificationResult {
+  titleId: string;
+  externalTitleDeedId: string;
+  onChainVerification: boolean;
+  verification?: {
+    deedNumber: string;
+    status: 'VALID' | 'EXPIRED' | 'DISPUTED' | 'NOT_FOUND';
+    ownerName: string;
+    propertyType: string;
+    encumbrances: string[];
+    verifiedAt: string;
+    source: string;
+  };
+  updatedStatus?: string;
+  reason?: string;
+  error?: string;
+  currentStatus?: string;
+}
+
+export async function verifyTitleOnChain(id: string, orgId: string): Promise<OnChainVerificationResult> {
+  const title = await getTitle(id, orgId);
+
+  // Check for Chainlink Functions configuration in environment
+  const chainId = process.env.CHAINLINK_CHAIN_ID ? parseInt(process.env.CHAINLINK_CHAIN_ID) : undefined;
+  const rpcUrl = process.env.CHAINLINK_RPC_URL;
+  const subscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID;
+  const consumerAddress = process.env.CHAINLINK_CONSUMER_ADDRESS;
+  const privateKey = process.env.CHAINLINK_PRIVATE_KEY;
+
+  if (!chainId || !rpcUrl || !subscriptionId || !consumerAddress) {
+    // Chainlink not configured - return informational result
+    await emitDldEvent(orgId, 'dld.title.onchain_verification_skipped', {
+      titleId: id,
+      externalTitleDeedId: title.externalTitleDeedId,
+      reason: 'Chainlink Functions not configured',
+    });
+
+    return {
+      titleId: id,
+      externalTitleDeedId: title.externalTitleDeedId,
+      onChainVerification: false,
+      reason: 'Chainlink Functions not configured. Set CHAINLINK_CHAIN_ID, CHAINLINK_RPC_URL, CHAINLINK_SUBSCRIPTION_ID, and CHAINLINK_CONSUMER_ADDRESS.',
+      currentStatus: title.status,
+    };
+  }
+
+  try {
+    // Dynamic import ethers for on-chain interaction
+    const ethers = await import('ethers');
+
+    const provider = new ethers.JsonRpcProvider(rpcUrl, chainId);
+    const signer = privateKey ? new ethers.Wallet(privateKey, provider) : undefined;
+
+    if (!signer) {
+      return {
+        titleId: id,
+        externalTitleDeedId: title.externalTitleDeedId,
+        onChainVerification: false,
+        error: 'CHAINLINK_PRIVATE_KEY required for on-chain verification',
+        currentStatus: title.status,
+      };
+    }
+
+    // Call the consumer contract to execute Chainlink Functions request
+    const consumerAbi = [
+      'function sendRequest(string memory source, bytes memory encryptedSecretsUrls, uint8 donHostedSecretsSlotID, uint64 donHostedSecretsVersion, string[] memory args, bytes[] memory bytesArgs, uint64 subscriptionId, uint32 gasLimit, bytes32 donId) external returns (bytes32 requestId)',
+      'function latestResponse() external view returns (bytes memory)',
+      'event Response(bytes32 indexed requestId, bytes response, bytes err)',
+    ];
+
+    const consumer = new ethers.Contract(consumerAddress, consumerAbi, signer);
+
+    const DON_IDS: Record<number, string> = {
+      84532: 'fun-base-sepolia-1',
+      11155111: 'fun-ethereum-sepolia-1',
+      80001: 'fun-polygon-mumbai-1',
+    };
+
+    const donId = DON_IDS[chainId] || '';
+    const deedNumber = title.externalTitleDeedId;
+
+    // DLD verification JavaScript source for Chainlink Functions
+    const source = `
+      const [deedNumber] = args;
+      let deedData;
+      try {
+        const response = await Functions.makeHttpRequest({
+          url: \`https://api.dld.gov.ae/v1/deeds/\${deedNumber}/verify\`,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        deedData = response.error ? null : response.data;
+      } catch (e) { deedData = null; }
+
+      if (!deedData) {
+        return Functions.encodeString(JSON.stringify({
+          deedNumber, status: 'NOT_FOUND', ownerName: '', propertyType: '', encumbrances: []
+        }));
+      }
+
+      return Functions.encodeString(JSON.stringify({
+        deedNumber: deedData.deedNumber || deedNumber,
+        status: deedData.status || 'VALID',
+        ownerName: deedData.ownerName || '',
+        propertyType: deedData.propertyType || '',
+        encumbrances: deedData.encumbrances || [],
+      }));
+    `;
+
+    const tx = await consumer.sendRequest(
+      source,
+      '0x',
+      0,
+      0n,
+      [deedNumber],
+      [],
+      BigInt(subscriptionId),
+      300000,
+      ethers.encodeBytes32String(donId)
+    );
+
+    const receipt = await tx.wait();
+
+    // Wait for response event
+    const response = await new Promise<{ response: Uint8Array; error?: Uint8Array }>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        consumer.off('Response');
+        reject(new Error('Functions request timed out'));
+      }, 120000);
+
+      consumer.on('Response', (_requestId: string, resp: Uint8Array, respErr: Uint8Array) => {
+        clearTimeout(timeout);
+        consumer.off('Response');
+        resolve({ response: resp, error: respErr.length > 0 ? respErr : undefined });
+      });
+    });
+
+    const decoded = JSON.parse(ethers.toUtf8String(response.response));
+    const verification = {
+      ...decoded,
+      verifiedAt: new Date().toISOString(),
+      source: 'chainlink-functions',
+    };
+
+    // Update title status based on on-chain result
+    if (verification.status === 'VALID') {
+      try { await verifyTitle(id, orgId, 'chainlink-functions'); } catch { /* may already be verified */ }
+    } else if (verification.status === 'DISPUTED') {
+      await setTitleConflict(id, orgId, 'On-chain verification: deed disputed');
+    }
+
+    await emitDldEvent(orgId, 'dld.title.onchain_verified', {
+      titleId: id,
+      externalTitleDeedId: title.externalTitleDeedId,
+      onChainStatus: verification.status,
+      verifiedAt: verification.verifiedAt,
+    });
+
+    return {
+      titleId: id,
+      externalTitleDeedId: title.externalTitleDeedId,
+      onChainVerification: true,
+      verification,
+      updatedStatus: verification.status === 'VALID' ? 'verified' :
+                     verification.status === 'DISPUTED' ? 'conflict' : title.status,
+    };
+  } catch (error) {
+    await emitDldEvent(orgId, 'dld.title.onchain_verification_failed', {
+      titleId: id,
+      externalTitleDeedId: title.externalTitleDeedId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    return {
+      titleId: id,
+      externalTitleDeedId: title.externalTitleDeedId,
+      onChainVerification: false,
+      error: error instanceof Error ? error.message : 'On-chain verification failed',
+      currentStatus: title.status,
+    };
+  }
+}
+
+// ============================================================================
 // DLD Event Processing
 // ============================================================================
 

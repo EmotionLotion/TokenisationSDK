@@ -76,6 +76,7 @@ export {
   type FunctionsResponse,
   type SafetyScoreResult,
   type CarbonOffsetResult,
+  type DLDVerificationResult,
 } from './FunctionsPlugin.js';
 
 export {

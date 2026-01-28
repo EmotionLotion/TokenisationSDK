@@ -620,3 +620,119 @@ complianceRouter.get('/receipts/:id', apiKeyMiddleware, async (req: ApiKeyReques
     next(error);
   }
 });
+
+// ============================================================================
+// KYC Routes
+// ============================================================================
+
+const configureKycSchema = z.object({
+  provider: z.string().min(1),
+  region: z.string().min(1),
+  level: z.string().optional(),
+  webhookUrl: z.string().url().optional(),
+});
+
+const freezeInvestorSchema = z.object({
+  reason: z.string().min(1),
+});
+
+// Configure KYC provider for the organization
+complianceRouter.post('/kyc/configure', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const input = configureKycSchema.parse(req.body);
+    const config = await complianceService.configureKYC({
+      ...input,
+      orgId: req.apiKey.orgId,
+    });
+
+    res.status(201).json(config);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+    } else {
+      next(error);
+    }
+  }
+});
+
+// Initiate KYC verification for an investor
+complianceRouter.post('/kyc/verify/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const session = await complianceService.initiateKYCVerification(
+      req.params.investorId,
+      req.apiKey.orgId,
+    );
+
+    res.status(201).json(session);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get KYC verification status for an investor
+complianceRouter.get('/kyc/status/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const status = await complianceService.getKYCVerificationStatus(
+      req.params.investorId,
+      req.apiKey.orgId,
+    );
+
+    res.json(status);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Freeze an investor
+complianceRouter.post('/kyc/freeze/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const input = freezeInvestorSchema.parse(req.body);
+    const result = await complianceService.freezeInvestor(
+      req.params.investorId,
+      req.apiKey.orgId,
+      input.reason,
+    );
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+    } else {
+      next(error);
+    }
+  }
+});
+
+// Unfreeze an investor
+complianceRouter.post('/kyc/unfreeze/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const result = await complianceService.unfreezeInvestor(
+      req.params.investorId,
+      req.apiKey.orgId,
+    );
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});

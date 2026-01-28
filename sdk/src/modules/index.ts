@@ -111,6 +111,16 @@ export type {
 } from './CashFlowClient.js';
 
 export { DLDModule } from './DLDClient.js';
+
+export { LegalModule } from './LegalModule.js';
+export type {
+  ConfigureKYCInput,
+  KYCConfiguration,
+  VerificationSession,
+  VerificationStatus,
+  FreezeResult,
+  UnfreezeResult,
+} from './LegalModule.js';
 export type {
   TitleDeed,
   TokenizationEligibility,

@@ -63,6 +63,7 @@ export enum AutomationTaskType {
   NAV_UPDATE = 'NAV_UPDATE',
   ESCROW_RELEASE = 'ESCROW_RELEASE',
   LICENSE_RENEWAL = 'LICENSE_RENEWAL',
+  DLD_REGISTRY_CHECK = 'DLD_REGISTRY_CHECK',
   CUSTOM = 'CUSTOM',
 }
 
@@ -474,6 +475,55 @@ export class ChainlinkAutomationPlugin {
       enabled: true,
       performCount: 0,
       metadata: { escrowId: params.escrowId, releaseCondition: params.releaseCondition },
+    };
+
+    this.tasks.set(task.id, task);
+    return ok(task);
+  }
+
+  /**
+   * Create and register a DLD registry watcher automation task
+   */
+  async createDLDRegistryWatcher(params: {
+    watcherContract: string;
+    dldTitleId: string;
+    deedNumber: string;
+    checkInterval?: string; // e.g., "hourly", "daily"
+    gasLimit?: number;
+    admin: string;
+  }): Promise<Result<AutomationTask, string>> {
+    const checkInterval = params.checkInterval || 'daily';
+
+    const checkData = ethers.AbiCoder.defaultAbiCoder().encode(
+      ['string', 'string', 'string', 'string'],
+      ['DLD_REGISTRY_CHECK', params.dldTitleId, params.deedNumber, checkInterval]
+    );
+
+    const result = await this.registerUpkeep({
+      target: params.watcherContract,
+      gasLimit: params.gasLimit || 300000,
+      admin: params.admin,
+      triggerType: TriggerType.CONDITIONAL,
+      checkData,
+    });
+
+    if (!result.success) {
+      return err(result.error);
+    }
+
+    const task: AutomationTask = {
+      id: `dld-registry-${params.dldTitleId}`,
+      type: AutomationTaskType.DLD_REGISTRY_CHECK,
+      upkeepId: result.data,
+      contractAddress: params.watcherContract,
+      checkData,
+      enabled: true,
+      performCount: 0,
+      metadata: {
+        dldTitleId: params.dldTitleId,
+        deedNumber: params.deedNumber,
+        checkInterval,
+      },
     };
 
     this.tasks.set(task.id, task);

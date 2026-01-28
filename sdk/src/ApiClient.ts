@@ -53,6 +53,7 @@ import { CashFlowModule } from './modules/CashFlowClient.js';
 import { DLDModule } from './modules/DLDClient.js';
 import { TicketsClient } from './modules/TicketsClient.js';
 import { ResaleModule } from './modules/ResaleModule.js';
+import { LegalModule } from './modules/LegalModule.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -107,6 +108,9 @@ export class ApiClient {
   /** Resale - Unified facade for ticket resale (list, offer, purchase, cancel) */
   public readonly resale: ResaleModule;
 
+  /** Legal - KYC/AML compliance, investor verification, freeze/unfreeze */
+  public readonly legal: LegalModule;
+
   constructor(config: TokenizationSDKConfig) {
     // Validate API key format
     if (!config.apiKey || !config.apiKey.startsWith('sk_')) {
@@ -149,6 +153,7 @@ export class ApiClient {
     this.dld = new DLDModule(this.http);
     this.tickets = new TicketsClient(this.http);
     this.resale = new ResaleModule(this.http);
+    this.legal = new LegalModule(this.http);
   }
 
   /**

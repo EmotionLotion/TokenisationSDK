@@ -90,6 +90,16 @@ export interface CarbonOffsetResult {
   source: 'chainlink-functions';
 }
 
+export interface DLDVerificationResult {
+  deedNumber: string;
+  status: 'VALID' | 'EXPIRED' | 'DISPUTED' | 'NOT_FOUND';
+  ownerName: string;
+  propertyType: string;
+  encumbrances: string[];
+  verifiedAt: string;
+  source: 'chainlink-functions';
+}
+
 /**
  * Chainlink Functions Plugin
  *
@@ -373,6 +383,82 @@ export class ChainlinkFunctionsPlugin {
       return ok(Number(value) / 10000);
     } catch (e) {
       return err('Failed to decode loyalty multiplier response');
+    }
+  }
+
+  /**
+   * Verify a DLD title deed on-chain using Chainlink Functions
+   */
+  async verifyDLDDeed(
+    deedNumber: string
+  ): Promise<Result<DLDVerificationResult, string>> {
+    const source = `
+      const [deedNumber] = args;
+
+      // Query DLD API for deed verification
+      let deedData;
+      try {
+        const response = await Functions.makeHttpRequest({
+          url: \`https://api.dld.gov.ae/v1/deeds/\${deedNumber}/verify\`,
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        deedData = response.error ? null : response.data;
+      } catch (e) {
+        deedData = null;
+      }
+
+      // Fallback to secondary source
+      if (!deedData) {
+        try {
+          const fallback = await Functions.makeHttpRequest({
+            url: \`https://api.dubailand.gov.ae/v1/titles/\${deedNumber}\`,
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+          deedData = fallback.error ? null : fallback.data;
+        } catch (e) {
+          deedData = null;
+        }
+      }
+
+      if (!deedData) {
+        return Functions.encodeString(JSON.stringify({
+          deedNumber: deedNumber,
+          status: 'NOT_FOUND',
+          ownerName: '',
+          propertyType: '',
+          encumbrances: [],
+        }));
+      }
+
+      return Functions.encodeString(JSON.stringify({
+        deedNumber: deedData.deedNumber || deedNumber,
+        status: deedData.status || 'VALID',
+        ownerName: deedData.ownerName || '',
+        propertyType: deedData.propertyType || '',
+        encumbrances: deedData.encumbrances || [],
+      }));
+    `;
+
+    const result = await this.executeRequest({
+      source,
+      args: [deedNumber],
+    });
+
+    if (!result.success) {
+      return err(result.error);
+    }
+
+    try {
+      const decoded = JSON.parse(ethers.toUtf8String(result.data.response));
+      return ok({
+        ...decoded,
+        verifiedAt: new Date().toISOString(),
+        source: 'chainlink-functions',
+      });
+    } catch (e) {
+      return err('Failed to decode DLD verification response');
     }
   }
 
