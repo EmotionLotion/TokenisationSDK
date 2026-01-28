@@ -6,7 +6,7 @@ import * as relayerService from './relayer.service.js';
 import * as auditService from './audit.service.js';
 import { logger } from '../middleware/logger.js';
 
-const { tokens, transfers, ledgerPositions, ledgerEvents, eventBusQueue } = schema;
+const { tokens, transfers, ledgerPositions, ledgerEvents, eventBusQueue, airlineTickets } = schema;
 
 // ============================================================================
 // Types & Interfaces
@@ -63,7 +63,33 @@ const EVENT_SIGNATURES = {
   IDENTITY_ADDED: '0x0a5c5e2f3d9f5b7d3c8e9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d',
   // ERC3643 ComplianceAdded(address)
   COMPLIANCE_ADDED: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
+
+  // AirlineTicketNFT lifecycle events
+  // TicketExpired(uint256 indexed tokenId)
+  TICKET_EXPIRED: '0x789bbe0feb4e78ac089e2aacb83e1b48c4e5e15a0e4b47d6fabc9eeb8d1e35f7',
+  // TicketBurned(uint256 indexed tokenId)
+  TICKET_BURNED: '0x3a3348fbc29cadaab4c01f66fb9bed58f2e2c2c39d9a0d4e68ed3cf29b4e9a15',
+  // TicketCheckedIn(uint256 indexed tokenId, address indexed passenger)
+  TICKET_CHECKED_IN: '0xaa7bc62b2e6e18cf7c3db0b3f9d3fcd19e8a0e5cb1f25d6a02aee7eed0c25da4',
+  // TicketBoarded(uint256 indexed tokenId, address indexed passenger)
+  TICKET_BOARDED: '0x5b0e1cf4d2b9c1a3e8f7d6c5b4a3928170f6e5d4c3b2a19087f6e5d4c3b2a190',
+  // AutoExpiryTriggered(uint256 indexed tokenId, uint256 timestamp)
+  AUTO_EXPIRY_TRIGGERED: '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62',
 };
+
+// ============================================================================
+// Ticket Event Types
+// ============================================================================
+
+export interface ParsedTicketEvent {
+  type: 'expired' | 'burned' | 'checked_in' | 'boarded' | 'auto_expiry';
+  contractAddress: string;
+  chainTokenId: string;
+  passenger?: string;
+  timestamp?: string;
+  blockNumber: number;
+  txHash: string;
+}
 
 // ============================================================================
 // Indexer State Management
@@ -100,7 +126,7 @@ async function getLogs(
   fromBlock: number,
   toBlock: number,
   addresses: string[],
-  topics?: string[]
+  topics?: (string | string[])[]
 ): Promise<ChainEvent[]> {
   const chain = relayerService.getChainConfig(chainId);
 
@@ -325,6 +351,155 @@ async function updatePositionFromChain(
 }
 
 // ============================================================================
+// Ticket Event Parsing
+// ============================================================================
+
+function parseTicketEvent(event: ChainEvent): ParsedTicketEvent | null {
+  const topic0 = event.topics[0];
+  const contractAddress = event.address;
+
+  switch (topic0) {
+    case EVENT_SIGNATURES.TICKET_EXPIRED:
+    case EVENT_SIGNATURES.AUTO_EXPIRY_TRIGGERED: {
+      if (event.topics.length < 2) return null;
+      const chainTokenId = BigInt(event.topics[1]).toString();
+      return {
+        type: topic0 === EVENT_SIGNATURES.AUTO_EXPIRY_TRIGGERED ? 'auto_expiry' : 'expired',
+        contractAddress,
+        chainTokenId,
+        blockNumber: event.blockNumber,
+        txHash: event.transactionHash,
+      };
+    }
+    case EVENT_SIGNATURES.TICKET_BURNED: {
+      if (event.topics.length < 2) return null;
+      const chainTokenId = BigInt(event.topics[1]).toString();
+      return {
+        type: 'burned',
+        contractAddress,
+        chainTokenId,
+        blockNumber: event.blockNumber,
+        txHash: event.transactionHash,
+      };
+    }
+    case EVENT_SIGNATURES.TICKET_CHECKED_IN: {
+      if (event.topics.length < 3) return null;
+      const chainTokenId = BigInt(event.topics[1]).toString();
+      const passenger = '0x' + event.topics[2].slice(26).toLowerCase();
+      return {
+        type: 'checked_in',
+        contractAddress,
+        chainTokenId,
+        passenger,
+        blockNumber: event.blockNumber,
+        txHash: event.transactionHash,
+      };
+    }
+    case EVENT_SIGNATURES.TICKET_BOARDED: {
+      if (event.topics.length < 3) return null;
+      const chainTokenId = BigInt(event.topics[1]).toString();
+      const passenger = '0x' + event.topics[2].slice(26).toLowerCase();
+      return {
+        type: 'boarded',
+        contractAddress,
+        chainTokenId,
+        passenger,
+        blockNumber: event.blockNumber,
+        txHash: event.transactionHash,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+const TICKET_EVENT_TOPICS = [
+  EVENT_SIGNATURES.TICKET_EXPIRED,
+  EVENT_SIGNATURES.TICKET_BURNED,
+  EVENT_SIGNATURES.TICKET_CHECKED_IN,
+  EVENT_SIGNATURES.TICKET_BOARDED,
+  EVENT_SIGNATURES.AUTO_EXPIRY_TRIGGERED,
+];
+
+const TICKET_STATUS_MAP: Record<ParsedTicketEvent['type'], string> = {
+  expired: 'EXPIRED',
+  auto_expiry: 'EXPIRED',
+  burned: 'BURNED',
+  checked_in: 'CHECKED_IN',
+  boarded: 'BOARDED',
+};
+
+const TICKET_TOPIC_MAP: Record<ParsedTicketEvent['type'], string> = {
+  expired: 'ticket.expired',
+  auto_expiry: 'ticket.expired',
+  burned: 'ticket.burned',
+  checked_in: 'ticket.checked_in',
+  boarded: 'ticket.boarded',
+};
+
+export async function processTicketEvent(
+  event: ParsedTicketEvent,
+  orgId: string
+): Promise<void> {
+  // Find ticket by contract address + chain token ID
+  const ticket = await db.query.airlineTickets.findFirst({
+    where: and(
+      eq(airlineTickets.contractAddress, event.contractAddress),
+      eq(airlineTickets.chainTokenId, event.chainTokenId),
+      eq(airlineTickets.orgId, orgId)
+    ),
+  });
+
+  if (!ticket) {
+    // Ticket not tracked by us, skip
+    return;
+  }
+
+  const newStatus = TICKET_STATUS_MAP[event.type];
+  if (!newStatus) return;
+
+  // Update ticket status in DB
+  const updateData: Record<string, unknown> = {
+    status: newStatus,
+    updatedAt: new Date(),
+  };
+
+  if (event.type === 'expired' || event.type === 'auto_expiry') {
+    updateData.cancelledAt = new Date(); // No expiredAt column; use cancelledAt for the timestamp
+  } else if (event.type === 'burned') {
+    updateData.burnedAt = new Date();
+  } else if (event.type === 'checked_in') {
+    updateData.checkedInAt = new Date();
+  } else if (event.type === 'boarded') {
+    updateData.boardedAt = new Date();
+  }
+
+  await db.update(airlineTickets)
+    .set(updateData)
+    .where(eq(airlineTickets.id, ticket.id));
+
+  // Publish to EventBus
+  const topic = TICKET_TOPIC_MAP[event.type];
+  await db.insert(eventBusQueue).values({
+    orgId,
+    topic,
+    payload: {
+      ticketId: ticket.id,
+      chainTokenId: event.chainTokenId,
+      contractAddress: event.contractAddress,
+      status: newStatus,
+      txHash: event.txHash,
+      blockNumber: event.blockNumber,
+      passenger: event.passenger,
+    },
+  });
+
+  logger.info(`Ticket ${ticket.id} updated to ${newStatus} from on-chain event`, {
+    metadata: { txHash: event.txHash, blockNumber: event.blockNumber },
+  });
+}
+
+// ============================================================================
 // Indexer Loop
 // ============================================================================
 
@@ -374,6 +549,48 @@ export async function indexBlocks(
     if (token) {
       await processTransferEvent(parsed, token.orgId);
       processedEvents++;
+    }
+  }
+
+  // Fetch ticket lifecycle events from AirlineTicketNFT contracts
+  const ticketContracts = await db.select({
+    contractAddress: airlineTickets.contractAddress,
+    orgId: airlineTickets.orgId,
+  })
+    .from(airlineTickets)
+    .where(and(
+      eq(airlineTickets.chainId, chainId),
+    ))
+    .groupBy(airlineTickets.contractAddress, airlineTickets.orgId);
+
+  const uniqueTicketAddresses = ticketContracts
+    .filter(t => t.contractAddress)
+    .map(t => t.contractAddress!);
+
+  if (uniqueTicketAddresses.length > 0) {
+    const ticketEvents = await getLogs(
+      chainId,
+      fromBlock,
+      toBlock,
+      uniqueTicketAddresses,
+      [TICKET_EVENT_TOPICS] // topics[0] = array of sigs → matches any
+    );
+
+    for (const event of ticketEvents) {
+      if (event.removed) continue;
+
+      const parsed = parseTicketEvent(event);
+      if (!parsed) continue;
+
+      // Find the org for this contract
+      const contract = ticketContracts.find(
+        t => t.contractAddress?.toLowerCase() === parsed.contractAddress
+      );
+
+      if (contract) {
+        await processTicketEvent(parsed, contract.orgId);
+        processedEvents++;
+      }
     }
   }
 

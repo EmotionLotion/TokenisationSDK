@@ -94,6 +94,16 @@ export const TOPICS = {
   // Webhook events
   WEBHOOK_DELIVERED: 'webhook.delivered',
   WEBHOOK_FAILED: 'webhook.failed',
+
+  // Ticket lifecycle events
+  TICKET_ISSUED: 'ticket.issued',
+  TICKET_CHECKED_IN: 'ticket.checked_in',
+  TICKET_BOARDED: 'ticket.boarded',
+  TICKET_COMPLETED: 'ticket.completed',
+  TICKET_EXPIRED: 'ticket.expired',
+  TICKET_BURNED: 'ticket.burned',
+  TICKET_CANCELLED: 'ticket.cancelled',
+  TICKET_GATE_CHANGED: 'ticket.gate_changed',
 };
 
 // ============================================================================

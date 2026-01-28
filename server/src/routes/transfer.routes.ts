@@ -1,9 +1,12 @@
 import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as transferService from '../services/transfer.service.js';
-import { ValidationError } from '../middleware/errorHandler.js';
+import * as relayerService from '../services/relayer.service.js';
+import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
 import { idempotencyMiddleware } from '../services/idempotency.service.js';
+import { db, schema } from '../config/database.js';
+import { eq, and } from 'drizzle-orm';
 
 export const transferRouter = Router();
 
@@ -426,6 +429,72 @@ transferRouter.post('/execute', apiKeyMiddleware, async (req: ApiKeyRequest, res
     );
 
     res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+    } else {
+      next(error);
+    }
+  }
+});
+
+// ============================================================================
+// Gas Estimation (must be registered before /:id routes)
+// ============================================================================
+
+const estimateGasSchema = z.object({
+  tokenId: z.string().uuid(),
+  fromWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
+  toWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
+  amount: z.string().min(1).regex(/^\d+$/, 'Amount must be a positive integer string'),
+});
+
+// Estimate gas for a transfer without creating one
+transferRouter.post('/estimate-gas', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const { tokenId, fromWallet, toWallet, amount } = estimateGasSchema.parse(req.body);
+
+    // Look up token
+    const token = await db.query.tokens.findFirst({
+      where: and(
+        eq(schema.tokens.id, tokenId),
+        eq(schema.tokens.orgId, req.apiKey.orgId),
+      ),
+    });
+
+    if (!token) {
+      throw new NotFoundError('Token not found');
+    }
+
+    if (!token.address) {
+      throw new ValidationError('Token not deployed');
+    }
+
+    // Encode transfer(address, uint256) call data
+    const callData = relayerService.encodeERC20Transfer(toWallet, amount);
+
+    // Estimate gas via eth_estimateGas — if the transaction would revert,
+    // the RPC returns an error with the revert reason.
+    const gasEstimate = await relayerService.estimateGas({
+      from: fromWallet,
+      to: token.address,
+      data: callData,
+      value: '0',
+      chainId: token.chainId,
+    });
+
+    res.json({
+      gasLimit: gasEstimate.gasLimit,
+      gasPrice: gasEstimate.gasPrice,
+      maxFeePerGas: gasEstimate.maxFeePerGas,
+      maxPriorityFeePerGas: gasEstimate.maxPriorityFeePerGas,
+      estimatedCost: gasEstimate.estimatedCost,
+      estimatedCostUSD: gasEstimate.estimatedCostUSD,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));

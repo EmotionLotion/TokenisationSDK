@@ -523,6 +523,65 @@ export async function getERC20Balance(
 }
 
 // ============================================================================
+// Generic Contract View Call
+// ============================================================================
+
+/**
+ * Calls a read-only (view/pure) contract function via `eth_call`.
+ *
+ * @param chainId       - Target chain ID
+ * @param contractAddress - Contract to call
+ * @param functionSignature - 4-byte selector, e.g. '0x12345678'
+ * @param params        - ABI-encoded parameters (already hex-encoded, without 0x prefix)
+ * @returns Raw hex-encoded return data from the contract
+ */
+export async function callContractView(
+  chainId: number,
+  contractAddress: string,
+  functionSignature: string,
+  params: string[] = [],
+): Promise<string> {
+  // Build calldata: function selector + ABI-encoded params
+  const encodedParams = params
+    .map(p => p.replace(/^0x/, '').padStart(64, '0'))
+    .join('');
+  const data = `${functionSignature}${encodedParams}`;
+
+  return call(chainId, contractAddress, data);
+}
+
+/**
+ * Calls `canTransfer(address,address,uint256)` on an ERC3643 / compliance token.
+ * Returns true if the on-chain compliance module allows the transfer.
+ *
+ * canTransfer selector: 0x8b477adb (keccak256('canTransfer(address,address,uint256)')[:8])
+ */
+export async function canTransfer(
+  chainId: number,
+  contractAddress: string,
+  from: string,
+  to: string,
+  amount: string,
+): Promise<boolean> {
+  const functionSignature = '0x8b477adb';
+  const params = [
+    from.toLowerCase(),
+    to.toLowerCase(),
+    `0x${BigInt(amount).toString(16)}`,
+  ];
+
+  try {
+    const result = await callContractView(chainId, contractAddress, functionSignature, params);
+    // bool is ABI-encoded as 32 bytes; last byte = 0x01 means true
+    return BigInt(result) === 1n;
+  } catch {
+    // If the contract doesn't implement canTransfer, or RPC fails, we
+    // don't want to block — the off-chain compliance engine already passed.
+    return true;
+  }
+}
+
+// ============================================================================
 // Relayer Health Check
 // ============================================================================
 

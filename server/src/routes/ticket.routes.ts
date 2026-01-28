@@ -9,6 +9,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as ticketService from '../services/ticket.service.js';
+import * as eventbusService from '../services/eventbus.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import type { ApiKeyRequest } from '../middleware/auth.js';
 
@@ -189,6 +190,67 @@ ticketRouter.post('/:id/unfreeze', async (req: ApiKeyRequest, res: Response, nex
   try {
     const ticket = await ticketService.unfreezeTicket(req.apiKey!.orgId, req.params.id, req.body.actor ?? 'api');
     res.json({ data: ticket });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================================================
+// SSE Stream — Real-time ticket status updates
+// ============================================================================
+
+// GET /api/v1/tickets/:id/stream
+ticketRouter.get('/:id/stream', async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.apiKey!.orgId;
+    const ticketId = req.params.id;
+
+    // Verify ticket exists
+    const ticket = await ticketService.getTicket(orgId, ticketId);
+
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // Disable nginx buffering
+    });
+
+    // Send initial state
+    res.write(`event: status\ndata: ${JSON.stringify({ ticketId: ticket.id, status: ticket.status, updatedAt: ticket.updatedAt })}\n\n`);
+
+    // Register EventBus handler for ticket events matching this ticket ID
+    const handlerName = `sse-ticket-${ticketId}-${Date.now()}`;
+
+    eventbusService.registerHandler({
+      name: handlerName,
+      topic: /^ticket\./,
+      handler: async (event) => {
+        const payload = event.payload as Record<string, unknown>;
+        if (payload.ticketId === ticketId) {
+          try {
+            res.write(`event: ${event.topic}\ndata: ${JSON.stringify(payload)}\n\n`);
+          } catch {
+            // Connection may have closed
+          }
+        }
+      },
+    });
+
+    // Heartbeat every 30 seconds
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(`:heartbeat\n\n`);
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 30_000);
+
+    // Cleanup on client disconnect
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      eventbusService.unregisterHandler(handlerName);
+    });
   } catch (error) {
     next(error);
   }

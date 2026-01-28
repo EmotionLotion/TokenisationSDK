@@ -172,4 +172,138 @@ export class TransfersModule {
     const validated = params ? validate(TokenHistoryParamsSchema, params) : undefined;
     return this.http.list<Transfer>(`/api/v1/transfers/token/${validatedTokenId}`, validated as Record<string, string | number | boolean | undefined>);
   }
+
+  // ============================================================================
+  // Pre-flight Validation
+  // ============================================================================
+
+  /**
+   * Validates whether a transfer would pass compliance checks WITHOUT creating one.
+   * Use this for form validation or pre-submission checks.
+   *
+   * Returns structured validation result — no transfer is persisted.
+   */
+  async validate(input: ValidateTransferInput): Promise<ValidationResult> {
+    const response = await this.http.post<{
+      allowed: boolean;
+      decision: 'allow' | 'deny' | 'review';
+      reasons: string[];
+      restrictions: string[];
+    }>('/api/v1/transfers/check', {
+      tokenId: input.tokenId,
+      fromWallet: input.fromWallet,
+      toWallet: input.toWallet,
+      amount: input.amount,
+    });
+
+    const data = response.data;
+    return {
+      valid: data.allowed,
+      decision: data.decision,
+      reasons: data.reasons,
+      requiredActions: data.restrictions,
+    };
+  }
+
+  /**
+   * Full pre-flight check: runs compliance validation AND verifies the
+   * on-chain transaction won't revert by estimating gas.
+   *
+   * Returns a comprehensive result combining compliance, gas estimation,
+   * and any errors encountered.
+   */
+  async preflight(input: ValidateTransferInput): Promise<PreflightResult> {
+    // Step 1: Compliance validation
+    let compliance: ValidationResult;
+    try {
+      compliance = await this.validate(input);
+    } catch (error) {
+      return {
+        canTransfer: false,
+        compliance: {
+          valid: false,
+          decision: 'deny',
+          reasons: [(error as Error).message],
+          requiredActions: [],
+        },
+        gas: null,
+        errors: [(error as Error).message],
+      };
+    }
+
+    if (!compliance.valid) {
+      return {
+        canTransfer: false,
+        compliance,
+        gas: null,
+        errors: compliance.reasons,
+      };
+    }
+
+    // Step 2: Gas estimation (verifies on-chain execution won't revert)
+    let gas: GasEstimation | null = null;
+    const errors: string[] = [];
+
+    try {
+      const gasResponse = await this.http.post<{
+        gasLimit: string;
+        gasPrice: string;
+        maxFeePerGas: string;
+        maxPriorityFeePerGas: string;
+        estimatedCost: string;
+        estimatedCostUSD?: string;
+      }>('/api/v1/transfers/estimate-gas', {
+        tokenId: input.tokenId,
+        fromWallet: input.fromWallet,
+        toWallet: input.toWallet,
+        amount: input.amount,
+      });
+
+      gas = {
+        gasLimit: gasResponse.data.gasLimit,
+        estimatedCost: gasResponse.data.estimatedCost,
+        estimatedCostUSD: gasResponse.data.estimatedCostUSD,
+      };
+    } catch (error) {
+      errors.push(`Gas estimation failed: ${(error as Error).message}`);
+    }
+
+    return {
+      canTransfer: errors.length === 0,
+      compliance,
+      gas,
+      errors,
+    };
+  }
+}
+
+// ============================================================================
+// Validation Types
+// ============================================================================
+
+export interface ValidateTransferInput {
+  tokenId: string;
+  fromWallet: string;
+  toWallet: string;
+  amount: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  decision: 'allow' | 'deny' | 'review';
+  reasons: string[];
+  requiredActions: string[];
+}
+
+export interface GasEstimation {
+  gasLimit: string;
+  estimatedCost: string;
+  estimatedCostUSD?: string;
+}
+
+export interface PreflightResult {
+  canTransfer: boolean;
+  compliance: ValidationResult;
+  gas: GasEstimation | null;
+  errors: string[];
 }

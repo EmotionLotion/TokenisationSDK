@@ -59,6 +59,7 @@ import { requestLogger, errorLogger, logger } from './middleware/logger.js';
 import { tenantContextMiddleware, optionalTenantContextMiddleware } from './middleware/context.js';
 import { traceMiddleware } from './middleware/traceMiddleware.js';
 import { usageMiddleware } from './middleware/usage.js';
+import * as recoveryService from './services/recovery.service.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -206,6 +207,10 @@ async function gracefulShutdown(signal: string) {
   logger.info(`Received ${signal}. Shutting down gracefully...`);
 
   try {
+    // Stop recovery workers (indexers, event bus, outbox)
+    await recoveryService.shutdown();
+    logger.info('Recovery service stopped');
+
     // Close Redis connection
     await closeRedisConnection();
     logger.info('Redis connection closed');
@@ -250,6 +255,20 @@ async function start() {
 
     // Get environment summary for logging
     const envSummary = getEnvironmentSummary();
+
+    // Start recovery service (outbox worker, event bus, saga recovery)
+    if (dbOk) {
+      try {
+        const indexerChainIds = process.env.INDEXER_CHAIN_IDS
+          ? process.env.INDEXER_CHAIN_IDS.split(',').map(Number).filter(Boolean)
+          : [];
+
+        await recoveryService.start({ indexerChainIds });
+        logger.info('Recovery service initialized');
+      } catch (error) {
+        logger.error('Recovery service failed to start', { error: error as Error });
+      }
+    }
 
     app.listen(PORT, () => {
       logger.info('Server started', {

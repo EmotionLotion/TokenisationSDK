@@ -378,4 +378,190 @@ export class TicketsClient {
     }>('/api/v1/tickets/automation/expire-stale');
     return response.data.data;
   }
+
+  // ============================================================================
+  // Real-time Subscriptions
+  // ============================================================================
+
+  /**
+   * Subscribe to real-time ticket events via Server-Sent Events.
+   *
+   * Returns an object with an `on()` method for event handling and
+   * a `close()` method to terminate the connection.
+   *
+   * Usage:
+   * ```ts
+   * const stream = sdk.tickets.subscribe('ticket-id');
+   * stream.on('ticket.expired', (data) => console.log('Expired!', data));
+   * stream.on('status', (data) => console.log('Initial status', data));
+   * stream.on('error', (err) => console.error(err));
+   * // Later:
+   * stream.close();
+   * ```
+   */
+  subscribe(ticketId: string): TicketEventStream {
+    const baseUrl = (this.http as any).config?.baseUrl || '';
+    const apiKey = (this.http as any).config?.apiKey || '';
+    const url = `${baseUrl}/api/v1/tickets/${ticketId}/stream`;
+
+    const listeners = new Map<string, Array<(data: unknown) => void>>();
+    let closed = false;
+    let eventSource: EventSource | null = null;
+
+    // Use native EventSource (browser) or polyfill (Node)
+    try {
+      const ES = typeof EventSource !== 'undefined'
+        ? EventSource
+        : (globalThis as any).EventSource;
+
+      if (!ES) {
+        throw new Error(
+          'EventSource not available. In Node.js, install the "eventsource" package and assign it to globalThis.EventSource.'
+        );
+      }
+
+      eventSource = new ES(url, {
+        // Note: Authorization via query param or cookie may be needed for
+        // native EventSource since it doesn't support custom headers.
+        // The SSE endpoint accepts the same API key auth via query param.
+      } as EventSourceInit);
+
+      const handleEvent = (type: string) => (e: MessageEvent) => {
+        if (closed) return;
+        try {
+          const data = JSON.parse(e.data);
+          const handlers = listeners.get(type) || [];
+          for (const handler of handlers) {
+            handler(data);
+          }
+          // Also fire wildcard handlers
+          const wildcardHandlers = listeners.get('*') || [];
+          for (const handler of wildcardHandlers) {
+            handler({ type, data });
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      // Listen for named event types from the SSE stream
+      const eventTypes = [
+        'status',
+        'ticket.expired',
+        'ticket.burned',
+        'ticket.checked_in',
+        'ticket.boarded',
+        'ticket.completed',
+        'ticket.cancelled',
+        'ticket.gate_changed',
+        'ticket.issued',
+      ];
+
+      for (const type of eventTypes) {
+        eventSource!.addEventListener(type, handleEvent(type));
+      }
+
+      eventSource!.onerror = () => {
+        const errorHandlers = listeners.get('error') || [];
+        for (const handler of errorHandlers) {
+          handler(new Error('SSE connection error'));
+        }
+      };
+    } catch (err) {
+      // Defer error to listeners
+      setTimeout(() => {
+        const errorHandlers = listeners.get('error') || [];
+        for (const handler of errorHandlers) {
+          handler(err);
+        }
+      }, 0);
+    }
+
+    return {
+      on(event: string, handler: (data: any) => void) {
+        if (!listeners.has(event)) {
+          listeners.set(event, []);
+        }
+        listeners.get(event)!.push(handler);
+        return this;
+      },
+      close() {
+        closed = true;
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+      },
+    };
+  }
+
+  /**
+   * Polling fallback: periodically fetches the ticket and fires a callback
+   * when the status changes. Returns a `stop()` function.
+   *
+   * Usage:
+   * ```ts
+   * const stop = sdk.tickets.watchStatus('ticket-id', {
+   *   interval: 5000,
+   *   onChange: (ticket, previousStatus) => {
+   *     console.log(`Status changed: ${previousStatus} -> ${ticket.status}`);
+   *   },
+   * });
+   * // Later:
+   * stop();
+   * ```
+   */
+  watchStatus(
+    ticketId: string,
+    options: WatchStatusOptions,
+  ): () => void {
+    const { interval = 5000, onChange, onError } = options;
+    let lastStatus: TicketStatus | null = null;
+    let stopped = false;
+
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const ticket = await this.get(ticketId);
+        if (lastStatus !== null && ticket.status !== lastStatus) {
+          onChange(ticket, lastStatus);
+        }
+        lastStatus = ticket.status;
+      } catch (error) {
+        if (onError) {
+          onError(error as Error);
+        }
+      }
+
+      if (!stopped) {
+        setTimeout(poll, interval);
+      }
+    };
+
+    poll();
+
+    return () => {
+      stopped = true;
+    };
+  }
+}
+
+// ============================================================================
+// Real-time subscription types
+// ============================================================================
+
+export interface TicketEventStream {
+  /** Register a handler for a specific event type, or '*' for all events */
+  on(event: string, handler: (data: any) => void): TicketEventStream;
+  /** Close the SSE connection */
+  close(): void;
+}
+
+export interface WatchStatusOptions {
+  /** Polling interval in ms (default: 5000) */
+  interval?: number;
+  /** Called when the ticket status changes */
+  onChange: (ticket: Ticket, previousStatus: TicketStatus) => void;
+  /** Called on fetch error */
+  onError?: (error: Error) => void;
 }

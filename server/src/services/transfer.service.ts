@@ -2,6 +2,7 @@ import { db, schema } from '../config/database.js';
 import { eq, and, desc, lt, or } from 'drizzle-orm';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
 import * as complianceService from './compliance.service.js';
+import * as relayerService from './relayer.service.js';
 import { randomUUID } from 'crypto';
 import { withSerializableTransaction, withRetryableTransaction } from '../utils/transaction.js';
 import { logger } from '../middleware/logger.js';
@@ -257,7 +258,50 @@ export async function precheckTransfer(id: string, orgId: string): Promise<Trans
       return formatTransferResponse(rejected);
     }
 
-    // Compliance passed
+    // Compliance passed — now do belt-and-suspenders on-chain check
+    const token = await db.query.tokens.findFirst({
+      where: and(eq(tokens.id, transfer.tokenId), eq(tokens.orgId, orgId)),
+    });
+
+    if (token?.address && token?.chainId) {
+      try {
+        const onChainAllowed = await relayerService.canTransfer(
+          token.chainId,
+          token.address,
+          transfer.fromWallet,
+          transfer.toWallet,
+          transfer.amount,
+        );
+
+        if (!onChainAllowed) {
+          const rejected = await transitionTransfer(transfer, 'rejected', {
+            decisionId: decision.id,
+            error: 'On-chain canTransfer() check returned false — transfer blocked by smart contract compliance module',
+          });
+
+          await emitTransferEvent(id, orgId, 'transfer.rejected', {
+            transferId: id,
+            decisionId: decision.id,
+            reasons: [{ code: 'ON_CHAIN_REJECTED', message: 'Smart contract compliance module blocked the transfer' }],
+          });
+
+          return formatTransferResponse(rejected);
+        }
+      } catch (error) {
+        // On-chain check failed (network error, contract not deployed, etc.)
+        // The off-chain compliance engine already passed, so log warning but don't block
+        logger.warn('On-chain canTransfer() view call failed, proceeding with off-chain approval', {
+          metadata: {
+            transferId: id,
+            tokenAddress: token.address,
+            chainId: token.chainId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+        });
+      }
+    }
+
+    // All checks passed
     const prechecked = await transitionTransfer(transfer, 'prechecked', {
       decisionId: decision.id,
     });
