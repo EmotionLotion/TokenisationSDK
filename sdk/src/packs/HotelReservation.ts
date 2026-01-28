@@ -20,6 +20,9 @@ import { LifecycleState, RightType, TransferabilityMode } from '../core/types.js
 import type { AssetPack } from './AssetPackRegistry.js';
 import { AssetType, InvestorClass, LiquidityProfile, FractionalizationType } from '../core/AssetAbstraction.js';
 import { StateMachine, type StateContext } from '../core/StateMachine.js';
+import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
+import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
+import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
 import {
   HOTEL_RESERVATION_STATE_MACHINE,
   HotelReservationState,
@@ -389,10 +392,21 @@ export class HotelReservationEngine {
   // Idempotency tracking
   private transferIdempotencyKeys: Map<string, string> = new Map();
 
+  // Cross-pack orchestration dependencies (optional)
+  private identityRegistry?: IIdentityRegistry;
+  private crossPackEventBus?: ICrossPackEventBus;
+  private crossPackAuditLog?: IAuditLog;
+
   constructor(config?: {
     distributedLock?: IDistributedLock;
+    identityRegistry?: IIdentityRegistry;
+    eventBus?: ICrossPackEventBus;
+    auditLog?: IAuditLog;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
+    this.identityRegistry = config?.identityRegistry;
+    this.crossPackEventBus = config?.eventBus;
+    this.crossPackAuditLog = config?.auditLog;
 
     this.stateMachine = new StateMachine(HOTEL_RESERVATION_STATE_MACHINE);
     this.stateMachine.addGlobalGuard(transferWindowGuard);
@@ -410,6 +424,7 @@ export class HotelReservationEngine {
 
   verifyIdentity(identityHash: string): void {
     this.verifiedIdentities.set(identityHash, true);
+    this.identityRegistry?.verify(identityHash, 'HOTEL');
   }
 
   // ============================================================================
@@ -945,6 +960,11 @@ export class HotelReservationEngine {
 
     // Check transfer count limit
     if (metadata.transferRules.transferCount >= metadata.transferRules.maxTransfers) {
+      this.crossPackAuditLog?.log({
+        source: 'HOTEL', action: 'TRANSFER_DENIED', actorId: params.fromGuest,
+        resourceId: params.reservationId, success: false,
+        reason: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
+      });
       return {
         success: false,
         error: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
@@ -982,7 +1002,7 @@ export class HotelReservationEngine {
     // Check for auto-approval with verified identity
     if (metadata.transferRules.autoApproveWithIdentity && params.toGuest.identity) {
       const identityHash = this.hashIdentity(params.toGuest.identity);
-      if (this.verifiedIdentities.get(identityHash)) {
+      if (this.verifiedIdentities.get(identityHash) || this.identityRegistry?.isVerified(identityHash)) {
         request.status = TransferApprovalStatus.AUTO_APPROVED;
         request.approvedAt = now.toISOString();
         request.approvedBy = 'SYSTEM_AUTO_APPROVAL';
@@ -1463,6 +1483,15 @@ export class HotelReservationEngine {
     };
 
     this.events.push(event);
+
+    // Publish to cross-pack event bus
+    this.crossPackEventBus?.publish({
+      source: 'HOTEL',
+      type: event.type,
+      resourceId: event.reservationId,
+      data: event.data,
+      correlationId: (event.data.correlationId as string) ?? undefined,
+    });
   }
 }
 

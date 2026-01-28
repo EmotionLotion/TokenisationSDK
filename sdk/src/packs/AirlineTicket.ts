@@ -23,6 +23,9 @@ import type { DecisionReceipt } from '../core/DecisionReceipt.js';
 import type { AssetPack } from './AssetPackRegistry.js';
 import { AssetType, InvestorClass, LiquidityProfile, FractionalizationType } from '../core/AssetAbstraction.js';
 import { StateMachine, type StateContext } from '../core/StateMachine.js';
+import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
+import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
+import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
 import {
   AIRLINE_TICKET_STATE_MACHINE,
   AirlineTicketState,
@@ -868,6 +871,11 @@ export class AirlineTicketEngine {
   // ComplianceEngine for transfer validation (integrated compliance checks)
   private complianceEngine?: ComplianceEngine;
 
+  // Cross-pack orchestration dependencies (optional)
+  private identityRegistry?: IIdentityRegistry;
+  private crossPackEventBus?: ICrossPackEventBus;
+  private crossPackAuditLog?: IAuditLog;
+
   constructor(config?: {
     distributedLock?: IDistributedLock;
     pssAdapter?: IPSSAdapter;
@@ -877,12 +885,18 @@ export class AirlineTicketEngine {
     idempotencyTTLMs?: number;
     /** ComplianceEngine for enhanced transfer validation (lifecycle state, price cap, etc.) */
     complianceEngine?: ComplianceEngine;
+    identityRegistry?: IIdentityRegistry;
+    eventBus?: ICrossPackEventBus;
+    auditLog?: IAuditLog;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
     this.pssAdapter = config?.pssAdapter;
     this.dcsAdapter = config?.dcsAdapter;
     this.resaleFeeConfig = config?.resaleFeeConfig;
     this.complianceEngine = config?.complianceEngine;
+    this.identityRegistry = config?.identityRegistry;
+    this.crossPackEventBus = config?.eventBus;
+    this.crossPackAuditLog = config?.auditLog;
     if (config?.webhookTimeout) this.webhookTimeout = config.webhookTimeout;
     if (config?.idempotencyTTLMs) this.idempotencyTTLMs = config.idempotencyTTLMs;
 
@@ -1025,6 +1039,7 @@ export class AirlineTicketEngine {
    */
   verifyIdentity(identityHash: string): void {
     this.verifiedIdentities.set(identityHash, true);
+    this.identityRegistry?.verify(identityHash, 'AIRLINE');
   }
 
   // ============================================================================
@@ -1840,6 +1855,11 @@ export class AirlineTicketEngine {
 
     // Check transfer count limit (AT-03)
     if (metadata.transferRules.transferCount >= metadata.transferRules.maxTransfers) {
+      this.crossPackAuditLog?.log({
+        source: 'AIRLINE', action: 'TRANSFER_DENIED', actorId: params.fromPassenger,
+        resourceId: params.ticketId, success: false,
+        reason: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
+      });
       return {
         success: false,
         error: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
@@ -1852,6 +1872,10 @@ export class AirlineTicketEngine {
     const deadlineHours = metadata.policyFlags.changeDeadlineHours ?? metadata.transferRules.transferDeadlineHours;
     const deadline = new Date(firstDeparture.getTime() - deadlineHours * 60 * 60 * 1000);
     if (new Date() > deadline) {
+      this.crossPackAuditLog?.log({
+        source: 'AIRLINE', action: 'TRANSFER_DENIED', actorId: params.fromPassenger,
+        resourceId: params.ticketId, success: false, reason: 'Transfer window has closed',
+      });
       return { success: false, error: 'Transfer window has closed', errorCode: 'TRANSFER_WINDOW_CLOSED' };
     }
 
@@ -1976,7 +2000,7 @@ export class AirlineTicketEngine {
     // Check for auto-approval with verified identity
     if (metadata.transferRules.autoApproveWithIdentity && params.toPassenger.identity) {
       const identityHash = this.hashIdentity(params.toPassenger.identity);
-      if (this.verifiedIdentities.get(identityHash)) {
+      if (this.verifiedIdentities.get(identityHash) || this.identityRegistry?.isVerified(identityHash)) {
         // If re-KYC required, mark it as completed via verified identity
         if (request.reKycRequired) {
           request.reKycCompleted = true;
@@ -1997,6 +2021,11 @@ export class AirlineTicketEngine {
           reason: params.reason,
           autoApproved: true,
         }, metadata.bookingReference);
+
+        this.crossPackAuditLog?.log({
+          source: 'AIRLINE', action: 'TRANSFER_COMPLETED', actorId: params.fromPassenger,
+          resourceId: params.ticketId, success: true,
+        });
 
         return { success: true, request };
       }
@@ -3864,6 +3893,15 @@ export class AirlineTicketEngine {
     };
 
     this.events.push(event);
+
+    // Publish to cross-pack event bus
+    this.crossPackEventBus?.publish({
+      source: 'AIRLINE',
+      type: event.type,
+      resourceId: event.ticketId,
+      data: event.data,
+      correlationId: (event.data.correlationId as string) ?? undefined,
+    });
 
     // Trigger webhooks with security (PR-04)
     for (const config of Array.from(this.webhookConfigs.values())) {

@@ -22,6 +22,9 @@ import { LifecycleState, RightType, TransferabilityMode } from '../core/types.js
 import type { AssetPack } from './AssetPackRegistry.js';
 import { AssetType, InvestorClass, LiquidityProfile, FractionalizationType } from '../core/AssetAbstraction.js';
 import { StateMachine, type StateContext } from '../core/StateMachine.js';
+import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
+import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
+import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
 import {
   CAR_RENTAL_STATE_MACHINE,
   CarRentalState,
@@ -435,10 +438,21 @@ export class CarRentalEngine {
   // Idempotency tracking
   private transferIdempotencyKeys: Map<string, string> = new Map();
 
+  // Cross-pack orchestration dependencies (optional)
+  private identityRegistry?: IIdentityRegistry;
+  private crossPackEventBus?: ICrossPackEventBus;
+  private crossPackAuditLog?: IAuditLog;
+
   constructor(config?: {
     distributedLock?: IDistributedLock;
+    identityRegistry?: IIdentityRegistry;
+    eventBus?: ICrossPackEventBus;
+    auditLog?: IAuditLog;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
+    this.identityRegistry = config?.identityRegistry;
+    this.crossPackEventBus = config?.eventBus;
+    this.crossPackAuditLog = config?.auditLog;
 
     this.stateMachine = new StateMachine(CAR_RENTAL_STATE_MACHINE);
     this.stateMachine.addGlobalGuard(transferWindowGuard);
@@ -456,6 +470,7 @@ export class CarRentalEngine {
 
   verifyIdentity(identityHash: string): void {
     this.verifiedIdentities.set(identityHash, true);
+    this.identityRegistry?.verify(identityHash, 'CAR_RENTAL');
   }
 
   // ============================================================================
@@ -1108,6 +1123,11 @@ export class CarRentalEngine {
 
     // Check transfer count limit
     if (metadata.transferRules.transferCount >= metadata.transferRules.maxTransfers) {
+      this.crossPackAuditLog?.log({
+        source: 'CAR_RENTAL', action: 'TRANSFER_DENIED', actorId: params.fromDriver,
+        resourceId: params.rentalId, success: false,
+        reason: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
+      });
       return {
         success: false,
         error: `Maximum transfers (${metadata.transferRules.maxTransfers}) exceeded`,
@@ -1145,7 +1165,7 @@ export class CarRentalEngine {
     // Check for auto-approval with verified identity
     if (metadata.transferRules.autoApproveWithIdentity && params.toDriver.identity) {
       const identityHash = this.hashIdentity(params.toDriver.identity);
-      if (this.verifiedIdentities.get(identityHash)) {
+      if (this.verifiedIdentities.get(identityHash) || this.identityRegistry?.isVerified(identityHash)) {
         request.status = TransferApprovalStatus.AUTO_APPROVED;
         request.approvedAt = now.toISOString();
         request.approvedBy = 'SYSTEM_AUTO_APPROVAL';
@@ -1627,6 +1647,15 @@ export class CarRentalEngine {
     };
 
     this.events.push(event);
+
+    // Publish to cross-pack event bus
+    this.crossPackEventBus?.publish({
+      source: 'CAR_RENTAL',
+      type: event.type,
+      resourceId: event.rentalId,
+      data: event.data,
+      correlationId: (event.data.correlationId as string) ?? undefined,
+    });
   }
 }
 
