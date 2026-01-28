@@ -32,6 +32,9 @@ export * from './WarehouseReceipt.js';
 // Pack H: Airline Tickets - ACCESS (conditional transfer)
 export * from './AirlineTicket.js';
 
+// Pack K: Hotel Reservations - ACCESS (hospitality)
+export * from './HotelReservation.js';
+
 // Jurisdiction-Specific Packs
 // Pack I: Dubai Real Estate - UAE VARA compliant with DLD integration
 export * from './dubai-real-estate.pack.js';

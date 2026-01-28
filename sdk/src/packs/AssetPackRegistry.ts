@@ -1001,10 +1001,14 @@ export class AssetPackRegistry {
 import { dubaiRealEstatePack, type AssetPackConfig } from './dubai-real-estate.pack.js';
 import { usSecurities506cPack, usSecurities506bPack } from './us-securities.pack.js';
 
+// Import hotel reservation pack
+import { HOTEL_RESERVATION_PACK } from './HotelReservation.js';
+
 // Register jurisdiction-specific packs
 AssetPackRegistry.register(dubaiRealEstatePack as AssetPack);
 AssetPackRegistry.register(usSecurities506cPack as AssetPack);
 AssetPackRegistry.register(usSecurities506bPack as AssetPack);
+AssetPackRegistry.register(HOTEL_RESERVATION_PACK as AssetPack);
 
 // Export individual packs for direct access
 export {
@@ -1016,6 +1020,7 @@ export {
   dubaiRealEstatePack,
   usSecurities506cPack,
   usSecurities506bPack,
+  HOTEL_RESERVATION_PACK,
 };
 
 // Export types
