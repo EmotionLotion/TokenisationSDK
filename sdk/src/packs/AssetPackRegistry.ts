@@ -1004,11 +1004,19 @@ import { usSecurities506cPack, usSecurities506bPack } from './us-securities.pack
 // Import hotel reservation pack
 import { HOTEL_RESERVATION_PACK } from './HotelReservation.js';
 
+// Import car rental pack
+import { CAR_RENTAL_PACK } from './CarRental.js';
+
+// Import concert ticket pack
+import { CONCERT_TICKET_PACK } from './ConcertTicket.js';
+
 // Register jurisdiction-specific packs
 AssetPackRegistry.register(dubaiRealEstatePack as AssetPack);
 AssetPackRegistry.register(usSecurities506cPack as AssetPack);
 AssetPackRegistry.register(usSecurities506bPack as AssetPack);
 AssetPackRegistry.register(HOTEL_RESERVATION_PACK as AssetPack);
+AssetPackRegistry.register(CAR_RENTAL_PACK as AssetPack);
+AssetPackRegistry.register(CONCERT_TICKET_PACK as AssetPack);
 
 // Export individual packs for direct access
 export {
@@ -1021,6 +1029,8 @@ export {
   usSecurities506cPack,
   usSecurities506bPack,
   HOTEL_RESERVATION_PACK,
+  CAR_RENTAL_PACK,
+  CONCERT_TICKET_PACK,
 };
 
 // Export types

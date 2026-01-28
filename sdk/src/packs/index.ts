@@ -35,6 +35,15 @@ export * from './AirlineTicket.js';
 // Pack K: Hotel Reservations - ACCESS (hospitality)
 export * from './HotelReservation.js';
 
+// Pack L: Car Rental - ACCESS (mobility, deposit workflow)
+export * from './CarRental.js';
+
+// Pack M: Concert Tickets - ACCESS (entertainment, anti-scalping)
+export * from './ConcertTicket.js';
+
+// Service Right Template - Shared utilities for service-right packs
+export * from './ServiceRightTemplate.js';
+
 // Jurisdiction-Specific Packs
 // Pack I: Dubai Real Estate - UAE VARA compliant with DLD integration
 export * from './dubai-real-estate.pack.js';
