@@ -23,6 +23,7 @@ import { StateMachine, type StateContext } from '../core/StateMachine.js';
 import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
 import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
 import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
+import type { PortableComplianceRegistry } from '../orchestration/PortableComplianceReceipt.js';
 import {
   HOTEL_RESERVATION_STATE_MACHINE,
   HotelReservationState,
@@ -396,17 +397,20 @@ export class HotelReservationEngine {
   private identityRegistry?: IIdentityRegistry;
   private crossPackEventBus?: ICrossPackEventBus;
   private crossPackAuditLog?: IAuditLog;
+  private complianceRegistry?: PortableComplianceRegistry;
 
   constructor(config?: {
     distributedLock?: IDistributedLock;
     identityRegistry?: IIdentityRegistry;
     eventBus?: ICrossPackEventBus;
     auditLog?: IAuditLog;
+    complianceRegistry?: PortableComplianceRegistry;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
     this.identityRegistry = config?.identityRegistry;
     this.crossPackEventBus = config?.eventBus;
     this.crossPackAuditLog = config?.auditLog;
+    this.complianceRegistry = config?.complianceRegistry;
 
     this.stateMachine = new StateMachine(HOTEL_RESERVATION_STATE_MACHINE);
     this.stateMachine.addGlobalGuard(transferWindowGuard);
@@ -633,6 +637,12 @@ export class HotelReservationEngine {
       checkOutDate: params.checkOutDate,
     }, params.confirmationNumber);
 
+    this.crossPackAuditLog?.log({
+      source: 'HOTEL', action: 'RESERVATION_CREATED',
+      actorId: params.hotelCode, resourceId: reservation.id,
+      success: true,
+    });
+
     return { success: true, reservation };
   }
 
@@ -682,6 +692,12 @@ export class HotelReservationEngine {
       confirmedBy: params.actor.actorId,
     }, metadata.confirmationNumber);
 
+    this.crossPackAuditLog?.log({
+      source: 'HOTEL', action: 'RESERVATION_CONFIRMED',
+      actorId: params.actor.actorId, resourceId: params.reservationId,
+      success: true,
+    });
+
     return { success: true, reservation };
   }
 
@@ -720,6 +736,20 @@ export class HotelReservationEngine {
       };
     }
 
+    // Compliance gate for check-in
+    if (this.complianceRegistry && metadata.guestIdentity) {
+      const identityHash = this.hashIdentity(metadata.guestIdentity);
+      const check = this.complianceRegistry.checkCompliance({ identityHash });
+      if (!check.hasValidReceipt) {
+        this.crossPackAuditLog?.log({
+          source: 'HOTEL', action: 'CHECKIN_DENIED',
+          actorId: params.actor.actorId, resourceId: params.reservationId,
+          success: false, reason: 'No valid compliance receipt',
+        });
+        return { success: false, error: 'Compliance verification required for check-in' };
+      }
+    }
+
     const previousMetadata = { ...metadata };
     metadata.status = HotelReservationStatus.CHECKED_IN;
     if (params.roomNumber) {
@@ -741,6 +771,12 @@ export class HotelReservationEngine {
       checkedInBy: params.actor.actorId,
       roomNumber: params.roomNumber,
     }, metadata.confirmationNumber);
+
+    this.crossPackAuditLog?.log({
+      source: 'HOTEL', action: 'CHECKIN_COMPLETED',
+      actorId: params.actor.actorId, resourceId: params.reservationId,
+      success: true,
+    });
 
     return { success: true, reservation };
   }
@@ -978,6 +1014,20 @@ export class HotelReservationEngine {
     const deadline = new Date(checkInDate.getTime() - deadlineHours * 60 * 60 * 1000);
     if (new Date() > deadline) {
       return { success: false, error: 'Transfer window has closed', errorCode: HotelReservationErrorCode.TRANSFER_WINDOW_CLOSED };
+    }
+
+    // Compliance gate for recipient
+    if (this.complianceRegistry && params.toGuest.identity) {
+      const identityHash = this.hashIdentity(params.toGuest.identity);
+      const check = this.complianceRegistry.checkCompliance({ identityHash });
+      if (!check.hasValidReceipt) {
+        this.crossPackAuditLog?.log({
+          source: 'HOTEL', action: 'TRANSFER_DENIED',
+          actorId: params.fromGuest, resourceId: params.reservationId,
+          success: false, reason: 'No valid compliance receipt',
+        });
+        return { success: false, error: 'Compliance verification required for recipient' };
+      }
     }
 
     const now = new Date();

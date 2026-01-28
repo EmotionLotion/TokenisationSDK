@@ -7,7 +7,7 @@
 
 import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import type { AuditEntry, IAuditLog } from './UnifiedAuditLog.js';
+import type { AuditEntry, AuditFilter, IAuditLog } from './UnifiedAuditLog.js';
 
 export interface ChainedAuditEntry extends AuditEntry {
   entryHash: string;
@@ -35,7 +35,7 @@ function computeHash(content: Record<string, unknown>): string {
   return createHash('sha256').update(normalized).digest('hex');
 }
 
-export class AuditChainManager {
+export class AuditChainManager implements IAuditLog {
   private chainedEntries: ChainedAuditEntry[] = [];
   private sequenceCounter = 0;
 
@@ -142,6 +142,45 @@ export class AuditChainManager {
     return this.chainedEntries
       .filter((e) => e.correlationId === correlationId)
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+  }
+
+  // IAuditLog interface methods
+
+  log(entry: Omit<AuditEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: string }): string {
+    const chained = this.logChained(entry);
+    return chained.id;
+  }
+
+  query(filter: AuditFilter): AuditEntry[] {
+    return this.chainedEntries.filter((e) => {
+      if (filter.source !== undefined && e.source !== filter.source) return false;
+      if (filter.action !== undefined && e.action !== filter.action) return false;
+      if (filter.actorId !== undefined && e.actorId !== filter.actorId) return false;
+      if (filter.resourceId !== undefined && e.resourceId !== filter.resourceId) return false;
+      if (filter.success !== undefined && e.success !== filter.success) return false;
+      if (filter.correlationId !== undefined && e.correlationId !== filter.correlationId) return false;
+      if (filter.fromDate !== undefined && e.timestamp < filter.fromDate) return false;
+      if (filter.toDate !== undefined && e.timestamp > filter.toDate) return false;
+      return true;
+    });
+  }
+
+  getAll(): AuditEntry[] {
+    return [...this.chainedEntries];
+  }
+
+  getByResource(resourceId: string): AuditEntry[] {
+    return this.chainedEntries.filter((e) => e.resourceId === resourceId);
+  }
+
+  getByCorrelation(correlationId: string): AuditEntry[] {
+    return this.chainedEntries.filter((e) => e.correlationId === correlationId);
+  }
+
+  clear(): void {
+    this.chainedEntries = [];
+    this.sequenceCounter = 0;
+    this.auditLog.clear();
   }
 
   private verifySubChain(entries: ChainedAuditEntry[]): boolean {

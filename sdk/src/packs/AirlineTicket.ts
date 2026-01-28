@@ -26,6 +26,7 @@ import { StateMachine, type StateContext } from '../core/StateMachine.js';
 import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
 import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
 import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
+import type { PortableComplianceRegistry } from '../orchestration/PortableComplianceReceipt.js';
 import {
   AIRLINE_TICKET_STATE_MACHINE,
   AirlineTicketState,
@@ -875,6 +876,7 @@ export class AirlineTicketEngine {
   private identityRegistry?: IIdentityRegistry;
   private crossPackEventBus?: ICrossPackEventBus;
   private crossPackAuditLog?: IAuditLog;
+  private complianceRegistry?: PortableComplianceRegistry;
 
   constructor(config?: {
     distributedLock?: IDistributedLock;
@@ -888,6 +890,7 @@ export class AirlineTicketEngine {
     identityRegistry?: IIdentityRegistry;
     eventBus?: ICrossPackEventBus;
     auditLog?: IAuditLog;
+    complianceRegistry?: PortableComplianceRegistry;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
     this.pssAdapter = config?.pssAdapter;
@@ -897,6 +900,7 @@ export class AirlineTicketEngine {
     this.identityRegistry = config?.identityRegistry;
     this.crossPackEventBus = config?.eventBus;
     this.crossPackAuditLog = config?.auditLog;
+    this.complianceRegistry = config?.complianceRegistry;
     if (config?.webhookTimeout) this.webhookTimeout = config.webhookTimeout;
     if (config?.idempotencyTTLMs) this.idempotencyTTLMs = config.idempotencyTTLMs;
 
@@ -1439,6 +1443,12 @@ export class AirlineTicketEngine {
       })),
     }, params.bookingReference);
 
+    this.crossPackAuditLog?.log({
+      source: 'AIRLINE', action: 'TICKET_ISSUED',
+      actorId: params.airlineCode, resourceId: ticket.id,
+      success: true,
+    });
+
     // Sync to PSS if adapter available
     if (this.pssAdapter) {
       this.pssAdapter.syncTicket(ticket.id, metadata).catch(() => {
@@ -1505,6 +1515,12 @@ export class AirlineTicketEngine {
       params.actor.actorId,
       'Check-in'
     );
+
+    this.crossPackAuditLog?.log({
+      source: 'AIRLINE', action: 'CHECKIN_COMPLETED',
+      actorId: params.actor.actorId, resourceId: params.ticketId,
+      success: true,
+    });
 
     return { success: true, ticket };
   }
@@ -1648,6 +1664,12 @@ export class AirlineTicketEngine {
       };
       existingLogs.push(log);
       this.verificationLogs.set(params.ticketId, existingLogs);
+
+      this.crossPackAuditLog?.log({
+        source: 'AIRLINE', action: 'BOARDING_COMPLETED',
+        actorId: params.actor.actorId, resourceId: params.ticketId,
+        success: true,
+      });
 
       return { success: true, ticket, verificationLog: log };
     } finally {
@@ -1877,6 +1899,20 @@ export class AirlineTicketEngine {
         resourceId: params.ticketId, success: false, reason: 'Transfer window has closed',
       });
       return { success: false, error: 'Transfer window has closed', errorCode: 'TRANSFER_WINDOW_CLOSED' };
+    }
+
+    // Compliance gate for recipient
+    if (this.complianceRegistry && params.toPassenger.identity) {
+      const identityHash = this.hashIdentity(params.toPassenger.identity);
+      const check = this.complianceRegistry.checkCompliance({ identityHash });
+      if (!check.hasValidReceipt) {
+        this.crossPackAuditLog?.log({
+          source: 'AIRLINE', action: 'TRANSFER_DENIED',
+          actorId: params.fromPassenger, resourceId: params.ticketId,
+          success: false, reason: 'No valid compliance receipt',
+        });
+        return { success: false, error: 'Compliance verification required for recipient' };
+      }
     }
 
     // Determine if re-KYC is required (Requirement C)

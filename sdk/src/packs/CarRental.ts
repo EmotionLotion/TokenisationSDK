@@ -25,6 +25,8 @@ import { StateMachine, type StateContext } from '../core/StateMachine.js';
 import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
 import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
 import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
+import type { PortableComplianceRegistry } from '../orchestration/PortableComplianceReceipt.js';
+import type { FlightLandingOracle } from '../orchestration/FlightLandingOracle.js';
 import {
   CAR_RENTAL_STATE_MACHINE,
   CarRentalState,
@@ -442,17 +444,23 @@ export class CarRentalEngine {
   private identityRegistry?: IIdentityRegistry;
   private crossPackEventBus?: ICrossPackEventBus;
   private crossPackAuditLog?: IAuditLog;
+  private complianceRegistry?: PortableComplianceRegistry;
+  private flightLandingOracle?: FlightLandingOracle;
 
   constructor(config?: {
     distributedLock?: IDistributedLock;
     identityRegistry?: IIdentityRegistry;
     eventBus?: ICrossPackEventBus;
     auditLog?: IAuditLog;
+    complianceRegistry?: PortableComplianceRegistry;
+    flightLandingOracle?: FlightLandingOracle;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
     this.identityRegistry = config?.identityRegistry;
     this.crossPackEventBus = config?.eventBus;
     this.crossPackAuditLog = config?.auditLog;
+    this.complianceRegistry = config?.complianceRegistry;
+    this.flightLandingOracle = config?.flightLandingOracle;
 
     this.stateMachine = new StateMachine(CAR_RENTAL_STATE_MACHINE);
     this.stateMachine.addGlobalGuard(transferWindowGuard);
@@ -685,6 +693,12 @@ export class CarRentalEngine {
       returnDate: params.rentalPeriod.returnDate,
     }, params.confirmationNumber);
 
+    this.crossPackAuditLog?.log({
+      source: 'CAR_RENTAL', action: 'RENTAL_CREATED',
+      actorId: params.rentalCompanyCode, resourceId: rental.id,
+      success: true,
+    });
+
     return { success: true, rental };
   }
 
@@ -734,6 +748,12 @@ export class CarRentalEngine {
       confirmedBy: params.actor.actorId,
     }, metadata.confirmationNumber);
 
+    this.crossPackAuditLog?.log({
+      source: 'CAR_RENTAL', action: 'RENTAL_CONFIRMED',
+      actorId: params.actor.actorId, resourceId: params.rentalId,
+      success: true,
+    });
+
     return { success: true, rental };
   }
 
@@ -741,12 +761,13 @@ export class CarRentalEngine {
   // PICK UP
   // ============================================================================
 
-  pickUp(params: {
+  async pickUp(params: {
     rentalId: string;
     actor: ActorContext;
     mileageStart?: number;
     fuelLevel?: number;
-  }): { success: boolean; rental?: RightModel; error?: string; alreadyPickedUp?: boolean } {
+    correlationId?: string;
+  }): Promise<{ success: boolean; rental?: RightModel; error?: string; alreadyPickedUp?: boolean }> {
     this.enforcePermission(params.actor, 'PICK_UP', params.rentalId);
 
     const rental = this.rentals.get(params.rentalId);
@@ -782,6 +803,21 @@ export class CarRentalEngine {
       };
     }
 
+    // If flight landing oracle is configured, verify landing before pickup
+    if (this.flightLandingOracle) {
+      const flightNumber = (metadata as unknown as Record<string, unknown>).pickupFlightNumber as string | undefined;
+      const landing = await this.flightLandingOracle.verifyLanding(flightNumber ?? '');
+      if (!landing.verified) {
+        this.crossPackAuditLog?.log({
+          source: 'CAR_RENTAL', action: 'PICKUP_DENIED',
+          actorId: params.actor.actorId, resourceId: params.rentalId,
+          success: false, reason: `Flight landing not verified: ${landing.reason}`,
+          correlationId: params.correlationId,
+        });
+        return { success: false, error: `Flight landing not verified: ${landing.reason}` };
+      }
+    }
+
     const previousMetadata = { ...metadata };
     metadata.status = CarRentalStatus.PICKED_UP;
     if (params.mileageStart !== undefined) {
@@ -807,6 +843,12 @@ export class CarRentalEngine {
       mileageStart: params.mileageStart,
       fuelLevel: params.fuelLevel,
     }, metadata.confirmationNumber);
+
+    this.crossPackAuditLog?.log({
+      source: 'CAR_RENTAL', action: 'PICKUP_COMPLETED',
+      actorId: params.actor.actorId, resourceId: params.rentalId,
+      success: true, correlationId: params.correlationId,
+    });
 
     return { success: true, rental };
   }
@@ -1141,6 +1183,20 @@ export class CarRentalEngine {
     const deadline = new Date(pickupDate.getTime() - deadlineHours * 60 * 60 * 1000);
     if (new Date() > deadline) {
       return { success: false, error: 'Transfer window has closed', errorCode: CarRentalErrorCode.TRANSFER_WINDOW_CLOSED };
+    }
+
+    // Compliance gate for recipient
+    if (this.complianceRegistry && params.toDriver.identity) {
+      const identityHash = this.hashIdentity(params.toDriver.identity);
+      const check = this.complianceRegistry.checkCompliance({ identityHash });
+      if (!check.hasValidReceipt) {
+        this.crossPackAuditLog?.log({
+          source: 'CAR_RENTAL', action: 'TRANSFER_DENIED',
+          actorId: params.fromDriver, resourceId: params.rentalId,
+          success: false, reason: 'No valid compliance receipt',
+        });
+        return { success: false, error: 'Compliance verification required for recipient' };
+      }
     }
 
     const now = new Date();

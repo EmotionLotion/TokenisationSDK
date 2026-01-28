@@ -25,6 +25,7 @@ import { StateMachine, type StateContext } from '../core/StateMachine.js';
 import type { IIdentityRegistry } from '../orchestration/SharedIdentityRegistry.js';
 import type { ICrossPackEventBus } from '../orchestration/CrossPackEventBus.js';
 import type { IAuditLog } from '../orchestration/UnifiedAuditLog.js';
+import type { PortableComplianceRegistry } from '../orchestration/PortableComplianceReceipt.js';
 import {
   CONCERT_TICKET_STATE_MACHINE,
   ConcertTicketState,
@@ -425,17 +426,20 @@ export class ConcertTicketEngine {
   private identityRegistry?: IIdentityRegistry;
   private crossPackEventBus?: ICrossPackEventBus;
   private crossPackAuditLog?: IAuditLog;
+  private complianceRegistry?: PortableComplianceRegistry;
 
   constructor(config?: {
     distributedLock?: IDistributedLock;
     identityRegistry?: IIdentityRegistry;
     eventBus?: ICrossPackEventBus;
     auditLog?: IAuditLog;
+    complianceRegistry?: PortableComplianceRegistry;
   }) {
     this.distributedLock = config?.distributedLock ?? new InMemoryDistributedLock();
     this.identityRegistry = config?.identityRegistry;
     this.crossPackEventBus = config?.eventBus;
     this.crossPackAuditLog = config?.auditLog;
+    this.complianceRegistry = config?.complianceRegistry;
 
     this.stateMachine = new StateMachine(CONCERT_TICKET_STATE_MACHINE);
     this.stateMachine.addGlobalGuard(transferWindowGuard);
@@ -690,6 +694,12 @@ export class ConcertTicketEngine {
       eventDate: params.eventInfo.eventDate,
     }, params.confirmationNumber);
 
+    this.crossPackAuditLog?.log({
+      source: 'CONCERT', action: 'TICKET_CREATED',
+      actorId: params.venueCode, resourceId: ticket.id,
+      success: true,
+    });
+
     return { success: true, ticket };
   }
 
@@ -739,6 +749,12 @@ export class ConcertTicketEngine {
       issuedBy: params.actor.actorId,
     }, metadata.confirmationNumber);
 
+    this.crossPackAuditLog?.log({
+      source: 'CONCERT', action: 'TICKET_ISSUED',
+      actorId: params.actor.actorId, resourceId: params.ticketId,
+      success: true,
+    });
+
     return { success: true, ticket };
   }
 
@@ -772,6 +788,20 @@ export class ConcertTicketEngine {
       };
     }
 
+    // Compliance gate for entry
+    if (this.complianceRegistry && metadata.fanInfo.fanIdentity) {
+      const identityHash = this.hashIdentity(metadata.fanInfo.fanIdentity);
+      const check = this.complianceRegistry.checkCompliance({ identityHash });
+      if (!check.hasValidReceipt) {
+        this.crossPackAuditLog?.log({
+          source: 'CONCERT', action: 'ENTRY_DENIED',
+          actorId: params.actor.actorId, resourceId: params.ticketId,
+          success: false, reason: 'No valid compliance receipt',
+        });
+        return { success: false, error: 'Compliance verification required for entry' };
+      }
+    }
+
     const previousMetadata = { ...metadata };
     metadata.status = ConcertTicketStatus.ADMITTED;
     metadata.entryInfo = {
@@ -795,6 +825,12 @@ export class ConcertTicketEngine {
       admittedBy: params.actor.actorId,
       scanLocation: params.scanLocation,
     }, metadata.confirmationNumber);
+
+    this.crossPackAuditLog?.log({
+      source: 'CONCERT', action: 'ENTRY_ADMITTED',
+      actorId: params.actor.actorId, resourceId: params.ticketId,
+      success: true,
+    });
 
     return { success: true, ticket };
   }
@@ -1075,6 +1111,20 @@ export class ConcertTicketEngine {
     const deadline = new Date(eventDate.getTime() - deadlineHours * 60 * 60 * 1000);
     if (new Date() > deadline) {
       return { success: false, error: 'Transfer window has closed', errorCode: ConcertTicketErrorCode.TRANSFER_WINDOW_CLOSED };
+    }
+
+    // Compliance gate for recipient
+    if (this.complianceRegistry && params.toFan.identity) {
+      const identityHash = this.hashIdentity(params.toFan.identity);
+      const check = this.complianceRegistry.checkCompliance({ identityHash });
+      if (!check.hasValidReceipt) {
+        this.crossPackAuditLog?.log({
+          source: 'CONCERT', action: 'TRANSFER_DENIED',
+          actorId: params.fromFan, resourceId: params.ticketId,
+          success: false, reason: 'No valid compliance receipt',
+        });
+        return { success: false, error: 'Compliance verification required for recipient' };
+      }
     }
 
     // Check anti-scalping price cap

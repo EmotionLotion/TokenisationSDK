@@ -204,10 +204,10 @@ describe('CarRentalEngine', () => {
       expect(result2.success).toBe(true);
     });
 
-    it('should reject confirm from invalid state', () => {
+    it('should reject confirm from invalid state', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
       expect(result.success).toBe(false);
@@ -219,11 +219,11 @@ describe('CarRentalEngine', () => {
   // TC-3: Pick up
   // ==========================================================================
   describe('TC-3: Pick up', () => {
-    it('should transition CONFIRMED -> PICKED_UP with mileage and fuel', () => {
+    it('should transition CONFIRMED -> PICKED_UP with mileage and fuel', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      const result = engine.pickUp({
+      const result = await engine.pickUp({
         rentalId: rental!.id,
         actor: rentalAgent,
         mileageStart: 15000,
@@ -237,28 +237,28 @@ describe('CarRentalEngine', () => {
       expect(metadata.vehicleCondition.pickupFuelLevel).toBe(100);
     });
 
-    it('should be idempotent (returns alreadyPickedUp)', () => {
+    it('should be idempotent (returns alreadyPickedUp)', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      const result1 = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result1 = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result1.success).toBe(true);
       expect(result1.alreadyPickedUp).toBeFalsy();
 
-      const result2 = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result2 = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result2.success).toBe(true);
       expect(result2.alreadyPickedUp).toBe(true);
     });
 
-    it('should reject pickup from CREATED status', () => {
+    it('should reject pickup from CREATED status', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
 
-      const result = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result.success).toBe(false);
       expect(result.error).toContain('Cannot pick up from status');
     });
 
-    it('should block pickup when rental is frozen', () => {
+    it('should block pickup when rental is frozen', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
       engine.freezeRental({
@@ -267,12 +267,12 @@ describe('CarRentalEngine', () => {
         reason: 'Payment dispute',
       });
 
-      const result = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result.success).toBe(false);
       expect(result.error).toContain('frozen');
     });
 
-    it('should block pickup when insurance is not verified', () => {
+    it('should block pickup when insurance is not verified', async () => {
       const { rental } = engine.createRental({
         ...defaultRentalParams,
         insurancePolicy: {
@@ -284,7 +284,7 @@ describe('CarRentalEngine', () => {
       });
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      const result = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result.success).toBe(false);
       expect(result.error).toContain('Insurance must be verified');
     });
@@ -294,10 +294,10 @@ describe('CarRentalEngine', () => {
   // TC-4: Return vehicle
   // ==========================================================================
   describe('TC-4: Return vehicle', () => {
-    it('should transition PICKED_UP -> RETURNED with mileage, fuel, and damage', () => {
+    it('should transition PICKED_UP -> RETURNED with mileage, fuel, and damage', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent, mileageStart: 15000, fuelLevel: 100 });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent, mileageStart: 15000, fuelLevel: 100 });
 
       const result = engine.returnVehicle({
         rentalId: rental!.id,
@@ -324,10 +324,10 @@ describe('CarRentalEngine', () => {
       expect(result.error).toContain('Must be PICKED_UP');
     });
 
-    it('should calculate mileage difference', () => {
+    it('should calculate mileage difference', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent, mileageStart: 15000 });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent, mileageStart: 15000 });
 
       const result = engine.returnVehicle({
         rentalId: rental!.id,
@@ -344,10 +344,10 @@ describe('CarRentalEngine', () => {
   // TC-5: Inspect vehicle
   // ==========================================================================
   describe('TC-5: Inspect vehicle', () => {
-    it('should release deposit when inspection passed', () => {
+    it('should release deposit when inspection passed', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       engine.returnVehicle({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.inspectVehicle({
@@ -362,10 +362,10 @@ describe('CarRentalEngine', () => {
       expect(metadata.deposit.status).toBe(DepositStatus.RELEASED);
     });
 
-    it('should partially charge deposit when damage found', () => {
+    it('should partially charge deposit when damage found', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       engine.returnVehicle({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.inspectVehicle({
@@ -386,10 +386,10 @@ describe('CarRentalEngine', () => {
       expect(metadata.deposit.chargeReason).toBe('Bumper scratch repair');
     });
 
-    it('should reject inspection from non-RETURNED status', () => {
+    it('should reject inspection from non-RETURNED status', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.inspectVehicle({
         rentalId: rental!.id,
@@ -477,10 +477,10 @@ describe('CarRentalEngine', () => {
   // TC-7: Transfer after pickup (blocked)
   // ==========================================================================
   describe('TC-7: Transfer after pickup', () => {
-    it('should block transfer after pickup (RENTAL_LOCKED_AFTER_PICKUP)', () => {
+    it('should block transfer after pickup (RENTAL_LOCKED_AFTER_PICKUP)', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.requestTransfer({
         rentalId: rental!.id,
@@ -534,10 +534,10 @@ describe('CarRentalEngine', () => {
       expect(parseFloat(result.refundAmount!)).toBe(225.00);
     });
 
-    it('should reject cancellation after pickup', () => {
+    it('should reject cancellation after pickup', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.cancelRental({
         rentalId: rental!.id,
@@ -618,10 +618,10 @@ describe('CarRentalEngine', () => {
       expect(metadata.vehicleInfo.category).toBe(VehicleCategory.SUV);
     });
 
-    it('should reject modification after pickup', () => {
+    it('should reject modification after pickup', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.modifyRental({
         rentalId: rental!.id,
@@ -658,10 +658,10 @@ describe('CarRentalEngine', () => {
   // TC-10: Extend rental
   // ==========================================================================
   describe('TC-10: Extend rental', () => {
-    it('should extend return date and update dayCount and total', () => {
+    it('should extend return date and update dayCount and total', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const newReturnDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -693,10 +693,10 @@ describe('CarRentalEngine', () => {
       expect(result.error).toContain('Must be PICKED_UP');
     });
 
-    it('should reject if new return date is before current return date', () => {
+    it('should reject if new return date is before current return date', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const result = engine.extendRental({
         rentalId: rental!.id,
@@ -731,7 +731,7 @@ describe('CarRentalEngine', () => {
       expect(metadata.frozen).toBe(true);
     });
 
-    it('should block operations on frozen rental', () => {
+    it('should block operations on frozen rental', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
@@ -741,7 +741,7 @@ describe('CarRentalEngine', () => {
         reason: 'Payment dispute',
       });
 
-      const pickupResult = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const pickupResult = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(pickupResult.success).toBe(false);
 
       const transferResult = engine.requestTransfer({
@@ -753,7 +753,7 @@ describe('CarRentalEngine', () => {
       expect(transferResult.success).toBe(false);
     });
 
-    it('should unfreeze and re-enable operations', () => {
+    it('should unfreeze and re-enable operations', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
@@ -769,7 +769,7 @@ describe('CarRentalEngine', () => {
       });
       expect(unfreezeResult.success).toBe(true);
 
-      const pickupResult = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const pickupResult = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(pickupResult.success).toBe(true);
     });
 
@@ -797,15 +797,15 @@ describe('CarRentalEngine', () => {
   // TC-12: Double pickup prevention
   // ==========================================================================
   describe('TC-12: Double pickup prevention', () => {
-    it('should return alreadyPickedUp on repeated pickup', () => {
+    it('should return alreadyPickedUp on repeated pickup', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      const result1 = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result1 = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result1.success).toBe(true);
       expect(result1.alreadyPickedUp).toBeFalsy();
 
-      const result2 = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const result2 = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(result2.success).toBe(true);
       expect(result2.alreadyPickedUp).toBe(true);
     });
@@ -815,10 +815,10 @@ describe('CarRentalEngine', () => {
   // TC-13: Metadata versioning
   // ==========================================================================
   describe('TC-13: Metadata versioning', () => {
-    it('should build hash chain across create/confirm/pickup/return', () => {
+    it('should build hash chain across create/confirm/pickup/return', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       engine.returnVehicle({ rentalId: rental!.id, actor: rentalAgent });
 
       const versions = engine.getMetadataVersions(rental!.id);
@@ -853,10 +853,10 @@ describe('CarRentalEngine', () => {
       expect(confirmVersion.changes.status.new).toBe(CarRentalStatus.CONFIRMED);
     });
 
-    it('should have unique hashes for each version', () => {
+    it('should have unique hashes for each version', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
 
       const versions = engine.getMetadataVersions(rental!.id);
       const hashes = versions.map(v => v.currentHash);
@@ -869,33 +869,33 @@ describe('CarRentalEngine', () => {
   // TC-14: RBAC
   // ==========================================================================
   describe('TC-14: RBAC', () => {
-    it('should allow rental agent to pick up and return', () => {
+    it('should allow rental agent to pick up and return', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      const pickupResult = engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      const pickupResult = await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       expect(pickupResult.success).toBe(true);
 
       const returnResult = engine.returnVehicle({ rentalId: rental!.id, actor: rentalAgent });
       expect(returnResult.success).toBe(true);
     });
 
-    it('should block driver from pickup (not authorized)', () => {
+    it('should block driver from pickup (not authorized)', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      expect(() => {
-        engine.pickUp({ rentalId: rental!.id, actor: driver });
-      }).toThrow('PERMISSION_DENIED');
+      await expect(
+        engine.pickUp({ rentalId: rental!.id, actor: driver })
+      ).rejects.toThrow('PERMISSION_DENIED');
     });
 
-    it('should block auditor from pickup', () => {
+    it('should block auditor from pickup', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
 
-      expect(() => {
-        engine.pickUp({ rentalId: rental!.id, actor: auditor });
-      }).toThrow('PERMISSION_DENIED');
+      await expect(
+        engine.pickUp({ rentalId: rental!.id, actor: auditor })
+      ).rejects.toThrow('PERMISSION_DENIED');
     });
 
     it('should allow rental admin to freeze', () => {
@@ -926,10 +926,10 @@ describe('CarRentalEngine', () => {
   // TC-15: Event tracking
   // ==========================================================================
   describe('TC-15: Event tracking', () => {
-    it('should emit events for each state change', () => {
+    it('should emit events for each state change', async () => {
       const { rental } = engine.createRental(defaultRentalParams);
       engine.confirmRental({ rentalId: rental!.id, actor: rentalAgent });
-      engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
+      await engine.pickUp({ rentalId: rental!.id, actor: rentalAgent });
       engine.returnVehicle({ rentalId: rental!.id, actor: rentalAgent });
 
       const events = engine.getRentalEvents(rental!.id);
@@ -1013,7 +1013,7 @@ describe('CarRentalEngine', () => {
       expect(ids.size).toBe(50);
     });
 
-    it('should handle concurrent-like operations on different rentals', () => {
+    it('should handle concurrent-like operations on different rentals', async () => {
       const rentals: string[] = [];
 
       for (let i = 0; i < 10; i++) {
@@ -1027,7 +1027,7 @@ describe('CarRentalEngine', () => {
       }
 
       for (const id of rentals) {
-        const result = engine.pickUp({ rentalId: id, actor: rentalAgent });
+        const result = await engine.pickUp({ rentalId: id, actor: rentalAgent });
         expect(result.success).toBe(true);
       }
 
