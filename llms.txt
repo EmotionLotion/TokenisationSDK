@@ -1,0 +1,75 @@
+# Tokenisation SDK Documentation
+
+> The Stripe of Real-World Asset Tokenization. A comprehensive SDK for compliant tokenized asset platforms with built-in KYC, governance, and multi-chain support.
+
+## Getting Started
+- [Installation Guide](docs/getting-started/INSTALLATION.md) Prerequisites and step-by-step instructions for installing Node.js 18+ and SDK dependencies
+- [Quick Start Guide](docs/getting-started/QUICKSTART.md) Minimal viable example to tokenize and transfer assets within minutes
+- [First Project Tutorial](docs/getting-started/FIRST_PROJECT.md) Hands-on tutorial walking through real estate tokenization with practical code samples
+
+## Core Concepts
+- [Core Concepts](docs/CONCEPTS.md) Foundation explanations of asset tokenization, its importance, and SDK capabilities
+- [Glossary](docs/GLOSSARY.md) 80+ technical terms and definitions used throughout the TokenisationSDK
+- [Architecture Overview](docs/ARCHITECTURE.md) Technical architecture and reasoning behind key design decisions
+
+## API Reference
+- [API Reference](docs/API_REFERENCE.md) Complete reference documentation for the Tokenisation SDK
+- [SDK API Reference](docs/api/SDK_API.md) Complete API documentation for SDK classes, methods, and installation
+- [REST API Reference](docs/api/REST_API.md) HTTP API endpoints with authentication requirements
+- [Smart Contracts Reference](docs/api/CONTRACTS.md) ERC-3643 compliant smart contract specification
+- [Mainnet Cost Estimation](docs/api/MAINNET_COSTS.md) Comprehensive cost estimates for production mainnet operations
+- [One-Page SDK Reference](docs/ONE_PAGE_SDK_REFERENCE.md) Complete TypeScript SDK API surface — every method, parameter, and type
+- [Authentication Guide](docs/AUTHENTICATION.md) Multi-language auth examples for JWT, API Key, and OAuth2
+- [Error Reference](docs/ERROR_REFERENCE.md) Standardized error codes, response format, and troubleshooting
+
+## Architecture
+- [Architecture Overview](docs/architecture/OVERVIEW.md) Layered system design with clear separation of concerns
+- [Lifecycle Engine](docs/architecture/LIFECYCLE.md) Deterministic state machine for asset state transitions with audit trail
+- [Security Model](docs/architecture/SECURITY.md) Security considerations, known limitations, and best practices
+- [Plugin System](docs/architecture/PLUGINS.md) Extensible architecture for customization through plugins
+- [Technical Review](docs/architecture/TECHNICAL_REVIEW.md) Strategic assessment covering technical review and production readiness
+- [SDK Architecture Guide](docs/SDK_ARCHITECTURE_GUIDE.md) Component responsibilities, design trade-offs, and production requirements
+
+## Guides
+- [SDK Usage Guide](docs/guides/SDK_USAGE.md) Common usage patterns and practical implementation examples
+- [Server Setup Guide](docs/guides/SERVER_SETUP.md) REST API server configuration for SQLite and PostgreSQL
+- [Compliance Setup Guide](docs/guides/COMPLIANCE_SETUP.md) ERC-3643 compliance framework configuration including KYC and transfer restrictions
+- [Chainlink Integration](docs/guides/CHAINLINK_INTEGRATION.md) Complete Chainlink integration including Data Feeds, Functions, Automation
+- [UI Kit Guide](docs/guides/UI_KIT.md) Drop-in React components for building tokenization interfaces
+- [MVP Showcase](docs/guides/MVP_SHOWCASE.md) Platform MVP demonstration of capabilities
+
+## Recipes (Use Cases with Chainlink)
+- [Recipes Overview](docs/recipes/README.md) Index of 5 self-contained task-oriented guides for real-world use cases
+- [Real Estate — Price Feeds](docs/recipes/01-real-estate.md) Tokenize real estate with live NAV from Chainlink price feeds
+- [Airline Tickets — Automation](docs/recipes/02-airline-tickets.md) Tokenize airline tickets using Chainlink Automation upkeeps
+- [Car Rental — CCIP Cross-Chain](docs/recipes/03-car-rental.md) Cross-chain settlement for car rental security deposits
+- [Hotel Reservations — Compliance Mint](docs/recipes/04-hotel-tickets.md) Compliance-gated minting with hash-chained audit receipts
+- [Concert Tickets — Proof of Reserve](docs/recipes/05-concert-tickets.md) Proof of Reserve to prevent minting beyond venue capacity
+
+## Deployment & Operations
+- [Deployment Runbook](docs/deployment/DEPLOYMENT_RUNBOOK.md) Step-by-step procedures for testnet and mainnet deployment
+- [Deployment Addresses](docs/deployment/DEPLOYMENT_ADDRESSES.md) Registry of deployed contract addresses across supported networks
+- [Operations Manual](docs/deployment/OPERATIONS_MANUAL.md) Day-to-day operational procedures for production
+- [Troubleshooting Guide](docs/deployment/TROUBLESHOOTING.md) Common issues with solutions and debugging procedures
+
+## Security
+- [Smart Contract Audit Guide](docs/security/SMART_CONTRACT_AUDIT.md) Comprehensive guide for conducting security audits
+- [Audit Checklist](docs/security/AUDIT_CHECKLIST.md) Structured checklist template for security reviewers
+- [Deployment Security](docs/security/DEPLOYMENT_SECURITY.md) Pre-deployment security checklist for production
+
+## Compliance
+- [Standards Mapping](docs/compliance/STANDARDS_MAPPING.md) Mapping of SDK features to token standards and regulatory frameworks
+- [Audit Readiness](docs/compliance/AUDIT_READINESS.md) Contract specifications overview for security auditors
+
+## Examples & Demos
+- [Real Estate Demo](examples/real-estate-demo/README.md) Executable demonstration of SDK for tokenized real estate
+- [Chainlink Starter Kit](examples/chainlink-starter/README.md) Five use-case demos wiring Chainlink through the full SDK pipeline
+- [Feature Showcase](examples/showcase/README.md) Single runnable script demonstrating all major SDK capabilities
+
+## Project Governance
+- [Contributing Guide](CONTRIBUTING.md) Contribution guidelines and procedures
+- [Security Policy](SECURITY.md) Vulnerability reporting and responsible disclosure
+- [Code of Conduct](CODE_OF_CONDUCT.md) Community conduct standards
+- [Changelog](CHANGELOG.md) Versioned record of notable changes
+- [FAQ](docs/FAQ.md) Frequently asked questions and troubleshooting
+- [Production Readiness](PRODUCTION_READINESS.md) Status assessment with detailed production requirements

@@ -43,6 +43,7 @@ export interface ErrorResponse {
     code: string;
     traceId?: string;
     spanId?: string;
+    correlation_id?: string;
     receiptId?: string;
     explanation?: PartnerExplanation;
     details?: Record<string, unknown>;
@@ -98,6 +99,7 @@ export function errorHandler(
       code,
       traceId,
       spanId,
+      correlation_id: traceId || (req.headers["x-request-id"] as string),
     },
   };
 
