@@ -98,6 +98,7 @@ contract ComplianceTokenUpgradeable is Initializable, UUPSUpgradeable {
     event AgentRemoved(address indexed agent);
     event RecoveryExecuted(address indexed from, address indexed to, uint256 amount);
     event ForceTransfer(address indexed from, address indexed to, uint256 amount, string reason);
+    event ComplianceOverride(address indexed agent, address indexed from, address indexed to, uint256 amount, string reason);
     event UpgradeScheduled(address indexed newImplementation, uint256 scheduledTime);
     event UpgradeCancelled(address indexed newImplementation);
     event TimelockControllerSet(address indexed controller);
@@ -496,6 +497,7 @@ contract ComplianceTokenUpgradeable is Initializable, UUPSUpgradeable {
         _updateInvestorStatus(from, to);
 
         emit ForceTransfer(from, to, amount, reason);
+        emit ComplianceOverride(msg.sender, from, to, amount, reason);
         emit Transfer(from, to, amount);
 
         return true;

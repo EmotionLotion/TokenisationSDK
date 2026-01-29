@@ -661,11 +661,20 @@ export class ComplianceEngine {
           }
         }
       } catch (error) {
-        warnings.push({
-          code: 'POR_CHECK_FAILED',
-          message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          rule: 'por.availability',
-        });
+        if (this.strictMode || this.porConfig?.enabled) {
+          violations.push({
+            code: 'POR_CHECK_FAILED',
+            message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            severity: 'CRITICAL',
+            rule: 'por.availability',
+          });
+        } else {
+          warnings.push({
+            code: 'POR_CHECK_FAILED',
+            message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            rule: 'por.availability',
+          });
+        }
       }
     }
 
@@ -911,11 +920,20 @@ export class ComplianceEngine {
           }
         }
       } catch (error) {
-        warnings.push({
-          code: 'POR_CHECK_FAILED',
-          message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          rule: 'por.availability',
-        });
+        if (this.strictMode || this.porConfig?.enabled) {
+          violations.push({
+            code: 'POR_CHECK_FAILED',
+            message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            severity: 'CRITICAL',
+            rule: 'por.availability',
+          });
+        } else {
+          warnings.push({
+            code: 'POR_CHECK_FAILED',
+            message: `Proof of Reserve check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            rule: 'por.availability',
+          });
+        }
       }
     }
 

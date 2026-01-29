@@ -72,6 +72,11 @@ contract ComplianceMultiToken {
     // Paused state (global)
     bool public paused;
 
+    // Reentrancy guard
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _reentrancyStatus = _NOT_ENTERED;
+
     // ============================================================================
     // EVENTS
     // ============================================================================
@@ -111,6 +116,14 @@ contract ComplianceMultiToken {
         uint256 amount,
         string reason
     );
+    event ComplianceOverride(
+        address indexed agent,
+        address indexed from,
+        address indexed to,
+        uint256 tokenId,
+        uint256 amount,
+        string reason
+    );
 
     // ============================================================================
     // MODIFIERS
@@ -139,6 +152,13 @@ contract ComplianceMultiToken {
     modifier notFrozen(address account) {
         require(!_frozen[account], "ComplianceMultiToken: account frozen");
         _;
+    }
+
+    modifier nonReentrant() {
+        require(_reentrancyStatus != _ENTERED, "ComplianceMultiToken: reentrant call");
+        _reentrancyStatus = _ENTERED;
+        _;
+        _reentrancyStatus = _NOT_ENTERED;
     }
 
     modifier tokenExists(uint256 tokenId) {
@@ -259,7 +279,7 @@ contract ComplianceMultiToken {
         uint256 id,
         uint256 amount,
         bytes memory /* data */
-    ) public whenNotPaused {
+    ) public whenNotPaused nonReentrant {
         require(
             from == msg.sender || isApprovedForAll(from, msg.sender),
             "ComplianceMultiToken: caller is not owner nor approved"
@@ -273,7 +293,7 @@ contract ComplianceMultiToken {
         uint256[] memory ids,
         uint256[] memory amounts,
         bytes memory /* data */
-    ) public whenNotPaused {
+    ) public whenNotPaused nonReentrant {
         require(
             from == msg.sender || isApprovedForAll(from, msg.sender),
             "ComplianceMultiToken: caller is not owner nor approved"
@@ -579,7 +599,7 @@ contract ComplianceMultiToken {
         uint256 tokenId,
         uint256 amount,
         string calldata reason
-    ) external onlyAgent tokenExists(tokenId) returns (bool) {
+    ) external onlyAgent tokenExists(tokenId) nonReentrant returns (bool) {
         require(bytes(reason).length > 0, "ComplianceMultiToken: reason required");
         require(_balances[tokenId][from] >= amount, "ComplianceMultiToken: insufficient balance");
 
@@ -591,6 +611,7 @@ contract ComplianceMultiToken {
         _updateInvestorStatus(tokenId, from, to);
 
         emit ForceTransfer(from, to, tokenId, amount, reason);
+        emit ComplianceOverride(msg.sender, from, to, tokenId, amount, reason);
         emit TransferSingle(msg.sender, from, to, tokenId, amount);
 
         return true;

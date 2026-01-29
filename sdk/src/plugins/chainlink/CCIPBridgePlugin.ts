@@ -45,6 +45,7 @@ export interface CCIPTransferParams {
   token: string;
   amount: string;
   data?: string;
+  gasLimit?: number;
 }
 
 export interface CCIPTransferResult {
@@ -53,6 +54,19 @@ export interface CCIPTransferResult {
   sourceChainId: number;
   destChainId: number;
   fee: string;
+}
+
+/**
+ * Encode EVMExtraArgsV1 for CCIP messages.
+ * Tag: 0x97a657c9 (bytes4 selector for EVMExtraArgsV1)
+ * If no gasLimit is provided, returns '0x' (use destination chain default).
+ */
+function encodeExtraArgs(gasLimit?: number): string {
+  if (gasLimit === undefined) {
+    return '0x';
+  }
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [gasLimit]);
+  return '0x97a657c9' + encoded.slice(2);
 }
 
 export class CCIPBridgePlugin {
@@ -104,7 +118,7 @@ export class CCIPBridgePlugin {
           amount: params.amount,
         }],
         feeToken: ethers.ZeroAddress, // Pay in native token
-        extraArgs: '0x',
+        extraArgs: encodeExtraArgs(params.gasLimit),
       };
 
       const fee = await router.getFee(destChain.ccipChainSelector, message);
@@ -150,7 +164,7 @@ export class CCIPBridgePlugin {
           amount: params.amount,
         }],
         feeToken: ethers.ZeroAddress,
-        extraArgs: '0x',
+        extraArgs: encodeExtraArgs(params.gasLimit),
       };
 
       // Send CCIP message

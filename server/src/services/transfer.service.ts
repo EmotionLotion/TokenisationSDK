@@ -78,31 +78,7 @@ const STATE_TRANSITIONS: Record<TransferStatus, TransferStatus[]> = {
 export async function createTransfer(input: CreateTransferInput): Promise<TransferResponse> {
   const { orgId, tokenId, fromWallet, toWallet, amount, fromInvestorId, toInvestorId, idempotencyKey, expiresAt, metadata } = input;
 
-  // Check idempotency
-  if (idempotencyKey) {
-    const existing = await db.query.transfers.findFirst({
-      where: and(eq(transfers.orgId, orgId), eq(transfers.idempotencyKey, idempotencyKey)),
-    });
-
-    if (existing) {
-      return formatTransferResponse(existing);
-    }
-  }
-
-  // Verify token exists and is active
-  const token = await db.query.tokens.findFirst({
-    where: and(eq(tokens.id, tokenId), eq(tokens.orgId, orgId)),
-  });
-
-  if (!token) {
-    throw new NotFoundError('Token not found');
-  }
-
-  if (token.status !== 'active') {
-    throw new ValidationError(`Token is not active (status: ${token.status})`);
-  }
-
-  // Basic validation
+  // Pure validation (no DB state dependency) — stays outside transaction
   if (fromWallet.toLowerCase() === toWallet.toLowerCase()) {
     throw new ValidationError('Cannot transfer to the same wallet');
   }
@@ -114,22 +90,52 @@ export async function createTransfer(input: CreateTransferInput): Promise<Transf
   // Set default expiry (24 hours)
   const transferExpiresAt = expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-  // Create transfer record
-  const [transfer] = await db.insert(transfers).values({
-    orgId,
-    tokenId,
-    fromWallet: fromWallet.toLowerCase(),
-    toWallet: toWallet.toLowerCase(),
-    amount,
-    fromInvestorId,
-    toInvestorId,
-    status: 'created',
-    idempotencyKey,
-    expiresAt: transferExpiresAt,
-    metadata: metadata || {},
-  }).returning();
+  // Wrap idempotency check + token validation + insert in a transaction
+  // to prevent TOCTOU race conditions
+  const transfer = await db.transaction(async (tx) => {
+    // Check idempotency inside transaction
+    if (idempotencyKey) {
+      const existing = await tx.query.transfers.findFirst({
+        where: and(eq(transfers.orgId, orgId), eq(transfers.idempotencyKey, idempotencyKey)),
+      });
 
-  // Emit event to event bus
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // Verify token exists and is active
+    const token = await tx.query.tokens.findFirst({
+      where: and(eq(tokens.id, tokenId), eq(tokens.orgId, orgId)),
+    });
+
+    if (!token) {
+      throw new NotFoundError('Token not found');
+    }
+
+    if (token.status !== 'active') {
+      throw new ValidationError(`Token is not active (status: ${token.status})`);
+    }
+
+    // Create transfer record
+    const [newTransfer] = await tx.insert(transfers).values({
+      orgId,
+      tokenId,
+      fromWallet: fromWallet.toLowerCase(),
+      toWallet: toWallet.toLowerCase(),
+      amount,
+      fromInvestorId,
+      toInvestorId,
+      status: 'created',
+      idempotencyKey,
+      expiresAt: transferExpiresAt,
+      metadata: metadata || {},
+    }).returning();
+
+    return newTransfer;
+  });
+
+  // Emit event to event bus (fire-and-forget, outside transaction)
   await emitTransferEvent(transfer.id, orgId, 'transfer.requested', {
     transferId: transfer.id,
     tokenId,

@@ -1,6 +1,7 @@
 import { db, schema } from '../config/database.js';
 import { eq, and, desc, or, ilike } from 'drizzle-orm';
 import { randomBytes, createHmac } from 'crypto';
+import { ethers } from 'ethers';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
 import { logger } from '../middleware/logger.js';
@@ -656,16 +657,19 @@ export async function manualKycRejection(
 export async function addWallet(input: AddWalletInput) {
   const investor = await getInvestor(input.investorId, input.orgId);
 
-  // Validate address format
-  if (!/^0x[a-fA-F0-9]{40}$/.test(input.address)) {
+  // Validate address format and normalize to EIP-55 checksum
+  let checksumAddress: string;
+  try {
+    checksumAddress = ethers.getAddress(input.address);
+  } catch {
     throw new ValidationError('Invalid wallet address');
   }
 
-  // Check for duplicate address
+  // Check for duplicate address (store checksummed form)
   const existing = await db.query.investorWallets.findFirst({
     where: and(
       eq(investorWallets.orgId, input.orgId),
-      eq(investorWallets.address, input.address.toLowerCase())
+      eq(investorWallets.address, checksumAddress.toLowerCase())
     ),
   });
 
@@ -676,7 +680,7 @@ export async function addWallet(input: AddWalletInput) {
   const [wallet] = await db.insert(investorWallets).values({
     orgId: input.orgId,
     investorId: input.investorId,
-    address: input.address.toLowerCase(),
+    address: checksumAddress.toLowerCase(),
     chainId: input.chainId,
     label: input.label,
     status: 'pending',

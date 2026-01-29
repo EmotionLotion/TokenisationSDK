@@ -297,13 +297,6 @@ export async function createAllocation(
     }
   }
 
-  // Check hard cap
-  const currentRaised = BigInt(offering.totalRaised || '0');
-  const hardCap = BigInt(offering.hardCap);
-  if (currentRaised + investmentBig > hardCap) {
-    throw new ValidationError('Investment would exceed offering hard cap');
-  }
-
   // Determine initial status based on investor KYC
   const initialStatus: AllocationStatus = investor.status === 'active' ? 'kyc_verified' : 'pending_kyc';
 
@@ -321,6 +314,21 @@ export async function createAllocation(
       if (existing) {
         return [existing];
       }
+    }
+
+    // Re-read offering inside transaction to prevent TOCTOU race on hardcap
+    const freshOffering = await tx.query.offerings.findFirst({
+      where: and(eq(offerings.id, input.offeringId), eq(offerings.orgId, orgId)),
+    });
+
+    if (!freshOffering) {
+      throw new NotFoundError('Offering not found');
+    }
+
+    const currentRaised = BigInt(freshOffering.totalRaised || '0');
+    const hardCap = BigInt(freshOffering.hardCap);
+    if (currentRaised + investmentBig > hardCap) {
+      throw new ValidationError('Investment would exceed offering hard cap');
     }
 
     // Create allocation
