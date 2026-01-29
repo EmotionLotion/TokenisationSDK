@@ -50,6 +50,18 @@
     "./errors": {
       "types": "./dist/errors/index.d.ts",
       "import": "./dist/errors/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js"
+    },
+    "./connectors": {
+      "types": "./dist/connectors/index.d.ts",
+      "import": "./dist/connectors/index.js"
+    },
+    "./embed": {
+      "types": "./dist/embed/index.d.ts",
+      "import": "./dist/embed/index.js"
     }
   },
   "scripts": {
@@ -61,6 +73,7 @@
     "test:integration": "vitest run --config tests/integration/vitest.integration.config.ts",
     "test:integration:stripe": "vitest run --config tests/integration/vitest.integration.config.ts tests/integration/stripe/",
     "test:integration:circle": "vitest run --config tests/integration/vitest.integration.config.ts tests/integration/circle/",
+    "test:integration:chainlink-fork": "vitest run --config tests/integration/vitest.integration.config.ts tests/integration/chainlink-fork.integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "docs": "typedoc",
