@@ -28,6 +28,10 @@ const ERC20_ABI = [
 export interface CCIPBridgeConfig {
   sourceChainId: number;
   rpcUrl: string;
+  /**
+   * @deprecated Use `connectSigner()` with an external Signer (Fireblocks, Ledger, AWS KMS) instead.
+   * Raw private keys should never be hardcoded or stored in .env files in production.
+   */
   privateKey?: string;
 }
 
@@ -97,6 +101,10 @@ export class CCIPBridgePlugin {
     this.provider = new ethers.JsonRpcProvider(config.rpcUrl, config.sourceChainId);
 
     if (config.privateKey) {
+      console.warn(
+        '[CCIPBridgePlugin] WARNING: Using raw privateKey is deprecated and insecure for production. ' +
+        'Use connectSigner() with an external Signer (Fireblocks, Ledger, AWS KMS) instead.'
+      );
       this.signer = new ethers.Wallet(config.privateKey, this.provider);
     }
   }

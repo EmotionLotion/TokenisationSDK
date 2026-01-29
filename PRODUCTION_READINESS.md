@@ -41,13 +41,10 @@ This document identifies critical gaps that must be addressed before handing off
 **Guardrails verified:**
 - **NODE_ENV gate (STRONG):** Triple-checked — `IS_PRODUCTION` and `IS_STAGING` force-disable `DEV_MODE` even if `AUTH_DEV_MODE=true` is set. The process exits with a fatal error if dev mode is somehow active in production/staging.
 - **IP restriction (STRONG):** Default allowlist is `127.0.0.1`, `::1`, `::ffff:127.0.0.1`, `localhost` only. Extensible via `AUTH_DEV_ALLOWED_IPS` env var.
-- **Org prefix filtering (PARTIAL):** Applies to API key auth bypass (orgs starting with `dev-`, `test-`, `demo-`). Does **NOT** apply to the JWT `x-dev-party-id` bypass path — that path allows arbitrary `partyId` impersonation.
+- **Org prefix filtering (STRONG):** Applies to both API key auth bypass (orgs starting with `dev-`, `test-`, `demo-`) AND the JWT `x-dev-party-id` bypass path. The `partyId` must match dev org prefixes.
 - **Startup warnings (PRESENT):** Logs warning with allowed IPs and orgs when dev mode is active.
 
-**Remaining risk:** The JWT bypass (`x-dev-party-id` header) does not enforce org prefix filtering, allowing cross-tenant impersonation within localhost dev environments.
-
 **Fix Required:**
-- Apply org prefix filtering to the JWT bypass path as well
 - Consider removing the bypass entirely for mainnet deployment builds
 
 ---
@@ -82,7 +79,11 @@ This document identifies critical gaps that must be addressed before handing off
 - `issuance.service.ts`: Hardcap check moved inside `db.transaction`; `offering.totalRaised` re-read within the transaction.
 - `transfer.service.ts`: `createTransfer` idempotency check + token validation + insert now wrapped in `db.transaction`.
 
-**Remaining:** `investor.service.ts` has non-atomic investor creation + event bus insert (orphaned records on partial failure). `settlement.service.ts` has a TOCTOU race on duplicate check + insert. Both need transaction wrapping.
+**Additional fixes applied:**
+- `investor.service.ts`: `createInvestor` duplicate check + insert + event bus now wrapped in `db.transaction`.
+- `settlement.service.ts`: `createSettlement` duplicate check + insert now wrapped in `db.transaction`.
+
+All identified non-atomic critical paths are now covered with transactions.
 
 ---
 
@@ -205,7 +206,7 @@ SECURITY
 INFRASTRUCTURE
 [ ] PostgreSQL configured (not SQLite)
 [x] Redis for rate limiting
-[x] Database transactions implemented (settlement, issuance TOCTOU, transfer creation)
+[x] Database transactions implemented (settlement, issuance TOCTOU, transfer, investor creation)
 [ ] Distributed tracing enabled (OpenTelemetry framework exists, needs deployment config)
 [ ] Monitoring & alerting configured
 
@@ -241,7 +242,7 @@ DOCUMENTATION
 | Duplicate token issuance | LOW | HIGH | SDK Zod enforcement + server idempotency checks | RESOLVED |
 | Contract bug discovered | MEDIUM | CRITICAL | UUPS proxy pattern deployed | RESOLVED |
 | Admin key compromise | MEDIUM | CRITICAL | TokenGovernor multi-sig + timelock | RESOLVED |
-| Data inconsistency | LOW | HIGH | DB transactions on critical paths | MOSTLY RESOLVED |
+| Data inconsistency | LOW | HIGH | DB transactions on all critical paths (issuance, transfer, investor, settlement) | RESOLVED |
 | DDoS attack | MEDIUM | MEDIUM | Redis rate limiting (sliding window) | RESOLVED |
 | Invalid blockchain tx | LOW | MEDIUM | Zod input validation + EIP-55 checksums | RESOLVED |
 | Contract test coverage | HIGH | CRITICAL | Only 1 test file for 43 contracts | OPEN |
@@ -263,10 +264,10 @@ DOCUMENTATION
 
 ## Conclusion
 
-The TokenisationSDK has made **significant progress** toward production readiness. Of the original 10 critical issues, 6 are fully resolved and 2 are partially resolved. Key achievements:
+The TokenisationSDK has made **significant progress** toward production readiness. Of the original 10 critical issues, 7 are fully resolved and 2 are partially resolved. Key achievements:
 
-- **Resolved:** Input validation (Zod), idempotency enforcement, UUPS proxy, multi-sig + timelock governance, ComplianceOverride audit events, rate limiting, EIP-55 validation, reentrancy guard, CCIP gasLimit, PoR fail-closed, TOCTOU fixes.
-- **Partially resolved:** Auth bypass (heavily guarded but code path still exists), JWT secrets (min-length enforced but weak default in git history), DB transactions (critical paths covered, 2 services still need wrapping).
+- **Resolved:** Input validation (Zod), idempotency enforcement, UUPS proxy, multi-sig + timelock governance, ComplianceOverride audit events, rate limiting, EIP-55 validation, reentrancy guard, CCIP gasLimit, PoR fail-closed, DB transactions on all critical paths (issuance, transfer, investor, settlement), auth bypass org filtering on both paths, Automation gas simulation, privateKey deprecation warnings.
+- **Partially resolved:** Auth bypass (heavily guarded, org-filtered on both paths, but code path still exists), JWT secrets (min-length enforced but weak default in git history).
 
 **Remaining critical gaps:**
 1. **Contract test coverage** (~2-3%) — highest risk item

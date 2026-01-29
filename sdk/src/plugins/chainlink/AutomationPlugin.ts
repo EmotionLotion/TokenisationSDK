@@ -64,6 +64,10 @@ export enum AutomationTaskType {
 export interface AutomationPluginConfig {
   chainId: number;
   rpcUrl: string;
+  /**
+   * @deprecated Use `connectSigner()` with an external Signer (Fireblocks, Ledger, AWS KMS) instead.
+   * Raw private keys should never be hardcoded or stored in .env files in production.
+   */
   privateKey?: string;
 }
 
@@ -135,6 +139,10 @@ export class ChainlinkAutomationPlugin {
     this.provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
 
     if (config.privateKey) {
+      console.warn(
+        '[ChainlinkAutomation] WARNING: Using raw privateKey is deprecated and insecure for production. ' +
+        'Use connectSigner() with an external Signer (Fireblocks, Ledger, AWS KMS) instead.'
+      );
       this.signer = new ethers.Wallet(config.privateKey, this.provider);
     }
 
@@ -156,12 +164,26 @@ export class ChainlinkAutomationPlugin {
     this.setupEventListeners();
   }
 
+  /**
+   * Connect with an external signer (preferred over raw privateKey for production).
+   */
+  connectSigner(signer: Signer): void {
+    this.signer = signer;
+    this.registry = new ethers.Contract(
+      AUTOMATION_REGISTRIES[this.chainId],
+      AUTOMATION_REGISTRY_ABI,
+      this.signer
+    );
+  }
+
   // ============================================
   // UPKEEP REGISTRATION
   // ============================================
 
   /**
-   * Register a new upkeep
+   * Register a new upkeep.
+   * Automatically runs simulateCheckUpkeep before registration to validate
+   * the target contract and warn if the provided gasLimit may be insufficient.
    */
   async registerUpkeep(params: UpkeepRegistration): Promise<Result<string, string>> {
     if (!this.signer) {
@@ -169,12 +191,44 @@ export class ChainlinkAutomationPlugin {
     }
 
     try {
+      // Pre-registration gas simulation: validate the target contract
+      // responds to checkUpkeep and estimate gas usage
+      const checkData = params.checkData || '0x';
+      try {
+        const targetContract = new ethers.Contract(
+          params.target,
+          AUTOMATION_COMPATIBLE_ABI,
+          this.provider
+        );
+        const gasEstimate = await this.provider.estimateGas({
+          to: params.target,
+          data: targetContract.interface.encodeFunctionData('checkUpkeep', [checkData]),
+        });
+        const estimatedGas = Number(gasEstimate);
+        // performUpkeep typically uses 2-3x the gas of checkUpkeep
+        const estimatedPerformGas = estimatedGas * 3;
+        if (params.gasLimit < estimatedPerformGas) {
+          console.warn(
+            `[ChainlinkAutomation] WARNING: Provided gasLimit (${params.gasLimit}) may be insufficient. ` +
+            `checkUpkeep estimated ${estimatedGas} gas; performUpkeep may need ~${estimatedPerformGas}. ` +
+            `Insufficient gas will cause repeated failed executions that drain your LINK balance.`
+          );
+        }
+      } catch {
+        // Simulation failed — target may not implement checkUpkeep or is not yet deployed.
+        // Log warning but proceed with registration (user may know what they're doing).
+        console.warn(
+          `[ChainlinkAutomation] WARNING: Could not simulate checkUpkeep on target ${params.target}. ` +
+          `Ensure the contract implements AutomationCompatibleInterface and is deployed.`
+        );
+      }
+
       const registrationParams = {
         target: params.target,
         gasLimit: params.gasLimit,
         admin: params.admin,
         triggerType: params.triggerType,
-        checkData: params.checkData || '0x',
+        checkData,
         triggerConfig: params.triggerConfig || '0x',
         offchainConfig: params.offchainConfig || '0x',
       };

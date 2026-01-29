@@ -14,6 +14,10 @@ import { SDKError, ErrorCode } from '../../errors/index.js';
 export interface EVMChainPluginConfig {
   chainId: number;
   rpcUrl?: string;
+  /**
+   * @deprecated Use `connectSigner()` with an external Signer (Fireblocks, Ledger, AWS KMS) instead.
+   * Raw private keys should never be hardcoded or stored in .env files in production.
+   */
   privateKey?: string;
   registry?: ChainRegistry;
 }
@@ -52,6 +56,10 @@ export class EVMChainPlugin implements IChainPlugin {
     this.provider = new ethers.JsonRpcProvider(rpcUrl, config.chainId);
 
     if (config.privateKey) {
+      console.warn(
+        '[EVMChainPlugin] WARNING: Using raw privateKey is deprecated and insecure for production. ' +
+        'Use connectSigner() with an external Signer (Fireblocks, Ledger, AWS KMS) instead.'
+      );
       this.signer = new ethers.Wallet(config.privateKey, this.provider);
     }
   }

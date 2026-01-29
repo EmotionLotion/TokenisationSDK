@@ -221,40 +221,46 @@ function getKycAdapter(provider: KycProvider): KycProviderAdapter {
 // ============================================================================
 
 export async function createInvestor(input: CreateInvestorInput) {
-  // Check for duplicate email
-  const existing = await db.query.investors.findFirst({
-    where: and(
-      eq(investors.orgId, input.orgId),
-      eq(investors.email, input.email.toLowerCase())
-    ),
+  // Wrap duplicate check + insert + event bus in a transaction to prevent
+  // orphaned records on partial failure and TOCTOU race on duplicate check
+  const investor = await db.transaction(async (tx) => {
+    // Check for duplicate email inside transaction
+    const existing = await tx.query.investors.findFirst({
+      where: and(
+        eq(investors.orgId, input.orgId),
+        eq(investors.email, input.email.toLowerCase())
+      ),
+    });
+
+    if (existing) {
+      throw new ConflictError('Investor with this email already exists');
+    }
+
+    const [newInvestor] = await tx.insert(investors).values({
+      orgId: input.orgId,
+      externalId: input.externalId,
+      email: input.email.toLowerCase(),
+      phone: input.phone,
+      type: input.type,
+      jurisdiction: input.countryCode.toUpperCase(),
+      countryCode: input.countryCode.toUpperCase(),
+      taxResidency: input.taxResidency?.toUpperCase(),
+      status: 'pending',
+      kycStatus: 'not_started',
+      metadata: { ...input.metadata, profile: input.profile } || {},
+    }).returning();
+
+    // Emit event inside transaction to prevent orphaned records
+    await tx.insert(eventBusQueue).values({
+      orgId: input.orgId,
+      topic: 'investor.created',
+      payload: { investorId: newInvestor.id, email: newInvestor.email },
+    });
+
+    return newInvestor;
   });
 
-  if (existing) {
-    throw new ConflictError('Investor with this email already exists');
-  }
-
-  const [investor] = await db.insert(investors).values({
-    orgId: input.orgId,
-    externalId: input.externalId,
-    email: input.email.toLowerCase(),
-    phone: input.phone,
-    type: input.type,
-    jurisdiction: input.countryCode.toUpperCase(),
-    countryCode: input.countryCode.toUpperCase(),
-    taxResidency: input.taxResidency?.toUpperCase(),
-    status: 'pending',
-    kycStatus: 'not_started',
-    metadata: { ...input.metadata, profile: input.profile } || {},
-  }).returning();
-
-  // Emit event
-  await db.insert(eventBusQueue).values({
-    orgId: input.orgId,
-    topic: 'investor.created',
-    payload: { investorId: investor.id, email: investor.email },
-  });
-
-  // Audit log
+  // Audit log (fire-and-forget, outside transaction)
   await auditService.logSystemAction(
     input.orgId,
     'create',

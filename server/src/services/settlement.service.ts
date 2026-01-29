@@ -77,39 +77,44 @@ export async function createSettlement(input: CreateSettlementInput): Promise<Se
     ?? CHAIN_FINALITY_CONFIG[input.chainId]
     ?? 12;
 
-  // Verify at least one reference is provided
+  // Pure validation — stays outside transaction
   if (!input.transferId && !input.issuanceId && !input.redemptionId) {
     throw new ValidationError('Settlement must reference a transfer, issuance, or redemption');
   }
 
-  // Check for duplicate by txHash
-  const existing = await db.query.settlements.findFirst({
-    where: and(
-      eq(settlements.txHash, input.txHash),
-      eq(settlements.chainId, input.chainId)
-    ),
+  // Wrap duplicate check + insert in a transaction to prevent TOCTOU race
+  const settlement = await db.transaction(async (tx) => {
+    // Check for duplicate by txHash inside transaction
+    const existing = await tx.query.settlements.findFirst({
+      where: and(
+        eq(settlements.txHash, input.txHash),
+        eq(settlements.chainId, input.chainId)
+      ),
+    });
+
+    if (existing) {
+      return existing as SettlementRecord;
+    }
+
+    const [newSettlement] = await tx.insert(settlements).values({
+      orgId: input.orgId,
+      txHash: input.txHash,
+      chainId: input.chainId,
+      transferId: input.transferId,
+      issuanceId: input.issuanceId,
+      redemptionId: input.redemptionId,
+      confirmedBlock: input.confirmedBlock,
+      requiredConfirmations,
+      confirmations: 0,
+      finalityStatus: 'pending',
+      indexedAt: input.confirmedBlock ? new Date() : null,
+      metadata: input.metadata || {},
+    }).returning();
+
+    return newSettlement as SettlementRecord;
   });
 
-  if (existing) {
-    return existing as SettlementRecord;
-  }
-
-  const [settlement] = await db.insert(settlements).values({
-    orgId: input.orgId,
-    txHash: input.txHash,
-    chainId: input.chainId,
-    transferId: input.transferId,
-    issuanceId: input.issuanceId,
-    redemptionId: input.redemptionId,
-    confirmedBlock: input.confirmedBlock,
-    requiredConfirmations,
-    confirmations: 0,
-    finalityStatus: 'pending',
-    indexedAt: input.confirmedBlock ? new Date() : null,
-    metadata: input.metadata || {},
-  }).returning();
-
-  // Audit log
+  // Audit log (fire-and-forget, outside transaction)
   await auditService.log({
     orgId: input.orgId,
     actorType: 'system',
@@ -123,7 +128,7 @@ export async function createSettlement(input: CreateSettlementInput): Promise<Se
     },
   });
 
-  return settlement as SettlementRecord;
+  return settlement;
 }
 
 /**

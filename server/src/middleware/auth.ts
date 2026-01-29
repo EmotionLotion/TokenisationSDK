@@ -186,6 +186,13 @@ export function authMiddleware(
       }
 
       const partyId = req.headers['x-dev-party-id'] as string;
+
+      // Enforce org prefix filtering on the partyId (same rules as API key bypass)
+      if (!isDevOrgAllowed(partyId)) {
+        logger.warn('Dev mode bypass rejected: partyId does not match allowed dev org prefixes', { metadata: { partyId } });
+        throw new UnauthorizedError('Dev mode partyId must use dev-/test-/demo- prefix');
+      }
+
       logDevModeUsage(getClientIp(req), undefined, partyId);
 
       req.user = {
