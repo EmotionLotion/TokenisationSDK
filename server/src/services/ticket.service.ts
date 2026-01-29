@@ -1,10 +1,16 @@
-import { db, schema } from '../config/database.js';
+import { db, schema, getDbMode } from '../config/database.js';
 import { eq, and, desc, lt, gt, or, sql } from 'drizzle-orm';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
 import * as complianceService from './compliance.service.js';
 import * as relayerService from './relayer.service.js';
 import { randomUUID } from 'crypto';
 import { logger } from '../middleware/logger.js';
+
+// SQLite compatibility helpers: Drizzle pgTable columns handle Date→string via mapToDriverValue,
+// but SQLite can't bind booleans or objects directly.
+const isSqlite = () => getDbMode() === 'sqlite';
+const toDbBool = (b: boolean): any => isSqlite() ? (b ? 1 : 0) : b;
+const toDbJson = (obj: unknown): any => isSqlite() ? JSON.stringify(obj ?? {}) : (obj ?? {});
 
 const {
   airlineTickets,
@@ -172,13 +178,16 @@ export async function issueTicket(input: IssueTicketInput) {
     eTicketNumber: eTicketNumber ?? `ET-${randomUUID().slice(0, 12).toUpperCase()}`,
     bookingReference: bookingReference ?? randomUUID().slice(0, 6).toUpperCase(),
     status: 'ISSUED',
-    transferable: transferable ?? true,
+    transferable: toDbBool(transferable ?? true),
     maxTransfers: maxTransfers ?? 3,
     transferCount: 0,
     pricePaid: pricePaid ?? '0',
     currency: currency ?? 'ETH',
     metadataVersion: 1,
-    metadata: metadata ?? {},
+    metadata: toDbJson(metadata),
+    issuedAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }).returning();
 
   // Record event
@@ -237,16 +246,17 @@ async function transitionTicket(orgId: string, ticketId: string, newStatus: Tick
     throw new ValidationError(`Cannot transition from ${currentStatus} to ${newStatus}`);
   }
 
+  const now = new Date();
   const updateData: Record<string, unknown> = {
     status: newStatus,
-    updatedAt: new Date(),
+    updatedAt: now,
   };
 
-  if (newStatus === 'CHECKED_IN') updateData.checkedInAt = new Date();
-  if (newStatus === 'BOARDED') updateData.boardedAt = new Date();
-  if (newStatus === 'COMPLETED') updateData.completedAt = new Date();
-  if (newStatus === 'CANCELLED') updateData.cancelledAt = new Date();
-  if (newStatus === 'BURNED') updateData.burnedAt = new Date();
+  if (newStatus === 'CHECKED_IN') updateData.checkedInAt = now;
+  if (newStatus === 'BOARDED') updateData.boardedAt = now;
+  if (newStatus === 'COMPLETED') updateData.completedAt = now;
+  if (newStatus === 'CANCELLED') updateData.cancelledAt = now;
+  if (newStatus === 'BURNED') updateData.burnedAt = now;
 
   // Optimistic DB update
   const [updated] = await db.update(airlineTickets)
@@ -291,7 +301,7 @@ async function transitionTicket(orgId: string, ticketId: string, newStatus: Tick
         const existingMeta = (ticket.metadata as Record<string, unknown>) ?? {};
         await db.update(airlineTickets)
           .set({
-            metadata: { ...existingMeta, lastTxHash: txHash },
+            metadata: toDbJson({ ...existingMeta, lastTxHash: txHash }),
           })
           .where(eq(airlineTickets.id, ticketId));
 
@@ -329,6 +339,7 @@ async function transitionTicket(orgId: string, ticketId: string, newStatus: Tick
     oldValue: currentStatus,
     newValue: newStatus,
     changedBy: actor,
+    createdAt: new Date(),
   });
 
   // Increment metadata version
@@ -417,13 +428,15 @@ export async function requestTransfer(input: TransferTicketInput) {
     fromPassengerId: ticket.passengerId ?? null,
     toPassengerId: toPassengerId ?? null,
     status: initialStatus,
-    kycRequired: kycRequired ?? false,
-    kycCompleted: false,
+    kycRequired: toDbBool(kycRequired ?? false),
+    kycCompleted: toDbBool(false),
     resaleFee: resaleFee ?? null,
     resaleFeeCurrency: resaleFeeCurrency ?? null,
-    resaleFeePaid: false,
+    resaleFeePaid: toDbBool(false),
     idempotencyKey,
-    metadata: metadata ?? {},
+    metadata: toDbJson(metadata),
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }).returning();
 
   // Record resale fee if applicable
@@ -435,6 +448,8 @@ export async function requestTransfer(input: TransferTicketInput) {
       amount: resaleFee,
       currency: resaleFeeCurrency ?? 'ETH',
       status: 'PENDING',
+      metadata: toDbJson({}),
+      createdAt: new Date(),
     });
   }
 
@@ -516,7 +531,7 @@ export async function rejectTransfer(orgId: string, transferId: string, reason: 
 
 export async function completeTransferKyc(orgId: string, transferId: string) {
   const [updated] = await db.update(ticketTransfers).set({
-    kycCompleted: true,
+    kycCompleted: toDbBool(true),
     kycCompletedAt: new Date(),
     status: 'PENDING', // Move from KYC_REQUIRED to PENDING for approval
     updatedAt: new Date(),
@@ -533,7 +548,7 @@ export async function payResaleFee(orgId: string, transferId: string, txHash?: s
   if (!transfer) throw new NotFoundError('Transfer request not found');
 
   await db.update(ticketTransfers).set({
-    resaleFeePaid: true,
+    resaleFeePaid: toDbBool(true),
     updatedAt: new Date(),
   }).where(eq(ticketTransfers.id, transferId));
 
@@ -579,6 +594,7 @@ export async function updateMetadata(input: UpdateMetadataInput) {
     newValue,
     changedBy: changedBy ?? 'SYSTEM',
     changeReason,
+    createdAt: new Date(),
   });
 
   // Map field to event type
@@ -769,14 +785,16 @@ export async function freezeTicket(orgId: string, ticketId: string, reason: stri
   const ticket = await getTicket(orgId, ticketId);
 
   await db.update(airlineTickets).set({
-    metadata: {
-      ...(ticket.metadata as Record<string, unknown> ?? {}),
+    status: 'FROZEN' as any,
+    metadata: toDbJson({
+      ...(typeof ticket.metadata === 'string' ? JSON.parse(ticket.metadata as string) : (ticket.metadata as Record<string, unknown> ?? {})),
       frozen: true,
       freezeReason: reason,
       frozenAt: new Date().toISOString(),
       frozenBy: actor,
-    },
-    transferable: false,
+      previousStatus: ticket.status,
+    }),
+    transferable: toDbBool(false),
     updatedAt: new Date(),
   }).where(eq(airlineTickets.id, ticketId));
 
@@ -786,15 +804,18 @@ export async function freezeTicket(orgId: string, ticketId: string, reason: stri
 
 export async function unfreezeTicket(orgId: string, ticketId: string, actor: string) {
   const ticket = await getTicket(orgId, ticketId);
-  const meta = ticket.metadata as Record<string, unknown> ?? {};
-  delete meta.frozen;
-  delete meta.freezeReason;
-  delete meta.frozenAt;
-  delete meta.frozenBy;
+  const rawMeta = typeof ticket.metadata === 'string' ? JSON.parse(ticket.metadata as string) : (ticket.metadata as Record<string, unknown> ?? {});
+  const previousStatus = rawMeta.previousStatus || 'ISSUED';
+  delete rawMeta.frozen;
+  delete rawMeta.freezeReason;
+  delete rawMeta.frozenAt;
+  delete rawMeta.frozenBy;
+  delete rawMeta.previousStatus;
 
   await db.update(airlineTickets).set({
-    metadata: meta,
-    transferable: true,
+    status: previousStatus,
+    metadata: toDbJson(rawMeta),
+    transferable: toDbBool(true),
     updatedAt: new Date(),
   }).where(eq(airlineTickets.id, ticketId));
 
@@ -824,7 +845,8 @@ async function recordTicketEvent(
     actorRole,
     previousState,
     newState,
-    details: details ?? {},
+    details: toDbJson(details),
     correlationId: randomUUID(),
+    createdAt: new Date(),
   });
 }

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import { logger } from '../middleware/logger.js';
 import { TracedRequest, getTraceId, getSpanId } from './traceMiddleware.js';
 import { TenantContextError, PermissionDeniedError } from '../context/TenantContext.js';
@@ -84,7 +85,11 @@ export function errorHandler(
   let message = err.message || 'Internal Server Error';
 
   // Handle specific error types
-  if (err instanceof TenantContextError) {
+  if (err instanceof ZodError) {
+    statusCode = 400;
+    code = 'VALIDATION_ERROR';
+    message = err.errors.map(e => e.message).join(', ');
+  } else if (err instanceof TenantContextError) {
     statusCode = 403;
     code = err.code;
   } else if (err instanceof PermissionDeniedError) {
