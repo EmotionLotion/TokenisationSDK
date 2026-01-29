@@ -268,6 +268,56 @@ export * from './audit/index.js';
 export * from './api/index.js';
 export * from './identity/index.js';
 
+// Cross-Pack Orchestration (Handoff, Identity, Audit)
+export {
+  // Autonomous Handoff
+  FlightLandingOracle,
+  CrossPackEventBus,
+  SagaOrchestrator,
+  SagaExecutionStatus,
+
+  // Portable Identity
+  PortableComplianceRegistry,
+  SharedIdentityRegistry,
+
+  // Unified Audit
+  AuditChainManager,
+  UnifiedAuditLog,
+} from './orchestration/index.js';
+
+export type {
+  // Handoff types
+  FlightLandingData,
+  FlightLandingStatus,
+  LandingVerificationResult,
+  CrossPackEvent,
+  CrossPackEventFilter,
+  CrossPackEventHandler,
+  ICrossPackEventBus,
+  SagaDefinition,
+  SagaStep,
+  SagaExecution,
+  SagaLogEntry,
+  CompensationStep,
+
+  // Portable Identity types
+  PortableReceipt,
+  PortableReceiptQuery,
+  PortableComplianceCheck,
+  ComplianceType,
+  IdentityVerification,
+  IIdentityRegistry,
+
+  // Audit types
+  AuditEntry as OrchestrationAuditEntry,
+  AuditFilter as OrchestrationAuditFilter,
+  IAuditLog,
+  ChainedAuditEntry,
+  BusinessAuditView,
+  ChainVerificationResult,
+  CrossPackSubscription,
+} from './orchestration/index.js';
+
 // Re-export commonly used types from SDK
 export {
   // Core enums
