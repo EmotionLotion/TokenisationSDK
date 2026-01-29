@@ -883,6 +883,9 @@ export class ChainlinkAcePlugin implements IAcePlugin {
 
     // Remove event listeners
     this.contract.removeAllListeners();
+
+    // Remove all provider-level listeners to stop polling
+    (this.provider as ethers.JsonRpcProvider).removeAllListeners?.();
   }
 }
 

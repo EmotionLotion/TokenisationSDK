@@ -46,12 +46,6 @@ const AUTOMATION_REGISTRIES: Record<number, string> = {
   42161: '0x02777053d6764996e594c3E88AF1D58D5363a2e6', // Arbitrum
 };
 
-// Registrar addresses for registration
-const AUTOMATION_REGISTRARS: Record<number, string> = {
-  11155111: '0x9a811502d843E5a03913d5A2cfb646c11463467A', // Sepolia
-  84532: '0x8Ea5C9B45FDF6e64b3f3D5f24c1C7f5bCf7b3fE4', // Base Sepolia (example)
-};
-
 export enum TriggerType {
   CONDITIONAL = 0,
   LOG = 1,
@@ -665,12 +659,13 @@ export class ChainlinkAutomationPlugin {
   }
 
   /**
-   * Cleanup resources
+   * Cleanup resources and remove all event listeners.
    */
   destroy(): void {
     this.registry.removeAllListeners();
     this.tasks.clear();
     this.performanceLogs.length = 0;
+    (this.provider as ethers.JsonRpcProvider).removeAllListeners?.();
   }
 }
 

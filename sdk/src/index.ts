@@ -101,6 +101,7 @@ export {
   PolicyEvaluator,
   VALID_TRANSITIONS,
   EventType,
+  ComplianceAction,
   ok,
   err,
   RightModelSchema,
@@ -109,6 +110,12 @@ export {
   ValidityPeriodSchema,
   TransferabilityRulesSchema,
   TransferContextSchema,
+  ComplianceEngine,
+} from './core/index.js';
+
+export type {
+  ComplianceEngineConfig,
+  ComplianceResult,
 } from './core/index.js';
 
 export type {
@@ -157,6 +164,19 @@ export * from './plugins/index.js';
 
 // Services
 export * from './services/index.js';
+
+// Factories (Chainlink wiring)
+export {
+  createChainlinkWiredSDK,
+} from './factories/ChainlinkSDKFactory.js';
+export type {
+  ChainlinkWiringConfig,
+  ChainlinkWiredSDK,
+} from './factories/ChainlinkSDKFactory.js';
+
+// Bridges
+export { DataFeedBridge } from './bridges/DataFeedBridge.js';
+export type { DataFeedBridgeConfig } from './bridges/DataFeedBridge.js';
 
 // Asset Abstraction Layer (institutional-friendly API, no ERC terminology)
 export {

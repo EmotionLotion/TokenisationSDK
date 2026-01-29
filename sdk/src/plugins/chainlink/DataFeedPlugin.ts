@@ -282,6 +282,13 @@ export class DataFeedPlugin implements IOraclePlugin {
       running = false;
     };
   }
+
+  /**
+   * Destroy the plugin, removing all event listeners from the provider.
+   */
+  destroy(): void {
+    (this.provider as ethers.JsonRpcProvider).removeAllListeners?.();
+  }
 }
 
 // Factory functions

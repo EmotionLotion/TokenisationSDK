@@ -15,6 +15,7 @@
 
 import { ethers, type Provider, type Signer } from 'ethers';
 import { ok, err, type Result } from '../../core/types.js';
+import type { IProofOfReservePlugin } from '../../core/interfaces.js';
 
 // ============================================================================
 // Types
@@ -133,7 +134,7 @@ interface CachedReserveCheck {
  *
  * Provides reserve verification for tokenized RWAs with circuit breaker functionality.
  */
-export class ProofOfReservePlugin {
+export class ProofOfReservePlugin implements IProofOfReservePlugin {
   readonly pluginId = 'chainlink-por';
   readonly checkerAddress: string;
 
@@ -566,6 +567,14 @@ export class ProofOfReservePlugin {
    */
   async disconnect(): Promise<void> {
     this.cache.clear();
+  }
+
+  /**
+   * Destroy the plugin, removing all event listeners from the provider.
+   */
+  destroy(): void {
+    this.cache.clear();
+    (this.provider as ethers.JsonRpcProvider).removeAllListeners?.();
   }
 }
 

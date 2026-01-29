@@ -33,13 +33,42 @@ export * from './WarehouseReceipt.js';
 export * from './AirlineTicket.js';
 
 // Pack K: Hotel Reservations - ACCESS (hospitality)
-export * from './HotelReservation.js';
+// Selective re-export to avoid duplicate symbols already exported by AirlineTicket/WarehouseReceipt
+export {
+  RoomType,
+  HotelReservationStatus,
+  type HotelReservationMetadata,
+  HotelEventType,
+  type HotelEvent,
+  HotelRole,
+  HotelReservationEngine,
+  HOTEL_RESERVATION_PACK,
+} from './HotelReservation.js';
 
 // Pack L: Car Rental - ACCESS (mobility, deposit workflow)
-export * from './CarRental.js';
+export {
+  VehicleCategory,
+  CarRentalStatus,
+  DepositStatus,
+  type CarRentalMetadata,
+  RentalRole,
+  CarRentalEventType,
+  type CarRentalEvent,
+  CarRentalEngine,
+  CAR_RENTAL_PACK,
+} from './CarRental.js';
 
 // Pack M: Concert Tickets - ACCESS (entertainment, anti-scalping)
-export * from './ConcertTicket.js';
+export {
+  SeatingTier,
+  ConcertTicketStatus,
+  type ConcertTicketMetadata,
+  VenueRole,
+  ConcertTicketEventType,
+  type ConcertTicketEventRecord,
+  ConcertTicketEngine,
+  CONCERT_TICKET_PACK,
+} from './ConcertTicket.js';
 
 // Service Right Template - Shared utilities for service-right packs
 export * from './ServiceRightTemplate.js';
@@ -52,7 +81,19 @@ export * from './dubai-real-estate.pack.js';
 export * from './us-securities.pack.js';
 
 // Cross-Pack Orchestration Layer
-export * from '../orchestration/index.js';
+// Selective re-export to avoid AuditEntry conflict with audit/AuditLog
+export * from '../orchestration/SharedIdentityRegistry.js';
+export * from '../orchestration/CrossPackEventBus.js';
+export * from '../orchestration/SagaOrchestrator.js';
+export {
+  type AuditEntry as OrchestrationAuditEntry,
+  type AuditFilter,
+  type IAuditLog,
+  UnifiedAuditLog,
+} from '../orchestration/UnifiedAuditLog.js';
+export * from '../orchestration/FlightLandingOracle.js';
+export * from '../orchestration/PortableComplianceReceipt.js';
+export * from '../orchestration/ScopedAuditView.js';
 
 // Custom Condition Evaluators
 // DLD Condition Evaluator - Dubai Land Department verification

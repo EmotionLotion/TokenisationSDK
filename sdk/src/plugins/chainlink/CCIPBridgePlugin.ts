@@ -158,8 +158,18 @@ export class CCIPBridgePlugin {
       const tx = await router.ccipSend(destChain.ccipChainSelector, message, { value: fee });
       const receipt = await tx.wait();
 
-      // Extract messageId from logs
-      const messageId = receipt.logs[0]?.topics[1] || receipt.hash;
+      // Extract messageId from the CCIPMessageSent event.
+      // The CCIP Router emits CCIPMessageSent(bytes32 indexed messageId, ...).
+      // We match by event signature instead of assuming log index, because
+      // token approval/transfer events often appear before the CCIP event.
+      const ccipMessageSentTopic = ethers.id('CCIPMessageSent(bytes32,uint64,address,tuple,uint256)');
+      const ccipSendRequestedTopic = ethers.id('CCIPSendRequested(bytes32)');
+      const messageSentLog = receipt.logs.find(
+        (log: ethers.Log) =>
+          log.topics[0] === ccipMessageSentTopic ||
+          log.topics[0] === ccipSendRequestedTopic
+      );
+      const messageId = messageSentLog?.topics[1] || receipt.hash;
 
       return ok({
         messageId,
@@ -231,6 +241,13 @@ export class CCIPBridgePlugin {
   // Connect with an external signer
   connectSigner(signer: Signer): void {
     this.signer = signer;
+  }
+
+  /**
+   * Destroy the plugin, removing all event listeners from the provider.
+   */
+  destroy(): void {
+    (this.provider as ethers.JsonRpcProvider).removeAllListeners?.();
   }
 }
 
