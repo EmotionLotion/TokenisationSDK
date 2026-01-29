@@ -134,7 +134,8 @@ export class HttpClient {
   }
 
   async post<T>(path: string, body?: unknown, options?: { idempotencyKey?: string }): Promise<ApiResponse<T>> {
-    return this.request<T>({ method: 'POST', path, body, idempotencyKey: options?.idempotencyKey });
+    const idempotencyKey = options?.idempotencyKey || crypto.randomUUID();
+    return this.request<T>({ method: 'POST', path, body, idempotencyKey });
   }
 
   async put<T>(path: string, body?: unknown): Promise<ApiResponse<T>> {

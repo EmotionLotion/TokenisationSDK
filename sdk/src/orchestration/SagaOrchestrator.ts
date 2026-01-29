@@ -79,6 +79,8 @@ export class SagaOrchestrator {
   private executions: Map<string, SagaExecution> = new Map();
   private log: SagaLogEntry[] = [];
   private subscriptionIds: string[] = [];
+  /** Tracks sagas currently inside a synchronous step action to prevent re-entrant triggers */
+  private inStepExecution: Set<string> = new Set();
 
   constructor(eventBus: ICrossPackEventBus) {
     this.eventBus = eventBus;
@@ -91,7 +93,9 @@ export class SagaOrchestrator {
   start(): void {
     for (const saga of this.sagas.values()) {
       const subId = this.eventBus.subscribe(saga.triggerFilter, (event) => {
-        this.executeSaga(saga, event);
+        void this.executeSaga(saga, event).catch(() => {
+          // Errors are already logged internally via appendLog
+        });
       });
       this.subscriptionIds.push(subId);
     }
@@ -124,6 +128,12 @@ export class SagaOrchestrator {
   }
 
   private async executeSaga(saga: SagaDefinition, triggerEvent: CrossPackEvent): Promise<void> {
+    // Drop re-entrant triggers: if a step action synchronously publishes
+    // an event matching this saga's trigger, skip it to prevent infinite recursion.
+    if (this.inStepExecution.has(saga.id)) {
+      return;
+    }
+
     const execution: SagaExecution = {
       id: uuidv4(),
       sagaId: saga.id,
@@ -150,16 +160,23 @@ export class SagaOrchestrator {
 
         const timeoutMs = step.timeoutMs ?? saga.timeoutMs;
 
+        // Guard only the synchronous portion of step.action() to block
+        // re-entrant triggers (step publishes event matching own saga trigger)
+        // without blocking separate publish() calls across await boundaries.
+        this.inStepExecution.add(saga.id);
+        let stepPromise: Promise<void>;
         if (timeoutMs) {
-          await Promise.race([
+          stepPromise = Promise.race([
             step.action(triggerEvent),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`Step "${step.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
             ),
           ]);
         } else {
-          await step.action(triggerEvent);
+          stepPromise = step.action(triggerEvent);
         }
+        this.inStepExecution.delete(saga.id);
+        await stepPromise;
 
         execution.completedSteps.push(step.name);
         this.appendLog(execution.id, saga.id, 'STEP_COMPLETED', step.name);

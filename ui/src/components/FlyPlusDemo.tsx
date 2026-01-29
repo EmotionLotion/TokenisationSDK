@@ -20,6 +20,7 @@ import { useFlyPlusPasses, FlightPass } from '../hooks/useVerticals';
 import { useAhoyState, useSDK } from '../contexts/SDKContext';
 import { AhoyBalanceWidget, AhoyActionButton } from './AhoyBalanceWidget';
 import { sdkStore, type FlyPlusFlight, type FlyPlusBooking, type FlyPlusServiceType, FLYPLUS_SERVICE_CATALOG } from '../store';
+import { FlightSelector, BoardingPass } from '@tokenisation/sdk/components'; // Import SDK components
 
 // Custom hook for FlyPlus store data
 function useFlyPlusStore() {
@@ -228,11 +229,10 @@ export function FlyPlusDemo() {
 
             {/* Recent Action Toast */}
             {recentAction && (
-                <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-4 duration-300 flex items-center gap-3 ${
-                    recentAction.points > 0
-                        ? 'bg-green-500/90 text-white'
-                        : 'bg-red-500/90 text-white'
-                }`}>
+                <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-4 duration-300 flex items-center gap-3 ${recentAction.points > 0
+                    ? 'bg-green-500/90 text-white'
+                    : 'bg-red-500/90 text-white'
+                    }`}>
                     {recentAction.points > 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
                     <div>
                         <p className="font-bold">{recentAction.action}</p>
@@ -245,17 +245,15 @@ export function FlyPlusDemo() {
             <div className="flex bg-white/5 rounded-xl p-1 border border-white/10 mb-6">
                 <button
                     onClick={() => setActiveTab('trips')}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                        activeTab === 'trips' ? 'bg-sky-500 text-white' : 'text-gray-400 hover:text-white'
-                    }`}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'trips' ? 'bg-sky-500 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
                 >
                     <Plane className="w-4 h-4" /> My Trips
                 </button>
                 <button
                     onClick={() => setActiveTab('services')}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                        activeTab === 'services' ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
-                    }`}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'services' ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
                 >
                     <CreditCard className="w-4 h-4" /> Service Credits
                     {serviceCredits.balance > 0 && (
@@ -266,17 +264,15 @@ export function FlyPlusDemo() {
                 </button>
                 <button
                     onClick={() => setActiveTab('tokenization')}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                        activeTab === 'tokenization' ? 'bg-amber-500 text-white' : 'text-gray-400 hover:text-white'
-                    }`}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'tokenization' ? 'bg-amber-500 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
                 >
                     <Coins className="w-4 h-4" /> Tokenization
                 </button>
                 <button
                     onClick={() => setActiveTab('wallet')}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                        activeTab === 'wallet' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
-                    }`}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'wallet' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
                 >
                     <Ticket className="w-4 h-4" /> Benefits
                 </button>
@@ -295,113 +291,39 @@ export function FlyPlusDemo() {
                         ) : (
                             activeBookings.map(booking => {
                                 const flight = getFlightForBooking(booking);
-                                const isDelayed = flight?.status === 'DELAYED';
+                                if (!flight) return null;
+
                                 return (
-                                    <div key={booking.id} className="relative overflow-hidden group">
-                                        <div className={`absolute inset-0 bg-gradient-to-r ${isDelayed ? 'from-yellow-900/40 to-slate-900/40 border-yellow-500/30' : 'from-sky-900/40 to-slate-900/40 border-sky-500/20'} border rounded-2xl backdrop-blur-sm`} />
+                                    <div key={booking.id} className="mb-4">
+                                        <BoardingPass
+                                            flight={{
+                                                id: flight.id,
+                                                airline: 'FlyPlus',
+                                                flightNumber: flight.flightNumber,
+                                                origin: flight.origin,
+                                                destination: flight.destination,
+                                                time: flight.departureTime,
+                                                price: `$${flight.prices.economy}`
+                                            }}
+                                            passengerName={booking.passengerName}
+                                            seat={booking.seatNumber}
+                                        />
 
-                                        <div className="relative p-6 flex items-center justify-between">
-                                            <div className="flex items-center gap-8">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="text-center">
-                                                        <p className="text-2xl font-bold text-white">{booking.origin}</p>
-                                                        <p className="text-xs text-gray-400">{booking.departureTime}</p>
-                                                    </div>
-
-                                                    <div className="flex flex-col items-center gap-1 w-24">
-                                                        <p className="text-xs text-sky-400 font-mono">{booking.flightNumber}</p>
-                                                        <div className="relative w-full h-px bg-sky-500/30">
-                                                            <Plane className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 text-sky-400 rotate-90" />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <p className="text-2xl font-bold text-white">{booking.destination}</p>
-                                                        <p className="text-xs text-gray-400">{booking.arrivalTime}</p>
-                                                    </div>
-                                                </div>
-
-                                                <div className="h-10 w-px bg-white/10 mx-2" />
-
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-400">Date</span>
-                                                        <span className="text-sm text-gray-200 font-medium">{booking.date}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-400">Class</span>
-                                                        <span className="text-sm text-sky-400 font-medium">{booking.seatClass}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-400">Seat</span>
-                                                        <span className="text-sm text-gray-200 font-medium">{booking.seatNumber}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                {booking.status === 'CONFIRMED' && (
-                                                    <button
-                                                        onClick={() => handleCheckIn(booking.id)}
-                                                        className="px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-all text-sm font-bold text-green-400"
-                                                    >
-                                                        Check In
-                                                    </button>
-                                                )}
-                                                {booking.status === 'CHECKED_IN' && (
-                                                    <span className="px-3 py-2 rounded-xl bg-green-500/20 text-green-400 text-sm font-bold">
-                                                        Checked In
-                                                    </span>
-                                                )}
-                                                <button className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
-                                                    <QrCode className="w-5 h-5 text-gray-400" />
+                                        {/* Action Buttons (kept from original app) */}
+                                        <div className="flex gap-2 mt-2">
+                                            {booking.status === 'CONFIRMED' && (
+                                                <button
+                                                    onClick={() => handleCheckIn(booking.id)}
+                                                    className="px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold"
+                                                >
+                                                    Check In
                                                 </button>
-                                                {booking.transferable && booking.status === 'CONFIRMED' && (
-                                                    <button
-                                                        onClick={() => { setSelectedTicket(booking); setShowSellModal(true); }}
-                                                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 transition-all"
-                                                    >
-                                                        <DollarSign className="w-4 h-4 text-sky-400" />
-                                                        <span className="text-sm font-bold text-sky-200">Sell</span>
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-black/20 px-6 py-2 flex items-center justify-between border-t border-white/5">
-                                            <div className="flex items-center gap-4">
-                                                <p className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
-                                                    <ShieldCheck className="w-3 h-3" />
-                                                    Token: {booking.tokenId}
-                                                </p>
-                                                {booking.hasInsurance && (
-                                                    <span className="text-[10px] text-green-400 flex items-center gap-1">
-                                                        <ShieldPlus className="w-3 h-3" /> Insured
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {isDelayed && (
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-xs text-yellow-400 font-bold animate-pulse flex items-center gap-1">
-                                                        <AlertCircle className="w-3 h-3" />
-                                                        Delayed {flight?.delayMinutes}min
-                                                    </p>
-                                                    {booking.hasInsurance && !booking.insuranceClaimed && (
-                                                        <button
-                                                            onClick={() => handleClaimInsurance(booking.id)}
-                                                            className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-lg hover:bg-yellow-500/30"
-                                                        >
-                                                            Claim Insurance
-                                                        </button>
-                                                    )}
-                                                </div>
                                             )}
                                         </div>
                                     </div>
                                 );
                             })
                         )}
-
                         {/* Available Flights */}
                         <div className="glass-card p-6 rounded-2xl border border-white/10">
                             <div className="flex items-center justify-between mb-4">
@@ -411,44 +333,17 @@ export function FlyPlusDemo() {
                                 </h3>
                             </div>
                             <div className="space-y-3">
-                                {flights.slice(0, 3).map((flight) => (
-                                    <div
-                                        key={flight.id}
-                                        className="p-4 bg-white/5 border border-white/10 rounded-xl hover:border-sky-500/30 hover:bg-sky-500/5 transition-all"
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-center">
-                                                    <p className="text-lg font-bold text-white">{flight.origin}</p>
-                                                    <p className="text-[10px] text-gray-500">{flight.departureTime}</p>
-                                                </div>
-                                                <div className="text-center">
-                                                    <p className="text-xs text-sky-400 font-mono">{flight.flightNumber}</p>
-                                                    <Plane className="w-4 h-4 text-sky-400 mx-auto rotate-90" />
-                                                </div>
-                                                <div className="text-center">
-                                                    <p className="text-lg font-bold text-white">{flight.destination}</p>
-                                                    <p className="text-[10px] text-gray-500">{flight.arrivalTime}</p>
-                                                </div>
-                                                <div className="ml-4 text-xs text-gray-400">
-                                                    {flight.date}
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="text-right text-xs">
-                                                    <p className="text-gray-400">from</p>
-                                                    <p className="text-sky-400 font-bold">${flight.prices.economy}</p>
-                                                </div>
-                                                <button
-                                                    onClick={() => { setSelectedFlight(flight); setShowBookModal(true); }}
-                                                    className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all text-sm font-bold"
-                                                >
-                                                    Book
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                                {/* Use SDK FlightSelector */}
+                                <FlightSelector
+                                    onSelect={(flight) => {
+                                        // Map back to internal type for compatibility
+                                        const internalFlight = flights.find(f => f.id === flight.id);
+                                        if (internalFlight) {
+                                            setSelectedFlight(internalFlight);
+                                            setShowBookModal(true);
+                                        }
+                                    }}
+                                />
                             </div>
                         </div>
                     </div>
@@ -593,11 +488,10 @@ export function FlyPlusDemo() {
                                     return (
                                         <div
                                             key={service.id}
-                                            className={`p-5 rounded-xl border transition-all ${
-                                                canAfford
-                                                    ? 'bg-white/5 border-white/10 hover:border-green-500/30 hover:bg-green-500/5'
-                                                    : 'bg-white/2 border-white/5 opacity-60'
-                                            }`}
+                                            className={`p-5 rounded-xl border transition-all ${canAfford
+                                                ? 'bg-white/5 border-white/10 hover:border-green-500/30 hover:bg-green-500/5'
+                                                : 'bg-white/2 border-white/5 opacity-60'
+                                                }`}
                                         >
                                             <div className="flex items-start justify-between mb-3">
                                                 <div className="p-2 bg-green-500/20 rounded-lg text-green-400">
@@ -613,11 +507,10 @@ export function FlyPlusDemo() {
                                             <button
                                                 onClick={() => handleRedeemService(service.serviceType)}
                                                 disabled={!canAfford}
-                                                className={`w-full py-2 rounded-lg text-sm font-bold transition-all ${
-                                                    canAfford
-                                                        ? 'bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20'
-                                                        : 'bg-gray-500/10 border border-gray-500/20 text-gray-500 cursor-not-allowed'
-                                                }`}
+                                                className={`w-full py-2 rounded-lg text-sm font-bold transition-all ${canAfford
+                                                    ? 'bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20'
+                                                    : 'bg-gray-500/10 border border-gray-500/20 text-gray-500 cursor-not-allowed'
+                                                    }`}
                                             >
                                                 {canAfford ? 'Redeem' : 'Insufficient Credits'}
                                             </button>
@@ -819,9 +712,8 @@ export function FlyPlusDemo() {
                                             <p className="text-white font-medium">{asset.name}</p>
                                             <p className="text-gray-500 font-mono">{asset.id.slice(0, 16)}...</p>
                                         </div>
-                                        <span className={`px-2 py-0.5 rounded text-[10px] ${
-                                            asset.state === 'ACTIVE' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
-                                        }`}>
+                                        <span className={`px-2 py-0.5 rounded text-[10px] ${asset.state === 'ACTIVE' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                                            }`}>
                                             {asset.state}
                                         </span>
                                     </div>
@@ -966,11 +858,10 @@ export function FlyPlusDemo() {
                                                 key={seatClass}
                                                 onClick={() => handleBookFlight(selectedFlight, seatClass)}
                                                 disabled={isProcessing || !available}
-                                                className={`p-3 rounded-xl border transition-all text-center ${
-                                                    available
-                                                        ? 'bg-white/5 border-white/10 hover:border-sky-500/30 hover:bg-sky-500/10'
-                                                        : 'bg-gray-800/50 border-gray-700/50 opacity-50 cursor-not-allowed'
-                                                }`}
+                                                className={`p-3 rounded-xl border transition-all text-center ${available
+                                                    ? 'bg-white/5 border-white/10 hover:border-sky-500/30 hover:bg-sky-500/10'
+                                                    : 'bg-gray-800/50 border-gray-700/50 opacity-50 cursor-not-allowed'
+                                                    }`}
                                             >
                                                 <p className="text-xs font-bold text-white">{seatClass}</p>
                                                 <p className="text-lg font-mono text-sky-400">${selectedFlight.prices[key]}</p>
