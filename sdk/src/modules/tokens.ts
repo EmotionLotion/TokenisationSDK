@@ -27,7 +27,9 @@ export interface CreateTokenInput {
   name: string;
   symbol: string;
   decimals?: number;
+  totalSupply: string;
   maxSupply?: string;
+  standard?: 'ERC3643' | 'ERC1400' | 'ERC20';
   projectId?: string;
   assetId?: string;
   chainId: number;

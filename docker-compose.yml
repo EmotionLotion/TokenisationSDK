@@ -174,7 +174,7 @@ services:
       API_URL: http://api:3001
       RPC_URL: http://chain:8545
       CHAIN_ID: 31337
-      TEST_API_KEY: ak_test_sandbox_key_12345
+      TEST_API_KEY: sk_test_sandbox_key_12345
     volumes:
       - ./tests:/app:ro
       - test_results:/app/results

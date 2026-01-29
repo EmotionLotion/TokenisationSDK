@@ -133,8 +133,14 @@ export const DistributionScheduleSchema = z.object({
   /** Minimum balance to receive distribution */
   minimumBalance: z.string().optional(),
 
-  /** Snapshot block/timestamp for balance calculation */
+  /** Snapshot timestamp for balance calculation */
   snapshotAt: z.string().datetime().optional(),
+
+  /** Immutable block number for on-chain snapshot (required for production) */
+  snapshotBlockNumber: z.number().nonnegative().optional(),
+
+  /** Chain ID for the snapshot block (e.g., 1 for Ethereum mainnet) */
+  snapshotChainId: z.number().nonnegative().optional(),
 
   /** Custom parameters */
   parameters: z.record(z.unknown()).optional(),
@@ -189,6 +195,15 @@ export const DistributionEventSchema = z.object({
   /** Snapshot timestamp */
   snapshotAt: z.string().datetime(),
 
+  /** Immutable block number used for balance snapshot (on-chain reference) */
+  snapshotBlockNumber: z.number().nonnegative().optional(),
+
+  /** Chain ID for the snapshot block */
+  snapshotChainId: z.number().nonnegative().optional(),
+
+  /** On-chain snapshot ID from DividendDistributor contract */
+  onChainSnapshotId: z.string().optional(),
+
   /** Execution timestamp */
   executedAt: z.string().datetime().optional(),
 
@@ -222,7 +237,30 @@ export interface HolderSnapshot {
   balance: string;
   weight: number; // Calculated weight for allocation
   timeHeld?: number; // Seconds held (for time-weighted)
+  /** Block number at which this balance was recorded */
+  snapshotBlockNumber?: number;
 }
+
+/**
+ * Balance provider options for snapshot queries
+ */
+export interface BalanceProviderOptions {
+  /** Asset ID to query */
+  assetId: string;
+  /** Block number for historical balance query (immutable snapshot) */
+  atBlockNumber?: number;
+  /** Chain ID for multi-chain support */
+  chainId?: number;
+  /** Timestamp fallback if block number not available */
+  atTimestamp?: string;
+}
+
+/**
+ * Enhanced balance provider that supports block-based queries
+ */
+export type BlockAwareBalanceProvider = (
+  options: BalanceProviderOptions
+) => Promise<HolderSnapshot[]>;
 
 // ============================================================================
 // CASH FLOW ENGINE
@@ -236,6 +274,8 @@ export class CashFlowEngine {
   private distributions: Map<string, DistributionEvent> = new Map();
   private eventStore?: { append: (event: BaseEvent) => Promise<void> };
   private balanceProvider?: (assetId: string) => Promise<HolderSnapshot[]>;
+  private blockAwareBalanceProvider?: BlockAwareBalanceProvider;
+  private currentBlockProvider?: () => Promise<{ blockNumber: number; chainId: number }>;
 
   constructor(
     eventStore?: { append: (event: BaseEvent) => Promise<void> },
@@ -246,10 +286,53 @@ export class CashFlowEngine {
   }
 
   /**
-   * Set balance provider
+   * Set balance provider (legacy, timestamp-based)
    */
   setBalanceProvider(provider: (assetId: string) => Promise<HolderSnapshot[]>): void {
     this.balanceProvider = provider;
+  }
+
+  /**
+   * Set block-aware balance provider (production, immutable snapshots)
+   * This provider queries balances at a specific block number for immutability
+   */
+  setBlockAwareBalanceProvider(provider: BlockAwareBalanceProvider): void {
+    this.blockAwareBalanceProvider = provider;
+  }
+
+  /**
+   * Set current block provider for automatic snapshot block determination
+   */
+  setCurrentBlockProvider(provider: () => Promise<{ blockNumber: number; chainId: number }>): void {
+    this.currentBlockProvider = provider;
+  }
+
+  /**
+   * Get balances at a specific block (or current if not specified)
+   * Prefers block-aware provider, falls back to legacy provider
+   */
+  private async getBalancesAtBlock(
+    assetId: string,
+    blockNumber?: number,
+    chainId?: number
+  ): Promise<{ holders: HolderSnapshot[]; blockNumber?: number; chainId?: number }> {
+    // Try block-aware provider first
+    if (this.blockAwareBalanceProvider) {
+      const holders = await this.blockAwareBalanceProvider({
+        assetId,
+        atBlockNumber: blockNumber,
+        chainId,
+      });
+      return { holders, blockNumber, chainId };
+    }
+
+    // Fall back to legacy provider
+    if (this.balanceProvider) {
+      const holders = await this.balanceProvider(assetId);
+      return { holders };
+    }
+
+    throw new Error('No balance provider configured');
   }
 
   // ============================================
@@ -378,6 +461,12 @@ export class CashFlowEngine {
     options?: {
       amount?: string;
       snapshotAt?: string;
+      /** Block number for immutable balance snapshot (recommended for production) */
+      snapshotBlockNumber?: number;
+      /** Chain ID for the snapshot */
+      chainId?: number;
+      /** On-chain snapshot ID from DividendDistributor contract */
+      onChainSnapshotId?: string;
       metadata?: Record<string, unknown>;
     }
   ): Promise<DistributionEvent> {
@@ -390,19 +479,38 @@ export class CashFlowEngine {
       );
     }
 
-    if (!this.balanceProvider) {
+    if (!this.balanceProvider && !this.blockAwareBalanceProvider) {
       throw new SDKError(
         'Balance provider not set',
         ErrorCode.NOT_INITIALIZED,
-        { details: { required: 'balanceProvider' } }
+        { details: { required: 'balanceProvider or blockAwareBalanceProvider' } }
       );
     }
 
     const now = new Date().toISOString();
     const snapshotAt = options?.snapshotAt || now;
 
-    // Get holder snapshots
-    const holders = await this.balanceProvider(schedule.assetId);
+    // Determine snapshot block number
+    let snapshotBlockNumber = options?.snapshotBlockNumber || schedule.snapshotBlockNumber;
+    let chainId = options?.chainId || schedule.snapshotChainId;
+
+    // Auto-determine current block if not specified and provider available
+    if (!snapshotBlockNumber && this.currentBlockProvider) {
+      try {
+        const currentBlock = await this.currentBlockProvider();
+        snapshotBlockNumber = currentBlock.blockNumber;
+        chainId = chainId || currentBlock.chainId;
+      } catch {
+        // Fall back to timestamp-based if block provider fails
+      }
+    }
+
+    // Get holder snapshots (prefer block-aware query)
+    const { holders, blockNumber: actualBlockNumber } = await this.getBalancesAtBlock(
+      schedule.assetId,
+      snapshotBlockNumber,
+      chainId
+    );
 
     // Filter by minimum balance
     const eligibleHolders = holders.filter(h => {
@@ -419,7 +527,7 @@ export class CashFlowEngine {
       schedule.parameters
     );
 
-    // Create distribution event
+    // Create distribution event with immutable block reference
     const distribution: DistributionEvent = {
       id: uuidv4(),
       scheduleId: schedule.id,
@@ -431,16 +539,21 @@ export class CashFlowEngine {
       recipientCount: payouts.length,
       payouts,
       snapshotAt,
+      snapshotBlockNumber: actualBlockNumber || snapshotBlockNumber,
+      snapshotChainId: chainId,
+      onChainSnapshotId: options?.onChainSnapshotId,
       createdAt: now,
       metadata: options?.metadata,
     };
 
     this.distributions.set(distribution.id, distribution);
 
-    // Update next distribution
+    // Update next distribution with block info
     this.updateSchedule(scheduleId, {
       nextDistribution: this.calculateNextDistribution(now, schedule.frequency),
       snapshotAt,
+      snapshotBlockNumber: actualBlockNumber || snapshotBlockNumber,
+      snapshotChainId: chainId,
     });
 
     // Emit event

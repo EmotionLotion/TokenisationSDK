@@ -1,0 +1,37 @@
+# CODEOWNERS - Defines code ownership for PR reviews
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything
+* @EmotionLotion/core-team
+
+# SDK
+/sdk/ @EmotionLotion/sdk-team
+/sdk/src/contracts/ @EmotionLotion/blockchain-team
+/sdk/src/plugins/chainlink/ @EmotionLotion/blockchain-team
+
+# Server
+/server/ @EmotionLotion/backend-team
+/server/src/middleware/ @EmotionLotion/security-team
+/server/src/services/ @EmotionLotion/backend-team
+
+# Smart Contracts - require blockchain team review
+/contracts/ @EmotionLotion/blockchain-team @EmotionLotion/security-team
+
+# Security-sensitive files require security team
+/server/src/middleware/auth.ts @EmotionLotion/security-team
+/server/src/services/iam.service.ts @EmotionLotion/security-team
+SECURITY.md @EmotionLotion/security-team
+
+# Documentation
+/docs/ @EmotionLotion/docs-team
+README.md @EmotionLotion/core-team
+CONTRIBUTING.md @EmotionLotion/core-team
+
+# CI/CD
+/.github/ @EmotionLotion/devops-team
+
+# UI
+/ui/ @EmotionLotion/frontend-team
+
+# Conformance tests
+/packages/conformance-suite/ @EmotionLotion/qa-team

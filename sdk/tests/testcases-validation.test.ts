@@ -5,7 +5,7 @@
  * Covers: Core Token, Compliance, Oracle, Distribution, Real Estate, Security
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { v4 as uuidv4 } from 'uuid';
 
 // Core imports

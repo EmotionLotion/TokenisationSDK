@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ContextRequest } from '../middleware/context.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { getOrgId, getActorId, getActorType, getRequestId } from '../context/TenantContext.js';
+import { rawQuery } from '../config/database.js';
 
 // ============================================================================
 // Transition Routes - State transition history with full audit trail
@@ -30,7 +31,7 @@ const ListTransitionsQuerySchema = z.object({
 });
 
 const GetTransitionSchema = z.object({
-  transitionId: z.string().uuid(),
+  transitionId: z.string().min(1),
 });
 
 const GetTransitionsByApproverSchema = z.object({
@@ -159,17 +160,89 @@ transitionRouter.get('/', async (req: Request, res: Response, next: NextFunction
       throw new ValidationError(`Invalid query parameters: ${parsed.error.message}`);
     }
 
-    const { limit, offset, ...filters } = parsed.data;
+    const { limit, offset, subjectType, subjectId, triggeredById, assetId, tokenId } = parsed.data;
 
-    // In production, this would query the stateTransitions table
-    // with the provided filters and pagination
+    // Build WHERE clause
+    const conditions: string[] = ['org_id = ?'];
+    const params: any[] = [orgId];
+
+    if (subjectType) {
+      conditions.push('subject_type = ?');
+      params.push(subjectType);
+    }
+    if (subjectId) {
+      conditions.push('subject_id = ?');
+      params.push(subjectId);
+    }
+    if (assetId) {
+      conditions.push("subject_type = 'asset'");
+      conditions.push('subject_id = ?');
+      params.push(assetId);
+    }
+    if (tokenId) {
+      conditions.push("subject_type = 'token'");
+      conditions.push('subject_id = ?');
+      params.push(tokenId);
+    }
+    if (triggeredById) {
+      conditions.push('triggered_by_id = ?');
+      params.push(triggeredById);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Query transitions using raw SQL
+    const rows = await rawQuery(
+      `SELECT * FROM state_transitions WHERE ${whereClause} ORDER BY executed_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    // Get total count
+    const countResult = await rawQuery(
+      `SELECT COUNT(*) as count FROM state_transitions WHERE ${whereClause}`,
+      params
+    );
+
+    const total = Number(countResult[0]?.count || 0);
+
+    // Map to response format (handle snake_case from DB)
+    const transitions: StateTransitionResponse[] = rows.map((row: any) => ({
+      id: row.id,
+      orgId: row.org_id,
+      subjectType: row.subject_type,
+      subjectId: row.subject_id,
+      previousState: row.previous_state,
+      newState: row.new_state,
+      version: row.version,
+      previousTransitionId: row.previous_transition_id,
+      triggeredBy: {
+        id: row.triggered_by_id,
+        type: row.triggered_by_type,
+        name: row.triggered_by_name,
+      },
+      justification: {
+        reason: row.reason,
+        explanation: row.justification,
+      },
+      compliance: row.decision_receipt_id ? {
+        decisionReceiptId: row.decision_receipt_id,
+        result: row.compliance_result,
+      } : undefined,
+      hashChain: {
+        transitionHash: row.transition_hash,
+        previousTransitionHash: row.previous_transition_hash,
+      },
+      context: {},
+      executedAt: row.executed_at,
+      createdAt: row.created_at,
+    }));
 
     const response: ListTransitionsResponse = {
-      transitions: [],
-      total: 0,
+      transitions,
+      total,
       limit,
       offset,
-      hasMore: false,
+      hasMore: offset + transitions.length < total,
     };
 
     res.json(response);
@@ -210,10 +283,49 @@ transitionRouter.get('/:transitionId', async (req: Request, res: Response, next:
 
     const { transitionId } = parsed.data;
 
-    // In production, this would query the stateTransitions table
-    // by ID and orgId
+    // Query transition by ID and orgId using raw SQL
+    const rows = await rawQuery(
+      `SELECT * FROM state_transitions WHERE id = ? AND org_id = ? LIMIT 1`,
+      [transitionId, orgId]
+    );
 
-    throw new NotFoundError('Transition');
+    if (!rows || rows.length === 0) {
+      throw new NotFoundError('Transition');
+    }
+
+    const row = rows[0];
+    const response: StateTransitionResponse = {
+      id: row.id,
+      orgId: row.org_id,
+      subjectType: row.subject_type,
+      subjectId: row.subject_id,
+      previousState: row.previous_state,
+      newState: row.new_state,
+      version: row.version,
+      previousTransitionId: row.previous_transition_id,
+      triggeredBy: {
+        id: row.triggered_by_id,
+        type: row.triggered_by_type,
+        name: row.triggered_by_name,
+      },
+      justification: {
+        reason: row.reason,
+        explanation: row.justification,
+      },
+      compliance: row.decision_receipt_id ? {
+        decisionReceiptId: row.decision_receipt_id,
+        result: row.compliance_result,
+      } : undefined,
+      hashChain: {
+        transitionHash: row.transition_hash,
+        previousTransitionHash: row.previous_transition_hash,
+      },
+      context: {},
+      executedAt: row.executed_at,
+      createdAt: row.created_at,
+    };
+
+    res.json(response);
   } catch (error) {
     next(error);
   }

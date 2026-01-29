@@ -8,6 +8,7 @@
 // Standalone plugin - does not implement core IOraclePlugin interface
 import { UtilityType, type IoTReading } from '../types.js';
 import { ValidationError } from '../../errors/index.js';
+import type { ChainlinkFunctionsPlugin } from '../../plugins/chainlink/FunctionsPlugin.js';
 
 /**
  * IoT device configuration
@@ -62,6 +63,21 @@ export class IoTOraclePlugin {
   private devices: Map<string, IoTDeviceConfig> = new Map();
   private readings: Map<string, IoTReading[]> = new Map();
   private subscribers: Map<string, ((data: unknown) => void)[]> = new Map();
+  private functionsPlugin?: ChainlinkFunctionsPlugin;
+
+  /**
+   * Set the Chainlink Functions plugin for external verification of IoT readings
+   */
+  setFunctionsPlugin(plugin: ChainlinkFunctionsPlugin): void {
+    this.functionsPlugin = plugin;
+  }
+
+  /**
+   * Get the currently configured Functions plugin (if any)
+   */
+  getFunctionsPlugin(): ChainlinkFunctionsPlugin | undefined {
+    return this.functionsPlugin;
+  }
 
   /**
    * Get data from IoT oracle

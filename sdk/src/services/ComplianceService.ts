@@ -57,6 +57,15 @@ export enum RuleConditionType {
   /** Time-based restriction */
   TIME_RESTRICTION = 'TIME_RESTRICTION',
 
+  /** Price cap for anti-scalping (limits resale price to % of mint price) */
+  PRICE_CAP = 'PRICE_CAP',
+
+  /** Maximum resale price (absolute value) */
+  MAX_RESALE_PRICE = 'MAX_RESALE_PRICE',
+
+  /** Lifecycle state restriction (blocks transfers from certain states) */
+  LIFECYCLE_STATE_RESTRICTION = 'LIFECYCLE_STATE_RESTRICTION',
+
   /** Custom rule */
   CUSTOM = 'CUSTOM',
 }

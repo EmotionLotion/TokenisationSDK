@@ -30,7 +30,7 @@ import type { FlightLandingOracle } from '../orchestration/FlightLandingOracle.j
 import {
   CAR_RENTAL_STATE_MACHINE,
   CarRentalState,
-  CarRentalEvent,
+  CarRentalEvent as CarRentalStateMachineEvent,
   CarRentalErrorCode,
   type CarRentalOperationContext,
   transferWindowGuard,

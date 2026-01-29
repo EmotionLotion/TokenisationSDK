@@ -72,7 +72,12 @@ export class ApiClient {
   }
 
   async post(path: string, body?: unknown, headers?: Record<string, string>): Promise<any> {
-    return this.request('POST', path, body, headers);
+    // Auto-generate Idempotency-Key for POST requests if not provided
+    const postHeaders: Record<string, string> = {
+      'Idempotency-Key': `idem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      ...headers,
+    };
+    return this.request('POST', path, body, postHeaders);
   }
 
   async patch(path: string, body?: unknown): Promise<any> {

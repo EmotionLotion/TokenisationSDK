@@ -140,6 +140,9 @@ export class ChainlinkFunctionsPlugin {
 
   /**
    * Execute a Chainlink Functions request
+   *
+   * The response listener is attached BEFORE the transaction is sent to avoid
+   * a race condition where the DON responds before the listener is registered.
    */
   async executeRequest(request: FunctionsRequest): Promise<Result<FunctionsResponse, string>> {
     if (!this.signer) {
@@ -152,6 +155,12 @@ export class ChainlinkFunctionsPlugin {
         FUNCTIONS_CONSUMER_ABI,
         this.signer
       );
+
+      // Attach the response listener BEFORE sending the transaction.
+      // This prevents a race where the DON responds before the listener
+      // is up, which would cause the response to be lost and the request
+      // to timeout after 120 seconds.
+      const responsePromise = this.waitForResponse(consumer, 120000);
 
       const tx = await consumer.sendRequest(
         request.source,
@@ -173,13 +182,17 @@ export class ChainlinkFunctionsPlugin {
       );
 
       if (!requestEvent) {
+        // Clean up the listener since we can't match a response without a requestId
+        consumer.removeAllListeners('Response');
         return err('Request event not found in transaction logs');
       }
 
       const requestId = requestEvent.topics[1];
 
-      // Wait for response (with timeout)
-      const response = await this.waitForResponse(consumer, requestId, 120000);
+      // Now wait for the response that matches our requestId.
+      // The listener was already capturing events since before the tx was sent,
+      // so even if the DON responded instantly, the event is buffered.
+      const response = await responsePromise.then(resolver => resolver(requestId));
 
       return ok(response);
     } catch (error) {
@@ -486,29 +499,72 @@ export class ChainlinkFunctionsPlugin {
   }
 
   /**
-   * Wait for Functions response with timeout
+   * Set up a Response event listener that buffers all incoming events.
+   *
+   * Returns a function that, given a requestId, resolves with the matching
+   * FunctionsResponse (or rejects on timeout). This two-phase design allows
+   * the listener to be attached before the requestId is known (i.e. before
+   * the transaction is sent), eliminating the race condition.
    */
-  private async waitForResponse(
+  private waitForResponse(
     consumer: ethers.Contract,
-    requestId: string,
     timeoutMs: number
-  ): Promise<FunctionsResponse> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        consumer.off('Response');
-        reject(new Error('Functions request timed out'));
-      }, timeoutMs);
+  ): Promise<(requestId: string) => Promise<FunctionsResponse>> {
+    // Buffer for events that arrive before we know the requestId
+    const buffered: Array<{ requestId: string; response: Uint8Array; err: Uint8Array }> = [];
+    let matchResolver: ((resp: FunctionsResponse) => void) | null = null;
+    let targetRequestId: string | null = null;
+    let settled = false;
 
-      consumer.on('Response', (respRequestId: string, response: Uint8Array, err: Uint8Array) => {
-        if (respRequestId === requestId) {
+    const handler = (respRequestId: string, response: Uint8Array, err: Uint8Array) => {
+      if (settled) return;
+
+      if (targetRequestId && respRequestId === targetRequestId) {
+        settled = true;
+        consumer.off('Response', handler);
+        matchResolver!({
+          requestId: targetRequestId,
+          response,
+          error: err.length > 0 ? err : undefined,
+        });
+      } else {
+        // Buffer the event — the requestId might not be known yet
+        buffered.push({ requestId: respRequestId, response, err });
+      }
+    };
+
+    consumer.on('Response', handler);
+
+    // Return a resolver function immediately (listener is already active)
+    return Promise.resolve((requestId: string): Promise<FunctionsResponse> => {
+      targetRequestId = requestId;
+
+      // Check if the response already arrived while we were waiting for the tx
+      const found = buffered.find(e => e.requestId === requestId);
+      if (found) {
+        settled = true;
+        consumer.off('Response', handler);
+        return Promise.resolve({
+          requestId,
+          response: found.response,
+          error: found.err.length > 0 ? found.err : undefined,
+        });
+      }
+
+      return new Promise<FunctionsResponse>((resolve, reject) => {
+        matchResolver = resolve;
+
+        const timeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            consumer.off('Response', handler);
+            reject(new Error(`Functions request timed out after ${timeoutMs}ms for requestId ${requestId}`));
+          }
+        }, timeoutMs);
+
+        // If already settled by the handler between the buffer check and now
+        if (settled) {
           clearTimeout(timeout);
-          consumer.off('Response');
-
-          resolve({
-            requestId,
-            response,
-            error: err.length > 0 ? err : undefined,
-          });
         }
       });
     });

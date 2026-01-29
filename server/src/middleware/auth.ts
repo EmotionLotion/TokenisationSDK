@@ -331,6 +331,48 @@ export async function apiKeyMiddleware(
       return next();
     }
 
+    // Check for X-API-Key header (standard API key header used by test clients)
+    const xApiKey = req.headers['x-api-key'] as string;
+    if (xApiKey) {
+      // Try validating as a real API key first
+      if (xApiKey.startsWith('sk_')) {
+        try {
+          const { validateApiKey } = await import('../services/iam.service.js');
+          const keyInfo = await validateApiKey(xApiKey);
+          req.apiKey = {
+            orgId: keyInfo.orgId,
+            scopes: keyInfo.scopes,
+            keyId: keyInfo.keyId,
+          };
+          return next();
+        } catch {
+          // Key not found in DB — fall through to dev mode bypass
+        }
+      }
+
+      // In dev mode, accept X-API-Key as a dev bypass trigger (only for keys with valid prefixes)
+      if (DEV_MODE_LOCAL && (xApiKey.startsWith('sk_') || xApiKey.startsWith('ak_'))) {
+        if (!isDevIpAllowed(req)) {
+          throw new UnauthorizedError('Dev mode not available from this IP');
+        }
+        const devOrgId = (req.headers['x-dev-org-id'] as string) || 'dev-org';
+        if (!isDevOrgAllowed(devOrgId)) {
+          throw new UnauthorizedError('Dev mode not available for this org ID');
+        }
+        logDevModeUsage(getClientIp(req), devOrgId);
+        const { ensureDevOrg } = await import('../services/iam.service.js');
+        await ensureDevOrg(devOrgId);
+        req.apiKey = {
+          orgId: devOrgId,
+          scopes: ['admin'],
+          keyId: 'dev-key',
+        };
+        return next();
+      }
+
+      throw new UnauthorizedError('Invalid API key');
+    }
+
     const authHeader = req.headers.authorization;
 
     // Check for API key in header

@@ -19,9 +19,14 @@ import 'dotenv/config';
 import { randomUUID } from 'crypto';
 import argon2 from 'argon2';
 import pg from 'pg';
+import Database from 'better-sqlite3';
 import { logger } from '../middleware/logger.js';
 
 const { Pool } = pg;
+
+// Database mode detection
+const DB_MODE = process.env.DB_MODE || 'postgresql';
+const SQLITE_PATH = process.env.SQLITE_PATH || './data/ahoy.db';
 
 // ============================================================================
 // CLI ARGUMENT PARSING
@@ -102,13 +107,234 @@ Examples:
 }
 
 // ============================================================================
-// DATABASE CONNECTION
+// DATABASE CONNECTION ABSTRACTION
 // ============================================================================
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL ||
-    'postgres://ahoy:ahoy_dev_password@localhost:5432/ahoy_tokenisation',
-});
+interface DbClient {
+  query(sql: string, params?: any[]): Promise<{ rows: any[] }>;
+  begin(): Promise<void>;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+  release(): void;
+}
+
+let pool: pg.Pool | null = null;
+let sqliteDb: Database.Database | null = null;
+
+function getDbClient(): Promise<DbClient> {
+  if (DB_MODE === 'sqlite') {
+    // SQLite mode
+    if (!sqliteDb) {
+      logger.info(`Using SQLite database at ${SQLITE_PATH}`);
+      sqliteDb = new Database(SQLITE_PATH);
+      sqliteDb.pragma('journal_mode = WAL');
+      sqliteDb.pragma('foreign_keys = ON');
+      initializeSqliteSchema(sqliteDb);
+    }
+
+    return Promise.resolve({
+      query: async (sql: string, params: any[] = []) => {
+        // Convert PostgreSQL $1, $2 placeholders to SQLite ? placeholders
+        let sqliteSql = sql;
+        let paramIndex = 1;
+        while (sqliteSql.includes(`$${paramIndex}`)) {
+          sqliteSql = sqliteSql.replace(`$${paramIndex}`, '?');
+          paramIndex++;
+        }
+        // Handle PostgreSQL-specific syntax
+        sqliteSql = sqliteSql.replace(/::uuid/g, '');
+        sqliteSql = sqliteSql.replace(/RETURNING \*/gi, '');
+        // Convert "INSERT INTO table ... ON CONFLICT DO NOTHING" to "INSERT OR IGNORE INTO table ..."
+        sqliteSql = sqliteSql.replace(/INSERT INTO/gi, 'INSERT OR IGNORE INTO');
+        sqliteSql = sqliteSql.replace(/ON CONFLICT DO NOTHING/gi, '');
+
+        // Convert array parameters to JSON strings and booleans to integers for SQLite
+        const sqliteParams = params.map(p => {
+          if (Array.isArray(p)) return JSON.stringify(p);
+          if (typeof p === 'boolean') return p ? 1 : 0;
+          return p;
+        });
+
+        try {
+          if (sqliteSql.trim().toUpperCase().startsWith('SELECT')) {
+            const rows = sqliteDb!.prepare(sqliteSql).all(...sqliteParams);
+            return { rows };
+          } else {
+            sqliteDb!.prepare(sqliteSql).run(...sqliteParams);
+            return { rows: [] };
+          }
+        } catch (error) {
+          // Ignore some errors for SQLite compatibility
+          if ((error as any).message?.includes('no such table')) {
+            return { rows: [] };
+          }
+          throw error;
+        }
+      },
+      begin: async () => { sqliteDb!.exec('BEGIN'); },
+      commit: async () => { sqliteDb!.exec('COMMIT'); },
+      rollback: async () => { sqliteDb!.exec('ROLLBACK'); },
+      release: () => { /* no-op for SQLite */ },
+    });
+  } else {
+    // PostgreSQL mode
+    if (!pool) {
+      pool = new Pool({
+        connectionString: process.env.DATABASE_URL ||
+          'postgres://ahoy:ahoy_dev_password@localhost:5432/ahoy_tokenisation',
+      });
+    }
+
+    return pool.connect().then((client) => ({
+      query: (sql: string, params?: any[]) => client.query(sql, params),
+      begin: () => client.query('BEGIN').then(() => {}),
+      commit: () => client.query('COMMIT').then(() => {}),
+      rollback: () => client.query('ROLLBACK').then(() => {}),
+      release: () => client.release(),
+    }));
+  }
+}
+
+function initializeSqliteSchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS orgs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      status TEXT DEFAULT 'active',
+      settings TEXT DEFAULT '{}',
+      risk_profile TEXT DEFAULT '{}',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL,
+      scopes TEXT DEFAULT '[]',
+      environment TEXT DEFAULT 'test',
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      name TEXT,
+      status TEXT DEFAULT 'active',
+      email_verified INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      jurisdiction TEXT DEFAULT 'DUBAI',
+      asset_type TEXT DEFAULT 'REAL_ESTATE',
+      status TEXT DEFAULT 'draft',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS parties (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      roles TEXT DEFAULT '[]',
+      jurisdiction TEXT,
+      verification_level TEXT DEFAULT 'NONE',
+      kyc_verified INTEGER DEFAULT 0,
+      accredited_investor INTEGER DEFAULT 0,
+      is_frozen INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS investors (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      party_id TEXT,
+      investor_type TEXT,
+      accreditation_status TEXT,
+      kyc_status TEXT,
+      aml_status TEXT,
+      tax_country TEXT,
+      jurisdictions TEXT DEFAULT '[]',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (party_id) REFERENCES parties(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      project_id TEXT,
+      name TEXT NOT NULL,
+      description TEXT,
+      right_type TEXT,
+      state TEXT DEFAULT 'DRAFT',
+      issuer_id TEXT,
+      jurisdiction TEXT DEFAULT '{}',
+      validity_period TEXT DEFAULT '{}',
+      transferability_rules TEXT DEFAULT '{}',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (project_id) REFERENCES projects(id),
+      FOREIGN KEY (issuer_id) REFERENCES parties(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tokens (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      asset_id TEXT,
+      name TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      decimals INTEGER DEFAULT 18,
+      total_supply TEXT DEFAULT '0',
+      state TEXT DEFAULT 'DRAFT',
+      token_standard TEXT DEFAULT 'ERC20',
+      compliance_config TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (asset_id) REFERENCES assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS webhook_endpoints (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      name TEXT,
+      url TEXT NOT NULL,
+      events TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'active',
+      secret TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id)
+    );
+  `);
+}
+
+async function closeDb(): Promise<void> {
+  if (sqliteDb) {
+    sqliteDb.close();
+    sqliteDb = null;
+  }
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
+}
 
 // ============================================================================
 // SAMPLE DATA GENERATORS
@@ -284,13 +510,10 @@ function generateWebhookEndpoint(orgId: string) {
 // SEEDING FUNCTIONS
 // ============================================================================
 
-async function cleanDatabase(client: pg.PoolClient): Promise<void> {
+async function cleanDatabase(client: DbClient): Promise<void> {
   logger.info('Cleaning database...');
 
-  // Disable foreign key checks temporarily
-  await client.query('SET session_replication_role = replica');
-
-  // Truncate all tables in reverse dependency order
+  // Tables to clean (in reverse dependency order)
   const tables = [
     'state_transitions', 'compliance_audit_log', 'compliance_receipts', 'policy_rulesets',
     'corporate_action_entitlements', 'corporate_actions', 'distribution_payments', 'distributions',
@@ -314,21 +537,38 @@ async function cleanDatabase(client: pg.PoolClient): Promise<void> {
     'orgs',
   ];
 
-  for (const table of tables) {
-    try {
-      await client.query(`TRUNCATE TABLE ${table} CASCADE`);
-    } catch (error) {
-      // Table might not exist
+  if (DB_MODE === 'sqlite') {
+    // SQLite mode - delete from tables
+    for (const table of tables) {
+      try {
+        await client.query(`DELETE FROM ${table}`);
+      } catch (error) {
+        // Table might not exist
+      }
     }
-  }
+  } else {
+    // PostgreSQL mode - use TRUNCATE with CASCADE
+    try {
+      await client.query('SET session_replication_role = replica');
+    } catch (e) { /* ignore */ }
 
-  // Re-enable foreign key checks
-  await client.query('SET session_replication_role = DEFAULT');
+    for (const table of tables) {
+      try {
+        await client.query(`TRUNCATE TABLE ${table} CASCADE`);
+      } catch (error) {
+        // Table might not exist
+      }
+    }
+
+    try {
+      await client.query('SET session_replication_role = DEFAULT');
+    } catch (e) { /* ignore */ }
+  }
 
   logger.info('Database cleaned');
 }
 
-async function seedOrganization(client: pg.PoolClient, options: SeedOptions): Promise<{ orgId: string; apiKey: string }> {
+async function seedOrganization(client: DbClient, options: SeedOptions): Promise<{ orgId: string; apiKey: string }> {
   const orgData = generateOrgData(options.orgId);
 
   // Check if org already exists
@@ -363,7 +603,7 @@ async function seedOrganization(client: pg.PoolClient, options: SeedOptions): Pr
   return { orgId, apiKey: apiKeyData.rawKey };
 }
 
-async function seedMinimal(client: pg.PoolClient, orgId: string): Promise<void> {
+async function seedMinimal(client: DbClient, orgId: string): Promise<void> {
   logger.info('Creating minimal seed data...');
 
   // Create user
@@ -441,7 +681,7 @@ async function seedMinimal(client: pg.PoolClient, orgId: string): Promise<void> 
   logger.info('Minimal seed data created');
 }
 
-async function seedFull(client: pg.PoolClient, orgId: string): Promise<void> {
+async function seedFull(client: DbClient, orgId: string): Promise<void> {
   logger.info('Creating full seed data...');
 
   // First do minimal seed
@@ -491,11 +731,12 @@ async function main(): Promise<void> {
 ║           AHOY Tokenisation Platform - Sandbox Seeder          ║
 ╚════════════════════════════════════════════════════════════════╝
 `);
+  console.log(`Database mode: ${DB_MODE}`);
 
-  const client = await pool.connect();
+  const client = await getDbClient();
 
   try {
-    await client.query('BEGIN');
+    await client.begin();
 
     if (options.clean) {
       await cleanDatabase(client);
@@ -513,7 +754,7 @@ async function main(): Promise<void> {
       }
     }
 
-    await client.query('COMMIT');
+    await client.commit();
 
     // Print summary
     console.log(`
@@ -543,12 +784,12 @@ async function main(): Promise<void> {
 ╚════════════════════════════════════════════════════════════════╝
 `);
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.rollback();
     logger.error('Seeding failed', { error });
     throw error;
   } finally {
     client.release();
-    await pool.end();
+    await closeDb();
   }
 }
 

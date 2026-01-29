@@ -157,7 +157,9 @@ export const CreateTokenInputSchema = z.object({
     .max(11, 'Token symbol must be 11 characters or less')
     .regex(/^[A-Z0-9]+$/, 'Token symbol must be uppercase alphanumeric'),
   decimals: z.number().int().min(0).max(18).optional().default(18),
+  totalSupply: z.string().regex(/^\d+$/, 'Must be a positive integer string'),
   maxSupply: TokenAmountOrZeroSchema.optional(),
+  standard: z.enum(['ERC3643', 'ERC1400', 'ERC20']).optional(),
   projectId: UUIDSchema.optional(),
   assetId: UUIDSchema.optional(),
   chainId: ChainIdSchema,

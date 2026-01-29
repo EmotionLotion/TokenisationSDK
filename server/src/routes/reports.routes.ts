@@ -16,8 +16,8 @@ const router = Router();
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const orgId = req.headers['x-org-id'] as string || 'default-org';
-    const userId = req.headers['x-user-id'] as string || 'system';
+    const orgId = (req as any).apiKey?.orgId || req.headers['x-org-id'] as string || 'default-org';
+    const userId = (req as any).apiKey?.keyId || req.headers['x-user-id'] as string || 'system';
     const { type, format, parameters } = req.body;
 
     if (!type) {
@@ -65,7 +65,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const orgId = req.headers['x-org-id'] as string || 'default-org';
+    const orgId = (req as any).apiKey?.orgId || req.headers['x-org-id'] as string || 'default-org';
     const { type, status, limit } = req.query;
 
     const reports = await reportsService.listReports(orgId, {
@@ -86,7 +86,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
  */
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const orgId = req.headers['x-org-id'] as string || 'default-org';
+    const orgId = (req as any).apiKey?.orgId || req.headers['x-org-id'] as string || 'default-org';
     const { id } = req.params;
 
     const report = await reportsService.getReport(id, orgId);
@@ -106,7 +106,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
  */
 router.get('/:id/download', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const orgId = req.headers['x-org-id'] as string || 'default-org';
+    const orgId = (req as any).apiKey?.orgId || req.headers['x-org-id'] as string || 'default-org';
     const { id } = req.params;
 
     const report = await reportsService.getReport(id, orgId);

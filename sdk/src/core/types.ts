@@ -15,7 +15,7 @@ import { z } from 'zod';
  * LifecycleState represents the canonical states an asset can be in.
  * The state machine enforces valid transitions between these states.
  *
- * Flow: DRAFT -> PENDING_VERIFICATION -> VERIFIED -> ACTIVE -> [REDEEMED|EXPIRED|BURNED]
+ * Flow: DRAFT -> PENDING_VERIFICATION -> VERIFIED -> ACTIVE -> [PARTIALLY_REDEEMED|REDEEMED|EXPIRED|CLOSED|BURNED]
  */
 export enum LifecycleState {
   /** Initial state - asset definition created but not submitted for verification */
@@ -27,17 +27,23 @@ export enum LifecycleState {
   /** Asset verified by authorized verifier */
   VERIFIED = 'VERIFIED',
 
-  /** Token minted and active on-chain */
+  /** Token minted and active on-chain (RE-E2E: ISSUED equivalent) */
   ACTIVE = 'ACTIVE',
 
   /** Asset frozen due to compliance or legal reasons */
   FROZEN = 'FROZEN',
 
-  /** Asset redeemed (e.g., ticket used, loan repaid) */
+  /** Partial redemptions have occurred but asset still has outstanding tokens (RE-E2E Step 7) */
+  PARTIALLY_REDEEMED = 'PARTIALLY_REDEEMED',
+
+  /** Asset fully redeemed (e.g., ticket used, loan repaid) */
   REDEEMED = 'REDEEMED',
 
   /** Asset validity period expired */
   EXPIRED = 'EXPIRED',
+
+  /** Asset closed - all tokens redeemed, no further operations allowed (RE-E2E Step 8) */
+  CLOSED = 'CLOSED',
 
   /** Token burned and asset retired */
   BURNED = 'BURNED',
@@ -50,10 +56,12 @@ export const VALID_TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
   [LifecycleState.DRAFT]: [LifecycleState.PENDING_VERIFICATION],
   [LifecycleState.PENDING_VERIFICATION]: [LifecycleState.VERIFIED, LifecycleState.DRAFT],
   [LifecycleState.VERIFIED]: [LifecycleState.ACTIVE, LifecycleState.DRAFT],
-  [LifecycleState.ACTIVE]: [LifecycleState.FROZEN, LifecycleState.REDEEMED, LifecycleState.EXPIRED, LifecycleState.BURNED],
+  [LifecycleState.ACTIVE]: [LifecycleState.FROZEN, LifecycleState.PARTIALLY_REDEEMED, LifecycleState.REDEEMED, LifecycleState.EXPIRED, LifecycleState.CLOSED, LifecycleState.BURNED],
   [LifecycleState.FROZEN]: [LifecycleState.ACTIVE, LifecycleState.BURNED],
-  [LifecycleState.REDEEMED]: [LifecycleState.BURNED],
-  [LifecycleState.EXPIRED]: [LifecycleState.BURNED],
+  [LifecycleState.PARTIALLY_REDEEMED]: [LifecycleState.ACTIVE, LifecycleState.REDEEMED, LifecycleState.CLOSED, LifecycleState.FROZEN],
+  [LifecycleState.REDEEMED]: [LifecycleState.CLOSED, LifecycleState.BURNED],
+  [LifecycleState.EXPIRED]: [LifecycleState.CLOSED, LifecycleState.BURNED],
+  [LifecycleState.CLOSED]: [], // Terminal state - no further operations
   [LifecycleState.BURNED]: [], // Terminal state
 };
 
@@ -402,6 +410,8 @@ export const TransferContextSchema = z.object({
   amount: z.string(), // BigNumber as string
   assetId: z.string().uuid(),
   timestamp: z.string().datetime(),
+  /** Transfer price for anti-scalping checks (BigNumber as string) */
+  transferPrice: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 

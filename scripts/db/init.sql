@@ -24,7 +24,7 @@ VALUES (
   'key_sandbox_default',
   'org_sandbox_default',
   'Sandbox Test Key',
-  encode(sha256('ak_test_sandbox_key_12345'::bytea), 'hex'),
+  encode(sha256('sk_test_sandbox_key_12345'::bytea), 'hex'),
   'ak_test_sandbox',
   ARRAY['read', 'write', 'admin'],
   'active',
@@ -49,5 +49,5 @@ DO $$
 BEGIN
   RAISE NOTICE 'AHOY Sandbox Database Initialized';
   RAISE NOTICE 'Organization: org_sandbox_default';
-  RAISE NOTICE 'API Key: ak_test_sandbox_key_12345';
+  RAISE NOTICE 'API Key: sk_test_sandbox_key_12345';
 END $$;

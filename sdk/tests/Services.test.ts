@@ -4,7 +4,7 @@
  * Tests for SDK services including deployment and indexing.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   DeploymentService,
   createDeploymentService,

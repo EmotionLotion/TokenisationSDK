@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { ApiClient } from '../helpers/api-client';
 
 const API_URL = process.env.API_URL || 'http://localhost:3001';
-const API_KEY = process.env.TEST_API_KEY || 'ak_test_sandbox_key_12345';
+const API_KEY = process.env.TEST_API_KEY || 'sk_test_sandbox_key_12345';
 
 describe('07. Audit Trail & Reports', () => {
   let client: ApiClient;
@@ -38,14 +38,16 @@ describe('07. Audit Trail & Reports', () => {
   });
 
   it('07.3 - Filter audit logs by entity type', async () => {
+    // Server uses 'resourceType' query param, not 'entityType'
     const response = await client.get('/api/v1/audit', {
-      entityType: 'investor',
+      resourceType: 'investor',
       limit: 10,
     });
 
     expect(response.data).toBeDefined();
     if (response.data.length > 0) {
-      expect(response.data[0].entityType).toBe('investor');
+      // Server returns 'resourceType' field
+      expect(response.data[0].resourceType).toBe('investor');
     }
   });
 
@@ -60,8 +62,8 @@ describe('07. Audit Trail & Reports', () => {
       expect(log.id).toBeDefined();
       expect(log.action).toBeDefined();
       expect(log.createdAt).toBeDefined();
-      // Hash chain fields
-      expect(log.previousHash || log.hash).toBeDefined();
+      // Hash chain fields — server uses 'prevHash' and 'entryHash'
+      expect(log.prevHash || log.previousHash || log.entryHash || log.hash).toBeDefined();
     }
   });
 
