@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   UserCheck, Shield, CheckCircle,
   Upload, Camera, FileText, Lock, Loader2, X,
@@ -98,6 +98,8 @@ type KYCStep = 'intro' | 'personal' | 'documents' | 'selfie' | 'review' | 'proce
  */
 export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config }: KYCModalProps) {
   const { api, events, user, theme } = useTokenisation();
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const [step, setStep] = useState<KYCStep>(config?.skipIntro ? 'personal' : 'intro');
   const [error, setError] = useState<string | null>(null);
@@ -126,13 +128,54 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
   const targetPartyId = partyId || user?.id;
   const requiredTier = config?.requiredTier || 'STANDARD';
 
-  // Reset state when modal opens
+  // Reset state when modal opens; manage focus
   useEffect(() => {
     if (isOpen) {
       setStep(config?.skipIntro ? 'personal' : 'intro');
       setError(null);
+      // Store the element that had focus before the modal opened
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      // Focus the modal container after render
+      requestAnimationFrame(() => {
+        modalRef.current?.focus();
+      });
+    } else if (previousFocusRef.current) {
+      // Restore focus when modal closes
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
     }
   }, [isOpen, config?.skipIntro]);
+
+  // Trap focus inside modal and handle Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Emit KYC events
   const emitEvent = useCallback((type: 'kyc:started' | 'kyc:step' | 'kyc:completed' | 'kyc:failed', payload: any) => {
@@ -364,6 +407,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
               <button
                 onClick={() => goToStep('documents')}
                 disabled={!formData.firstName || !formData.lastName || !formData.email}
+                aria-disabled={!formData.firstName || !formData.lastName || !formData.email}
                 className="flex-1 py-2.5 text-black font-bold rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                 style={{ background: `linear-gradient(to right, ${primaryColor}, ${primaryColor}dd)` }}
               >
@@ -425,6 +469,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
               <button
                 onClick={() => goToStep('selfie')}
                 disabled={!documents.idFront}
+                aria-disabled={!documents.idFront}
                 className="flex-1 py-2.5 text-black font-bold rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                 style={{ background: `linear-gradient(to right, ${primaryColor}, ${primaryColor}dd)` }}
               >
@@ -466,6 +511,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
               <button
                 onClick={() => goToStep('review')}
                 disabled={!documents.selfie}
+                aria-disabled={!documents.selfie}
                 className="flex-1 py-2.5 text-black font-bold rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                 style={{ background: `linear-gradient(to right, ${primaryColor}, ${primaryColor}dd)` }}
               >
@@ -528,7 +574,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
 
       case 'processing':
         return (
-          <div className="text-center space-y-6 py-8">
+          <div className="text-center space-y-6 py-8" role="status" aria-label={strings.processingText}>
             <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center" style={{ backgroundColor: `${primaryColor}20` }}>
               <Loader2 className="w-10 h-10 animate-spin" style={{ color: primaryColor }} />
             </div>
@@ -541,7 +587,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
 
       case 'complete':
         return (
-          <div className="text-center space-y-6 py-8">
+          <div className="text-center space-y-6 py-8" role="status" aria-label={strings.successTitle}>
             <div className="w-20 h-20 mx-auto rounded-full bg-green-500/20 flex items-center justify-center">
               <CheckCircle className="w-10 h-10 text-green-400" />
             </div>
@@ -554,7 +600,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
 
       case 'error':
         return (
-          <div className="text-center space-y-6 py-8">
+          <div className="text-center space-y-6 py-8" role="alert" aria-label={strings.errorTitle}>
             <div className="w-20 h-20 mx-auto rounded-full bg-red-500/20 flex items-center justify-center">
               <AlertCircle className="w-10 h-10 text-red-400" />
             </div>
@@ -576,8 +622,15 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="presentation">
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kyc-modal-title"
+        aria-describedby="kyc-modal-description"
+        aria-busy={step === 'processing'}
+        tabIndex={-1}
         className="w-full max-w-md rounded-2xl overflow-hidden"
         style={{ background: bgColor, border: '1px solid rgba(255,255,255,0.1)' }}
       >
@@ -587,7 +640,7 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${primaryColor}20` }}>
               <Shield className="w-4 h-4" style={{ color: primaryColor }} />
             </div>
-            <span className="text-sm font-bold text-white">{strings.title}</span>
+            <span id="kyc-modal-title" className="text-sm font-bold text-white">{strings.title}</span>
           </div>
           <button
             onClick={onClose}
@@ -598,8 +651,13 @@ export function KYCModal({ isOpen, onClose, onComplete, onError, partyId, config
           </button>
         </div>
 
+        {/* Screen-reader description */}
+        <p id="kyc-modal-description" className="sr-only">
+          Identity verification process. Complete each step to verify your identity.
+        </p>
+
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6" aria-live="polite">
           {renderStep()}
         </div>
 

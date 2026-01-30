@@ -74,8 +74,17 @@ export function AssetCard({ asset, showActions = false, onClick, onInvest, class
 
     return (
         <div
+            role="article"
+            aria-label={`${asset.name} - ${asset.rightType} asset, status: ${asset.state}`}
+            tabIndex={0}
             className={`bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-all cursor-pointer ${className}`}
             onClick={() => onClick?.(asset)}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onClick?.(asset);
+                }
+            }}
         >
             {/* Header */}
             <div className="p-4 border-b border-white/5">
@@ -89,7 +98,7 @@ export function AssetCard({ asset, showActions = false, onClick, onInvest, class
                             <p className="text-xs text-gray-500">{asset.rightType}</p>
                         </div>
                     </div>
-                    <span className={`px-2 py-1 rounded-md text-xs font-medium border ${getStateColor(asset.state)}`}>
+                    <span className={`px-2 py-1 rounded-md text-xs font-medium border ${getStateColor(asset.state)}`} role="status" aria-label={`Asset status: ${asset.state}`}>
                         {asset.state}
                     </span>
                 </div>
@@ -119,6 +128,7 @@ export function AssetCard({ asset, showActions = false, onClick, onInvest, class
                 <div className="p-4 pt-0 flex gap-2">
                     <button
                         className="flex-1 py-2 bg-white/5 text-white text-sm rounded-lg hover:bg-white/10 transition-colors"
+                        aria-label={`View details for ${asset.name}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             onClick?.(asset);
@@ -129,6 +139,7 @@ export function AssetCard({ asset, showActions = false, onClick, onInvest, class
                     {asset.state === 'ACTIVE' && onInvest && (
                         <button
                             className="flex-1 py-2 bg-[#F8B032] text-black text-sm font-semibold rounded-lg hover:bg-[#E8A633] transition-colors"
+                            aria-label={`Invest in ${asset.name}`}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onInvest(asset);

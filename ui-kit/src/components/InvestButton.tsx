@@ -147,10 +147,13 @@ export function InvestButton({
                 return (
                     <button
                         disabled
+                        aria-disabled="true"
+                        aria-busy="true"
+                        aria-label="Processing investment"
                         className={`flex items-center justify-center gap-2 py-3 px-6 text-black font-bold rounded-xl cursor-not-allowed opacity-50 ${className}`}
                         style={{ background: primaryColor }}
                     >
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                         Processing...
                     </button>
                 );
@@ -159,9 +162,11 @@ export function InvestButton({
                 return (
                     <button
                         disabled
+                        aria-disabled="true"
+                        aria-label="Investment complete"
                         className={`flex items-center justify-center gap-2 py-3 px-6 bg-green-500 text-white font-bold rounded-xl ${className}`}
                     >
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="w-4 h-4" aria-hidden="true" />
                         Investment Complete!
                     </button>
                 );
@@ -170,9 +175,10 @@ export function InvestButton({
                 return (
                     <button
                         onClick={handleClick}
+                        aria-label="Retry investment"
                         className={`flex items-center justify-center gap-2 py-3 px-6 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors ${className}`}
                     >
-                        <AlertTriangle className="w-4 h-4" />
+                        <AlertTriangle className="w-4 h-4" aria-hidden="true" />
                         Retry Investment
                     </button>
                 );
@@ -182,6 +188,8 @@ export function InvestButton({
                     <button
                         onClick={handleClick}
                         disabled={!isReady}
+                        aria-disabled={!isReady}
+                        aria-label={label}
                         className={`py-3 px-6 text-black font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 ${className}`}
                         style={{ background: `linear-gradient(to right, ${primaryColor}, ${primaryColor}dd)` }}
                     >
@@ -212,12 +220,15 @@ export function InvestButton({
 
             {/* Confirmation Modal */}
             {step === 'confirm' && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="presentation">
                     <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="invest-confirm-title"
                         className="w-full max-w-sm rounded-2xl p-6"
                         style={{ background: theme?.colors?.backgroundSecondary || 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
                     >
-                        <h3 className="text-lg font-bold text-white mb-4">Confirm Investment</h3>
+                        <h3 id="invest-confirm-title" className="text-lg font-bold text-white mb-4">Confirm Investment</h3>
 
                         <div className="space-y-3 mb-6">
                             <div className="flex justify-between text-sm">

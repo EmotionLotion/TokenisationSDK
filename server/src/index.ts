@@ -53,6 +53,16 @@ import { exportRouter } from './routes/export.routes.js';
 import { transitionRouter } from './routes/transition.routes.js';
 import { oauthRouter } from './routes/oauth.routes.js';
 import { ticketRouter } from './routes/ticket.routes.js';
+import { gasRouter } from './routes/gas.routes.js';
+// Phase 1-5: New route imports
+import { schedulerRouter } from './routes/scheduler.routes.js';
+import { navRouter } from './routes/nav.routes.js';
+import { flightOracleRouter } from './routes/flight-oracle.routes.js';
+import { redemptionRouter } from './routes/redemption.routes.js';
+import { boardingPassRouter } from './routes/boarding-pass.routes.js';
+import { accreditationRouter } from './routes/accreditation.routes.js';
+import { sseRouter } from './routes/sse.routes.js';
+import { themeRouter } from './routes/theme.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
@@ -68,7 +78,11 @@ import { requestLogger, errorLogger, logger } from './middleware/logger.js';
 import { tenantContextMiddleware, optionalTenantContextMiddleware } from './middleware/context.js';
 import { traceMiddleware } from './middleware/traceMiddleware.js';
 import { usageMiddleware } from './middleware/usage.js';
+import { idempotencyMiddleware } from './middleware/idempotency.js';
+import { auditTrailMiddleware } from './middleware/auditTrail.js';
 import * as recoveryService from './services/recovery.service.js';
+import * as schedulerService from './services/scheduler.service.js';
+import { sseService } from './services/sse.service.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -90,6 +104,15 @@ app.use(requestLogger({ logBody: process.env.LOG_REQUEST_BODY === 'true' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
+
+// Idempotency middleware for write operations (Gap 12)
+app.use(idempotencyMiddleware());
+
+// Automatic audit trail middleware for all mutations (Gap 18)
+app.use(auditTrailMiddleware);
+
+// SSE Events endpoint — registered before compression (SSE must not be compressed) (Gap 1)
+app.use('/api/v1/events', sseRouter);
 
 // Rate limiting (Redis-backed when REDIS_URL is configured)
 app.use('/api/v1/auth', authRateLimiter);
@@ -177,6 +200,7 @@ app.use('/api/v1/issuance', apiKeyMiddleware, tenantContextMiddleware, issuanceR
 // Infrastructure & Operations
 app.use('/api/v1/webhooks', apiKeyMiddleware, tenantContextMiddleware, webhookRouter);
 app.use('/api/v1/relayer', apiKeyMiddleware, tenantContextMiddleware, relayerRouter);
+app.use('/api/v1/gas', apiKeyMiddleware, tenantContextMiddleware, gasRouter);
 app.use('/api/v1/indexer', apiKeyMiddleware, tenantContextMiddleware, indexerRouter);
 app.use('/api/v1/eventbus', apiKeyMiddleware, tenantContextMiddleware, eventbusRouter);
 app.use('/api/v1/idempotency', apiKeyMiddleware, tenantContextMiddleware, idempotencyRouter);
@@ -194,6 +218,27 @@ app.use('/api/v1/transitions', apiKeyMiddleware, tenantContextMiddleware, transi
 
 // Airline Tickets (NFT Utility Tokens)
 app.use('/api/v1/tickets', apiKeyMiddleware, tenantContextMiddleware, ticketRouter);
+
+// NAV & Valuation (Gap 4)
+app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, navRouter);
+
+// Flight Oracle (Gap 5)
+app.use('/api/v1/flights', apiKeyMiddleware, tenantContextMiddleware, flightOracleRouter);
+
+// Redemption Workflow (Gap 9)
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, redemptionRouter);
+
+// Boarding Pass (Gap 16)
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, boardingPassRouter);
+
+// Accreditation (Gap 17)
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, accreditationRouter);
+
+// Scheduler Admin (Gap 13)
+app.use('/api/v1/scheduler', apiKeyMiddleware, tenantContextMiddleware, schedulerRouter);
+
+// White-Label Theming (Gap 6)
+app.use('/api/v1/themes', apiKeyMiddleware, tenantContextMiddleware, themeRouter);
 
 // External Integrations
 app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);
@@ -219,6 +264,14 @@ async function gracefulShutdown(signal: string) {
     // Stop recovery workers (indexers, event bus, outbox)
     await recoveryService.shutdown();
     logger.info('Recovery service stopped');
+
+    // Stop scheduler service
+    schedulerService.stop();
+    logger.info('Scheduler service stopped');
+
+    // Close SSE connections
+    sseService.shutdown();
+    logger.info('SSE connections closed');
 
     // Close Redis connection
     await closeRedisConnection();
@@ -276,6 +329,14 @@ async function start() {
         logger.info('Recovery service initialized');
       } catch (error) {
         logger.error('Recovery service failed to start', { error: error as Error });
+      }
+
+      // Start scheduled jobs service (Gap 13)
+      try {
+        await schedulerService.start();
+        logger.info('Scheduler service started');
+      } catch (error) {
+        logger.error('Scheduler service failed to start', { error: error as Error });
       }
     }
 

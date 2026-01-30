@@ -135,44 +135,46 @@ export function TransactionHistory({
 
     if (loading) {
         return (
-            <div className={`flex items-center justify-center p-8 ${className}`}>
-                <Loader2 className="w-6 h-6 text-[#F8B032] animate-spin" />
+            <div className={`flex items-center justify-center p-8 ${className}`} role="status" aria-label="Loading transactions" aria-busy="true">
+                <Loader2 className="w-6 h-6 text-[#F8B032] animate-spin" aria-hidden="true" />
+                <span className="sr-only">Loading transaction history...</span>
             </div>
         );
     }
 
     if (transactions.length === 0) {
         return (
-            <div className={`text-center p-8 ${className}`}>
-                <Clock className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <div className={`text-center p-8 ${className}`} role="status">
+                <Clock className="w-12 h-12 text-gray-600 mx-auto mb-3" aria-hidden="true" />
                 <p className="text-gray-400">No transactions yet</p>
             </div>
         );
     }
 
     return (
-        <div className={`bg-white/5 border border-white/10 rounded-xl overflow-hidden ${className}`}>
+        <div className={`bg-white/5 border border-white/10 rounded-xl overflow-hidden ${className}`} role="region" aria-label="Transaction History">
             {/* Header */}
             <div className="p-4 border-b border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-[#F8B032]" />
-                    <h3 className="font-semibold text-white">Activity</h3>
+                    <Clock className="w-5 h-5 text-[#F8B032]" aria-hidden="true" />
+                    <h3 id="tx-history-heading" className="font-semibold text-white">Activity</h3>
                 </div>
                 <button
                     onClick={fetchTransactions}
                     className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                    aria-label="Refresh transaction history"
                 >
-                    <RefreshCw className="w-4 h-4 text-gray-400" />
+                    <RefreshCw className="w-4 h-4 text-gray-400" aria-hidden="true" />
                 </button>
             </div>
 
             {/* Transaction List */}
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-white/5" role="list" aria-labelledby="tx-history-heading" aria-live="polite">
                 {transactions.map((tx) => (
-                    <div key={tx.id} className="p-4 hover:bg-white/5 transition-colors">
+                    <div key={tx.id} className="p-4 hover:bg-white/5 transition-colors" role="listitem" aria-label={`${getEventLabel(tx.type)}${tx.amount ? `, ${Number(tx.amount).toLocaleString()} tokens` : ''}, ${formatTimestamp(tx.timestamp)}`}>
                         <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center" aria-hidden="true">
                                     {getEventIcon(tx.type)}
                                 </div>
                                 <div>

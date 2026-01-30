@@ -2,7 +2,9 @@
  * OAuth2 Authorization Server Routes
  *
  * Implements RFC 6749 OAuth2 endpoints:
- * - POST /oauth/token - Token endpoint
+ * - GET /oauth/authorize - Authorization endpoint (initiate auth code flow)
+ * - POST /oauth/authorize - Process authorization decision (approve/deny)
+ * - POST /oauth/token - Token endpoint (client_credentials, authorization_code, refresh_token)
  * - POST /oauth/revoke - Token revocation (RFC 7009)
  * - POST /oauth/introspect - Token introspection (RFC 7662)
  * - GET /oauth/.well-known/oauth-authorization-server - Server metadata (RFC 8414)
@@ -12,6 +14,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { oauth2Service, OAUTH_SCOPES } from '../services/oauth2.service.js';
+import { oauth2ConsentService } from '../services/oauth2-consent.service.js';
 import { ValidationError, UnauthorizedError, AppError } from '../middleware/errorHandler.js';
 import { logger } from '../middleware/logger.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
@@ -47,6 +50,341 @@ function extractClientCredentials(req: Request): { clientId: string; clientSecre
 }
 
 // ============================================================================
+// AUTHORIZATION ENDPOINT
+// GET /oauth/authorize
+// ============================================================================
+
+/**
+ * @openapi
+ * /oauth/authorize:
+ *   get:
+ *     summary: OAuth2 Authorization Endpoint
+ *     description: |
+ *       Initiates the Authorization Code flow with PKCE.
+ *       Validates the request parameters and returns authorization request details
+ *       for the client to present a consent screen or process programmatically.
+ *     tags:
+ *       - OAuth2
+ *     parameters:
+ *       - name: response_type
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [code]
+ *       - name: client_id
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - name: redirect_uri
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - name: scope
+ *         in: query
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Space-separated list of requested scopes
+ *       - name: state
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Opaque value used to prevent CSRF
+ *       - name: code_challenge
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: PKCE code challenge
+ *       - name: code_challenge_method
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [S256, plain]
+ *         description: PKCE code challenge method
+ *     responses:
+ *       200:
+ *         description: Authorization request created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 request_id:
+ *                   type: string
+ *                 client_id:
+ *                   type: string
+ *                 client_name:
+ *                   type: string
+ *                 requested_scopes:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 redirect_uri:
+ *                   type: string
+ *                 state:
+ *                   type: string
+ *                 expires_at:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Invalid request parameters
+ */
+oauthRouter.get('/authorize', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const {
+      response_type,
+      client_id,
+      redirect_uri,
+      scope,
+      state,
+      code_challenge,
+      code_challenge_method,
+    } = req.query as Record<string, string>;
+
+    // Validate response_type
+    if (!response_type || response_type !== 'code') {
+      return res.status(400).json({
+        error: 'unsupported_response_type',
+        error_description: 'Only response_type=code is supported',
+      });
+    }
+
+    // Validate required parameters
+    if (!client_id) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing required parameter: client_id',
+      });
+    }
+
+    if (!redirect_uri) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing required parameter: redirect_uri',
+      });
+    }
+
+    if (!state) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing required parameter: state',
+      });
+    }
+
+    if (!code_challenge) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing required parameter: code_challenge (PKCE is required)',
+      });
+    }
+
+    if (!code_challenge_method || !['S256', 'plain'].includes(code_challenge_method)) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing or invalid code_challenge_method. Supported: S256, plain',
+      });
+    }
+
+    // Validate client exists and is active
+    const client = await oauth2Service.getClient(client_id);
+    if (!client || client.status !== 'active') {
+      return res.status(400).json({
+        error: 'invalid_client',
+        error_description: 'Unknown or inactive client',
+      });
+    }
+
+    // Validate redirect_uri is registered
+    if (!client.redirectUris.includes(redirect_uri)) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'redirect_uri is not registered for this client',
+      });
+    }
+
+    // Parse and validate scopes
+    const requestedScopes = scope ? scope.split(' ').filter(s => s) : client.scopes;
+    const validScopes = requestedScopes.filter(s => client.scopes.includes(s));
+
+    if (requestedScopes.length > 0 && validScopes.length === 0) {
+      return res.status(400).json({
+        error: 'invalid_scope',
+        error_description: 'None of the requested scopes are valid for this client',
+      });
+    }
+
+    // Create the authorization request
+    const authRequest = oauth2ConsentService.createAuthorizationRequest({
+      clientId: client_id,
+      orgId: client.orgId,
+      redirectUri: redirect_uri,
+      scope: validScopes,
+      state,
+      codeChallenge: code_challenge,
+      codeChallengeMethod: code_challenge_method as 'S256' | 'plain',
+    });
+
+    // Return authorization request details for the client to present consent
+    res.json({
+      request_id: authRequest.id,
+      client_id: client.clientId,
+      client_name: client.name,
+      requested_scopes: validScopes.map(s => ({
+        scope: s,
+        description: (OAUTH_SCOPES as Record<string, string>)[s] || s,
+      })),
+      redirect_uri,
+      state,
+      expires_at: authRequest.expiresAt.toISOString(),
+    });
+  } catch (error) {
+    logger.error('OAuth2 authorize error', { error });
+    next(error);
+  }
+});
+
+// ============================================================================
+// AUTHORIZATION DECISION ENDPOINT
+// POST /oauth/authorize
+// ============================================================================
+
+/**
+ * @openapi
+ * /oauth/authorize:
+ *   post:
+ *     summary: Process Authorization Decision
+ *     description: |
+ *       Processes the user's authorization decision (approve or deny).
+ *       On approval, generates an authorization code and returns the redirect URL.
+ *       On denial, returns the redirect URL with an error.
+ *     tags:
+ *       - OAuth2
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - request_id
+ *               - action
+ *             properties:
+ *               request_id:
+ *                 type: string
+ *                 description: Authorization request ID from GET /oauth/authorize
+ *               action:
+ *                 type: string
+ *                 enum: [approve, deny]
+ *               scope:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Approved scopes (subset of requested). If omitted, all requested scopes are approved.
+ *     responses:
+ *       200:
+ *         description: Authorization decision processed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 redirect_uri:
+ *                   type: string
+ *                   description: Full redirect URI with code and state (or error)
+ *       400:
+ *         description: Invalid request
+ */
+oauthRouter.post('/authorize', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { request_id, action, scope } = req.body;
+
+    // Validate required parameters
+    if (!request_id) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing required parameter: request_id',
+      });
+    }
+
+    if (!action || !['approve', 'deny'].includes(action)) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Missing or invalid action. Must be "approve" or "deny"',
+      });
+    }
+
+    // Look up the authorization request
+    const authRequest = oauth2ConsentService.getAuthorizationRequest(request_id);
+    if (!authRequest) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Authorization request not found or expired',
+      });
+    }
+
+    if (authRequest.status !== 'pending') {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Authorization request has already been processed',
+      });
+    }
+
+    const redirectUrl = new URL(authRequest.redirectUri);
+
+    // Handle deny
+    if (action === 'deny') {
+      oauth2ConsentService.denyAuthorization(request_id);
+
+      redirectUrl.searchParams.set('error', 'access_denied');
+      redirectUrl.searchParams.set('error_description', 'The resource owner denied the request');
+      redirectUrl.searchParams.set('state', authRequest.state);
+
+      return res.json({
+        redirect_uri: redirectUrl.toString(),
+      });
+    }
+
+    // Handle approve
+    // Validate approved scopes (must be subset of requested scopes)
+    let approvedScopes: string[] | undefined;
+    if (scope && Array.isArray(scope) && scope.length > 0) {
+      approvedScopes = scope.filter((s: string) => authRequest.scope.includes(s));
+      if (approvedScopes.length === 0) {
+        return res.status(400).json({
+          error: 'invalid_scope',
+          error_description: 'None of the approved scopes are valid for this authorization request',
+        });
+      }
+    }
+
+    const approved = oauth2ConsentService.approveAuthorization(request_id, approvedScopes);
+    if (!approved || !approved.authorizationCode) {
+      return res.status(500).json({
+        error: 'server_error',
+        error_description: 'Failed to generate authorization code',
+      });
+    }
+
+    // Build redirect URL with code and state
+    redirectUrl.searchParams.set('code', approved.authorizationCode);
+    redirectUrl.searchParams.set('state', authRequest.state);
+
+    return res.json({
+      redirect_uri: redirectUrl.toString(),
+    });
+  } catch (error) {
+    logger.error('OAuth2 authorize decision error', { error });
+    next(error);
+  }
+});
+
+// ============================================================================
 // TOKEN ENDPOINT
 // POST /oauth/token
 // ============================================================================
@@ -59,6 +397,7 @@ function extractClientCredentials(req: Request): { clientId: string; clientSecre
  *     description: |
  *       Issues access and refresh tokens. Supports grant types:
  *       - `client_credentials`: For service-to-service authentication
+ *       - `authorization_code`: For authorization code flow with PKCE
  *       - `refresh_token`: For token renewal
  *     tags:
  *       - OAuth2
@@ -73,19 +412,28 @@ function extractClientCredentials(req: Request): { clientId: string; clientSecre
  *             properties:
  *               grant_type:
  *                 type: string
- *                 enum: [client_credentials, refresh_token]
+ *                 enum: [client_credentials, authorization_code, refresh_token]
  *               client_id:
  *                 type: string
  *                 description: Required if not using Basic auth
  *               client_secret:
  *                 type: string
- *                 description: Required if not using Basic auth
+ *                 description: Required if not using Basic auth (client_credentials only)
  *               scope:
  *                 type: string
- *                 description: Space-separated list of requested scopes
+ *                 description: Space-separated list of requested scopes (client_credentials only)
  *               refresh_token:
  *                 type: string
  *                 description: Required for refresh_token grant
+ *               code:
+ *                 type: string
+ *                 description: Authorization code (authorization_code grant only)
+ *               redirect_uri:
+ *                 type: string
+ *                 description: Must match the redirect_uri used in the authorization request
+ *               code_verifier:
+ *                 type: string
+ *                 description: PKCE code verifier (authorization_code grant only)
  *     responses:
  *       200:
  *         description: Token response
@@ -112,7 +460,7 @@ function extractClientCredentials(req: Request): { clientId: string; clientSecre
  */
 oauthRouter.post('/token', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { grant_type, scope, refresh_token } = req.body;
+    const { grant_type, scope, refresh_token, code, redirect_uri, client_id, code_verifier } = req.body;
 
     if (!grant_type) {
       return res.status(400).json({
@@ -167,6 +515,53 @@ oauthRouter.post('/token', async (req: Request, res: Response, next: NextFunctio
       const requestedScopes = scope ? scope.split(' ').filter((s: string) => s) : undefined;
 
       const tokenResponse = await oauth2Service.issueClientCredentialsToken(client, requestedScopes);
+      return res.json(tokenResponse);
+    }
+
+    // Handle authorization_code grant
+    if (grant_type === 'authorization_code') {
+      if (!code) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'Missing required parameter: code',
+        });
+      }
+
+      if (!redirect_uri) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'Missing required parameter: redirect_uri',
+        });
+      }
+
+      if (!client_id) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'Missing required parameter: client_id',
+        });
+      }
+
+      if (!code_verifier) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'Missing required parameter: code_verifier (PKCE is required)',
+        });
+      }
+
+      const tokenResponse = await oauth2Service.issueAuthorizationCodeToken(
+        code,
+        redirect_uri,
+        client_id,
+        code_verifier
+      );
+
+      if (!tokenResponse) {
+        return res.status(400).json({
+          error: 'invalid_grant',
+          error_description: 'Invalid authorization code, redirect_uri mismatch, or PKCE verification failed',
+        });
+      }
+
       return res.json(tokenResponse);
     }
 
@@ -328,6 +723,8 @@ oauthRouter.post('/introspect', async (req: Request, res: Response, next: NextFu
  *               properties:
  *                 issuer:
  *                   type: string
+ *                 authorization_endpoint:
+ *                   type: string
  *                 token_endpoint:
  *                   type: string
  *                 revocation_endpoint:
@@ -339,6 +736,10 @@ oauthRouter.post('/introspect', async (req: Request, res: Response, next: NextFu
  *                   items:
  *                     type: string
  *                 scopes_supported:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 code_challenge_methods_supported:
  *                   type: array
  *                   items:
  *                     type: string

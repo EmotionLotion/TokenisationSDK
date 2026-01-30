@@ -117,34 +117,35 @@ export function CapTable({
 
     if (loading) {
         return (
-            <div className={`flex items-center justify-center p-8 ${className}`}>
-                <Loader2 className="w-6 h-6 text-[#F8B032] animate-spin" />
+            <div className={`flex items-center justify-center p-8 ${className}`} role="status" aria-label="Loading cap table" aria-busy="true">
+                <Loader2 className="w-6 h-6 text-[#F8B032] animate-spin" aria-hidden="true" />
+                <span className="sr-only">Loading cap table data...</span>
             </div>
         );
     }
 
     if (holders.length === 0) {
         return (
-            <div className={`text-center p-8 ${className}`}>
-                <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <div className={`text-center p-8 ${className}`} role="status">
+                <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" aria-hidden="true" />
                 <p className="text-gray-400">No holders found</p>
             </div>
         );
     }
 
     return (
-        <div className={`bg-white/5 border border-white/10 rounded-xl overflow-hidden ${className}`}>
+        <div className={`bg-white/5 border border-white/10 rounded-xl overflow-hidden ${className}`} role="region" aria-label="Cap Table">
             {/* Header */}
             <div className="p-4 border-b border-white/10 flex items-center gap-2">
-                <PieChart className="w-5 h-5 text-[#F8B032]" />
-                <h3 className="font-semibold text-white">Cap Table</h3>
-                <span className="text-xs text-gray-500 ml-auto">{holders.length} holders</span>
+                <PieChart className="w-5 h-5 text-[#F8B032]" aria-hidden="true" />
+                <h3 id="cap-table-heading" className="font-semibold text-white">Cap Table</h3>
+                <span className="text-xs text-gray-500 ml-auto" aria-label={`${holders.length} holders`}>{holders.length} holders</span>
             </div>
 
             {/* Simple Bar Visualization */}
             {showPercentages && (
                 <div className="p-4 border-b border-white/10">
-                    <div className="h-8 rounded-lg overflow-hidden flex">
+                    <div className="h-8 rounded-lg overflow-hidden flex" role="img" aria-label="Ownership distribution chart">
                         {holders.map((holder, idx) => (
                             <div
                                 key={holder.address}
@@ -155,6 +156,7 @@ export function CapTable({
                                     minWidth: holder.percentage > 0 ? '4px' : '0',
                                 }}
                                 title={`${holder.name || holder.address}: ${holder.percentage.toFixed(2)}%`}
+                                aria-label={`${holder.name || holder.address}: ${holder.percentage.toFixed(2)}%`}
                             />
                         ))}
                     </div>
@@ -162,13 +164,19 @@ export function CapTable({
             )}
 
             {/* Holder List */}
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-white/5" role="table" aria-labelledby="cap-table-heading">
+                <div className="sr-only" role="row">
+                    <span role="columnheader">Holder</span>
+                    <span role="columnheader" aria-sort="descending">Balance</span>
+                    {showPercentages && <span role="columnheader">Percentage</span>}
+                </div>
                 {holders.map((holder, idx) => (
-                    <div key={holder.address} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
-                        <div className="flex items-center gap-3">
+                    <div key={holder.address} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors" role="row" aria-label={`${holder.name || 'Unknown'}: ${Number(holder.balance).toLocaleString()} tokens`}>
+                        <div className="flex items-center gap-3" role="cell">
                             <div
                                 className="w-3 h-3 rounded-full"
                                 style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                                aria-hidden="true"
                             />
                             <div>
                                 <p className="text-sm text-white">{holder.name || 'Unknown'}</p>
@@ -177,7 +185,7 @@ export function CapTable({
                                 </p>
                             </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right" role="cell">
                             <p className="text-sm font-mono text-white">
                                 {Number(holder.balance).toLocaleString()}
                             </p>

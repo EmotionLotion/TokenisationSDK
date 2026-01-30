@@ -219,4 +219,47 @@ export type { PersonaSwitcherProps, Persona } from './components/PersonaSwitcher
 export { TicketCard } from './components/TicketCard';
 export type { TicketCardProps } from './components/TicketCard';
 
+// ============================================
+// Components - Investment & Portfolio
+// ============================================
+export { InvestmentChart } from './components/InvestmentChart';
+export type { InvestmentChartProps } from './components/InvestmentChart';
+
+// ============================================
+// Components - Fee Estimation
+// ============================================
+export { FeeEstimate } from './components/FeeEstimate';
+export type { FeeEstimateProps, FeeEstimateData } from './components/FeeEstimate';
+
 export { StatusBadge as StateBadge } from './generic';
+
+// ============================================
+// Components - Transaction Flow (Gap 10)
+// ============================================
+export { TransactionFlow } from './components/TransactionFlow';
+
+// ============================================
+// Components - Export (Gap 11)
+// ============================================
+export { ExportButton } from './components/ExportButton';
+
+// ============================================
+// Theme Provider (Gap 6)
+// ============================================
+export { ThemeProvider, useTheme } from './core/ThemeProvider';
+
+// ============================================
+// i18n System (Gap 7)
+// ============================================
+export { createI18n, getDirection } from './i18n/index';
+export { I18nProvider, useTranslation } from './i18n/I18nProvider';
+
+// ============================================
+// Analytics (Gap 22)
+// ============================================
+export { analytics, trackEvent, setUser, setBackend, setupAutoTracking } from './analytics/index';
+
+// ============================================
+// Web Components / Embed (Gap 21)
+// ============================================
+export { registerElements } from './embed/TokenisationElement';

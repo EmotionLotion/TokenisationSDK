@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as evidenceService from '../services/evidence.service.js';
 import * as regulatoryPackService from '../services/regulatoryPack.service.js';
+import * as auditService from '../services/audit.service.js';
+import * as ledgerService from '../services/ledger.service.js';
 import { generateEvidencePackHtml, generateRegulatoryPackHtml, exportEvidencePack } from '../services/pdfExport.service.js';
 import { apiKeyMiddleware } from '../middleware/auth.js';
 import { ValidationError } from '../middleware/errorHandler.js';
@@ -21,6 +23,182 @@ const regulatoryPackOptionsSchema = z.object({
   includeIdentityDetails: z.boolean().optional(),
   limit: z.number().int().positive().max(10000).optional(),
   format: z.enum(['json', 'html']).optional(),
+});
+
+const csvDateFilterSchema = z.object({
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+});
+
+// ============================================================================
+// CSV Helpers
+// ============================================================================
+
+/**
+ * Escape a value for safe inclusion in a CSV cell.
+ * Wraps the value in double-quotes if it contains commas, quotes, or newlines.
+ */
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/**
+ * Convert an array of objects to a CSV string.
+ */
+function toCsv(rows: Record<string, unknown>[], columns?: string[]): string {
+  if (rows.length === 0) return '';
+
+  const headers = columns ?? Object.keys(rows[0]);
+  const headerLine = headers.map(csvEscape).join(',');
+
+  const dataLines = rows.map((row) =>
+    headers.map((h) => csvEscape(row[h])).join(','),
+  );
+
+  return [headerLine, ...dataLines].join('\r\n');
+}
+
+function sendCsv(res: Response, csv: string, filename: string): void {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
+}
+
+// ============================================================================
+// CSV Export Routes
+// ============================================================================
+
+/**
+ * GET /cap-table/:tokenId - CSV export of cap table
+ */
+router.get('/cap-table/:tokenId', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctxReq = req as ContextRequest;
+    const orgId = ctxReq.apiKey?.orgId;
+    if (!orgId) {
+      throw new ValidationError('Organization ID required');
+    }
+
+    const tokenId = req.params.tokenId;
+    const capTable = await ledgerService.getCapTable(tokenId, orgId);
+
+    const rows = (capTable.holders ?? capTable.positions ?? []).map((holder: Record<string, unknown>) => ({
+      address: holder.walletAddress ?? holder.address ?? '',
+      investorId: holder.investorId ?? '',
+      name: holder.name ?? '',
+      balance: holder.balance ?? '0',
+      percentage: holder.percentage ?? '',
+      frozenBalance: holder.frozenBalance ?? '0',
+      lastUpdated: holder.lastEventAt ?? holder.updatedAt ?? '',
+    }));
+
+    const columns = ['address', 'investorId', 'name', 'balance', 'percentage', 'frozenBalance', 'lastUpdated'];
+    const csv = toCsv(rows, columns);
+    const filename = `cap-table_${tokenId}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    sendCsv(res, csv, filename);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /audit - CSV export of audit trail with date filters
+ */
+router.get('/audit', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctxReq = req as ContextRequest;
+    const orgId = ctxReq.apiKey?.orgId;
+    if (!orgId) {
+      throw new ValidationError('Organization ID required');
+    }
+
+    const { startDate, endDate } = req.query;
+
+    const entries = await auditService.getAuditLog(orgId, {
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      limit: 10000,
+    });
+
+    const rows = (Array.isArray(entries) ? entries : []).map((entry: Record<string, unknown>) => ({
+      id: entry.id ?? '',
+      timestamp: entry.timestamp ?? entry.createdAt ?? '',
+      action: entry.action ?? '',
+      actorId: entry.actorId ?? '',
+      actorType: entry.actorType ?? '',
+      resourceType: entry.resourceType ?? '',
+      resourceId: entry.resourceId ?? '',
+      ipAddress: entry.ipAddress ?? '',
+      details: entry.metadata ? JSON.stringify(entry.metadata) : '',
+    }));
+
+    const columns = ['id', 'timestamp', 'action', 'actorId', 'actorType', 'resourceType', 'resourceId', 'ipAddress', 'details'];
+    const csv = toCsv(rows, columns);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `audit-log_${dateStr}.csv`;
+
+    sendCsv(res, csv, filename);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /transactions/:tokenId - CSV export of transactions for a token
+ */
+router.get('/transactions/:tokenId', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctxReq = req as ContextRequest;
+    const orgId = ctxReq.apiKey?.orgId;
+    if (!orgId) {
+      throw new ValidationError('Organization ID required');
+    }
+
+    const tokenId = req.params.tokenId;
+    const { startDate, endDate } = req.query;
+
+    const events = await ledgerService.getLedgerEvents(tokenId, orgId, {
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      limit: 10000,
+    });
+
+    const rows = (Array.isArray(events) ? events : []).map((evt: Record<string, unknown>) => ({
+      id: evt.id ?? '',
+      timestamp: evt.createdAt ?? '',
+      eventType: evt.eventType ?? '',
+      fromWallet: evt.fromWallet ?? '',
+      toWallet: evt.toWallet ?? '',
+      amount: evt.delta ?? '',
+      txHash: evt.txHash ?? '',
+      blockNumber: evt.txBlock ?? '',
+      balanceBefore: evt.balanceBefore ?? '',
+      balanceAfter: evt.balanceAfter ?? '',
+      ref: evt.ref ?? '',
+      refType: evt.refType ?? '',
+    }));
+
+    const columns = [
+      'id', 'timestamp', 'eventType', 'fromWallet', 'toWallet',
+      'amount', 'txHash', 'blockNumber', 'balanceBefore', 'balanceAfter',
+      'ref', 'refType',
+    ];
+    const csv = toCsv(rows, columns);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `transactions_${tokenId}_${dateStr}.csv`;
+
+    sendCsv(res, csv, filename);
+  } catch (error) {
+    next(error);
+  }
 });
 
 // ============================================================================

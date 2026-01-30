@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as webhookService from './webhook.service.js';
 import { logger } from '../middleware/logger.js';
+import { sseService } from './sse.service.js';
 
 const { eventBusQueue } = schema;
 
@@ -194,6 +195,18 @@ function matchesTopic(pattern: string | RegExp, topic: string): boolean {
 async function processEvent(event: EventMessage): Promise<void> {
   // Find matching handlers
   const matchingHandlers = handlers.filter(h => matchesTopic(h.topic, event.topic));
+
+  // Broadcast event to SSE connections (Gap 1: Real-time events)
+  try {
+    sseService.broadcast(event.orgId, {
+      topic: event.topic,
+      payload: event.payload,
+      id: event.id,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (sseError) {
+    logger.warn('SSE broadcast failed (non-critical)', { error: sseError as Error });
+  }
 
   if (matchingHandlers.length === 0) {
     // No handlers, just mark as processed

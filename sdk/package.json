@@ -11,6 +11,7 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
+      "require": "./dist/cjs/index.cjs",
       "default": "./dist/index.js"
     },
     "./client": {
@@ -65,7 +66,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsx scripts/build-cjs.ts",
+    "build:cjs": "tsx scripts/build-cjs.ts",
     "dev": "tsc --watch",
     "test": "vitest",
     "test:run": "vitest run",

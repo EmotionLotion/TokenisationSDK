@@ -3,6 +3,7 @@
  *
  * Implements RFC 6749 OAuth2 Authorization Server with support for:
  * - client_credentials grant (service-to-service)
+ * - authorization_code grant with PKCE (RFC 7636)
  * - refresh_token grant (token renewal)
  *
  * Security features:
@@ -10,6 +11,7 @@
  * - Access tokens are JWTs (1 hour expiry)
  * - Refresh tokens are opaque, hashed in storage (30 day expiry, rotated on use)
  * - Token introspection for resource servers
+ * - PKCE support (S256 and plain code challenge methods)
  *
  * @packageDocumentation
  */
@@ -21,6 +23,7 @@ import { db } from '../config/database.js';
 import { oauthClients, oauthTokens, orgs } from '../db/schema.js';
 import { eq, and, sql, gt, isNull } from 'drizzle-orm';
 import { logger } from '../middleware/logger.js';
+import { oauth2ConsentService } from './oauth2-consent.service.js';
 
 // ============================================================================
 // CONFIGURATION
@@ -115,6 +118,7 @@ export interface TokenIntrospectionResponse {
 
 export interface OAuth2ServerMetadata {
   issuer: string;
+  authorization_endpoint: string;
   token_endpoint: string;
   revocation_endpoint: string;
   introspection_endpoint: string;
@@ -122,6 +126,7 @@ export interface OAuth2ServerMetadata {
   grant_types_supported: string[];
   scopes_supported: string[];
   response_types_supported: string[];
+  code_challenge_methods_supported: string[];
 }
 
 // ============================================================================
@@ -245,6 +250,103 @@ export class OAuth2Service {
     });
 
     logger.info('OAuth2 tokens issued', {
+      metadata: { clientId: client.clientId, scopes: finalScopes },
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: ACCESS_TOKEN_EXPIRY_SECONDS,
+      refresh_token: refreshToken,
+      scope: finalScopes.join(' '),
+    };
+  }
+
+  /**
+   * Issue tokens for authorization_code grant with PKCE verification
+   */
+  async issueAuthorizationCodeToken(
+    code: string,
+    redirectUri: string,
+    clientId: string,
+    codeVerifier: string
+  ): Promise<OAuth2TokenResponse | null> {
+    // Look up stored authorization code
+    const authRequest = oauth2ConsentService.getAuthorizationRequestByCode(code);
+    if (!authRequest) {
+      logger.warn('Authorization code not found or expired', {
+        metadata: { clientId },
+      });
+      return null;
+    }
+
+    // Validate client_id matches
+    if (authRequest.clientId !== clientId) {
+      logger.warn('Authorization code client_id mismatch', {
+        metadata: { expected: authRequest.clientId, received: clientId },
+      });
+      return null;
+    }
+
+    // Validate redirect_uri matches
+    if (authRequest.redirectUri !== redirectUri) {
+      logger.warn('Authorization code redirect_uri mismatch', {
+        metadata: { expected: authRequest.redirectUri, received: redirectUri },
+      });
+      return null;
+    }
+
+    // Validate PKCE code_verifier against code_challenge
+    if (!this.verifyCodeChallenge(codeVerifier, authRequest.codeChallenge, authRequest.codeChallengeMethod)) {
+      logger.warn('PKCE code_verifier validation failed', {
+        metadata: { clientId, method: authRequest.codeChallengeMethod },
+      });
+      return null;
+    }
+
+    // Consume the authorization code (one-time use)
+    const consumed = oauth2ConsentService.consumeAuthorizationCode(code);
+    if (!consumed) {
+      logger.warn('Failed to consume authorization code', {
+        metadata: { clientId },
+      });
+      return null;
+    }
+
+    // Look up the client from database
+    const client = await this.getClient(clientId);
+    if (!client || client.status !== 'active') {
+      logger.warn('Client not found or inactive during authorization code exchange', {
+        metadata: { clientId },
+      });
+      return null;
+    }
+
+    // Determine final scopes (approved scopes intersected with client's allowed scopes)
+    const approvedScopes = authRequest.approvedScopes || authRequest.scope;
+    const finalScopes = approvedScopes.filter(s => client.scopes.includes(s));
+
+    // Generate access token (JWT)
+    const accessToken = this.generateAccessToken(client, finalScopes);
+
+    // Generate refresh token (opaque)
+    const refreshToken = randomBytes(32).toString('base64url');
+    const refreshTokenHash = createHash('sha256').update(refreshToken).digest('hex');
+
+    // Store refresh token
+    const refreshExpiresAt = new Date();
+    refreshExpiresAt.setDate(refreshExpiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+    await db.insert(oauthTokens).values({
+      orgId: client.orgId,
+      clientId: client.id,
+      tokenType: 'refresh',
+      tokenHash: refreshTokenHash,
+      scopes: finalScopes.join(' '),
+      expiresAt: refreshExpiresAt,
+    });
+
+    logger.info('OAuth2 authorization code tokens issued', {
       metadata: { clientId: client.clientId, scopes: finalScopes },
     });
 
@@ -436,6 +538,7 @@ export class OAuth2Service {
   getServerMetadata(baseUrl: string): OAuth2ServerMetadata {
     return {
       issuer: JWT_ISSUER,
+      authorization_endpoint: `${baseUrl}/oauth/authorize`,
       token_endpoint: `${baseUrl}/oauth/token`,
       revocation_endpoint: `${baseUrl}/oauth/revoke`,
       introspection_endpoint: `${baseUrl}/oauth/introspect`,
@@ -445,10 +548,12 @@ export class OAuth2Service {
       ],
       grant_types_supported: [
         'client_credentials',
+        'authorization_code',
         'refresh_token',
       ],
       scopes_supported: Object.keys(OAUTH_SCOPES),
-      response_types_supported: ['token'],
+      response_types_supported: ['token', 'code'],
+      code_challenge_methods_supported: ['S256', 'plain'],
     };
   }
 
@@ -585,6 +690,29 @@ export class OAuth2Service {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     });
+  }
+
+  /**
+   * Verify PKCE code_verifier against stored code_challenge
+   *
+   * For S256: base64url(sha256(code_verifier)) === code_challenge
+   * For plain: code_verifier === code_challenge
+   */
+  private verifyCodeChallenge(
+    codeVerifier: string,
+    codeChallenge: string,
+    codeChallengeMethod: 'S256' | 'plain'
+  ): boolean {
+    if (codeChallengeMethod === 'plain') {
+      return codeVerifier === codeChallenge;
+    }
+
+    // S256: BASE64URL(SHA256(code_verifier)) == code_challenge
+    const computed = createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+
+    return computed === codeChallenge;
   }
 
   /**
