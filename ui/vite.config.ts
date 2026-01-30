@@ -15,8 +15,12 @@ const require = createRequire(import.meta.url)
 function polyfillShimResolver(): Plugin {
   const shimMap: Record<string, string> = {}
   for (const name of ['buffer', 'global', 'process']) {
-    shimMap[`vite-plugin-node-polyfills/shims/${name}`] = require.resolve(
-      `vite-plugin-node-polyfills/shims/${name}`,
+    // require.resolve returns the CJS entry; replace with ESM entry so that
+    // Vite dev server gets proper ES module exports (default export).
+    const cjsPath = require.resolve(`vite-plugin-node-polyfills/shims/${name}`)
+    shimMap[`vite-plugin-node-polyfills/shims/${name}`] = cjsPath.replace(
+      /index\.cjs$/,
+      'index.js',
     )
   }
 
