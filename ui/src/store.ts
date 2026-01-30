@@ -1560,18 +1560,7 @@ class SDKStore {
     const realEstate = await this.sdk.assets.create({
       name: 'Dubai Marina Tower - Unit 1501',
       rightType: RightType.OWNERSHIP,
-      // Actually checking imports, RightType is NOT imported in store.ts.
-      // Let's check imports.
-      // imports: TokenisationSDK, LifecycleState, Asset, Party, BaseEvent, PartyType, PartyRole...
-      // I should add RightType to imports first.
-
-      // Wait, I can't modify imports in this block.
-      // I will just use the string 'OWNERSHIP' as cast if needed, or better yet, I should add RightType to imports in another step.
-      // For now, I will just correct the indentation and ensuring it compiles.
-      // The original code was: rightType: 'OWNERSHIP' as any,
-      // I'll keep it as any for now to avoid import errors until I fix imports.
-
-      jurisdiction: 'AE' as any,
+      jurisdiction: { countryCode: 'AE', accreditedOnly: false, blockedJurisdictions: [] },
       issuerId: issuer.id,
     });
 

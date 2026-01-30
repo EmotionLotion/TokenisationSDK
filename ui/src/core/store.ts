@@ -1158,7 +1158,7 @@ export const useSDKStore = create<SDKStoreState>()(
           const realEstate = await s.sdk.assets.create({
             name: 'Dubai Marina Tower - Unit 1501',
             rightType: RightType.OWNERSHIP,
-            jurisdiction: 'AE' as any,
+            jurisdiction: { countryCode: 'AE', accreditedOnly: false, blockedJurisdictions: [] },
             issuerId: issuer.id,
           });
 
