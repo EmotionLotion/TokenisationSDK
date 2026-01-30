@@ -2,18 +2,59 @@
  * React SDK Types
  *
  * Type definitions for the React integration layer.
- * Partners use these types when building their UIs.
- *
- * Note: We define types locally rather than importing from core SDK
- * to ensure API stability for React consumers.
+ * Canonical domain types are re-exported from the core SDK.
+ * React-specific types (config, UI state, callbacks) are defined locally.
  */
 
 // ============================================================================
-// CORE TYPES (locally defined for stability)
+// CANONICAL TYPES (re-exported from core SDK)
+// ============================================================================
+
+export type {
+  Asset,
+  Token,
+  TokenStatus,
+  Transfer,
+  TransferStatus,
+  CreateTransferInput,
+  Investor,
+  InvestorWallet,
+  InvestorStatus,
+  InvestorClassification,
+  RiskTier,
+  KycStatus,
+  Policy,
+  PolicyRule,
+  ComplianceDecision,
+  Settlement,
+  FinalityStatus,
+  WebhookEndpoint,
+  WebhookDelivery,
+  LedgerPosition,
+  LedgerEvent,
+  DldTitle,
+  DldEvent,
+  EventMessage,
+  EventStatus,
+  ChainConfig,
+  Project,
+  Document,
+  Organization,
+  User,
+  Role,
+  ApiKey,
+  TokenTranche,
+  PaginatedResponse,
+  ApiResponse,
+  ApiError,
+} from '@tokenisation/sdk';
+
+// ============================================================================
+// REACT-SPECIFIC CORE TYPES
 // ============================================================================
 
 /**
- * Asset lifecycle states
+ * Asset lifecycle states (React-layer alias for display purposes)
  */
 export type LifecycleState =
   | 'DRAFT'
@@ -105,7 +146,7 @@ export type KYCLevel =
   | 'institutional';
 
 /**
- * KYC verification status
+ * KYC verification status — aligned with server's KycStatus
  */
 export type KYCStatus =
   | 'not_started'
@@ -116,26 +157,7 @@ export type KYCStatus =
   | 'expired';
 
 /**
- * Asset definition
- */
-export interface Asset {
-  id: string;
-  name: string;
-  symbol?: string;
-  description?: string;
-  rightType: string;
-  jurisdiction: string;
-  state: LifecycleState;
-  ownerId: string;
-  totalShares?: number;
-  pricePerShare?: number;
-  createdAt: string;
-  updatedAt: string;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Token info
+ * Token info (display-oriented)
  */
 export interface TokenInfo {
   assetId: string;
@@ -147,7 +169,7 @@ export interface TokenInfo {
 }
 
 /**
- * Party (investor/user) record
+ * Party (investor/user) record — maps to Investor with wallet extensions
  */
 export interface Party {
   id: string;
@@ -177,6 +199,12 @@ export interface TokenisationConfig {
 
   /** Organization ID for multi-tenant deployments */
   orgId?: string;
+
+  /** Publishable key for org identification (pk_test_xxx / pk_live_xxx) */
+  publishableKey?: string;
+
+  /** Called on 401 auth errors */
+  onAuthError?: () => void;
 
   /** Default jurisdiction (ISO country code) */
   defaultJurisdiction?: string;
@@ -468,6 +496,49 @@ export interface TransferSuccessEvent {
 // CONTEXT TYPES
 // ============================================================================
 
+import type { BrowserHttpClient } from '@tokenisation/sdk/client';
+import type {
+  TransfersModule,
+  TokensModule,
+  InvestorsModule,
+  ComplianceModule,
+  GovernanceModule,
+  EscrowModule,
+  CashFlowModule,
+  DLDModule,
+  TicketsClient,
+  ResaleModule,
+  LegalModule,
+  EventsModule,
+  WebhooksModule,
+  AuditModule,
+  AssetsModule,
+  ProjectsModule,
+} from '@tokenisation/sdk/client';
+import type { TransactionRequest } from '../utils/wallet-adapter.js';
+
+/**
+ * SDK Module instances available on the context
+ */
+export interface SDKModules {
+  transfers: TransfersModule;
+  tokens: TokensModule;
+  investors: InvestorsModule;
+  compliance: ComplianceModule;
+  governance: GovernanceModule;
+  escrow: EscrowModule;
+  cashflow: CashFlowModule;
+  dld: DLDModule;
+  tickets: TicketsClient;
+  resale: ResaleModule;
+  legal: LegalModule;
+  events: EventsModule;
+  webhooks: WebhooksModule;
+  audit: AuditModule;
+  assets: AssetsModule;
+  projects: ProjectsModule;
+}
+
 /**
  * SDK Context value
  */
@@ -495,4 +566,22 @@ export interface TokenisationContextValue {
 
   /** Event callbacks (exposed for hooks to fire) */
   callbacks: TokenisationCallbacks;
+
+  /** Shared HTTP client for direct API calls */
+  api: BrowserHttpClient;
+
+  /** SDK module instances for typed API access */
+  modules: SDKModules;
+
+  /** Current JWT auth token */
+  authToken: string | null;
+
+  /** Set the JWT auth token */
+  setAuthToken: (token: string | null) => void;
+
+  /** Sign a message via connected wallet */
+  signMessage: (message: string) => Promise<string>;
+
+  /** Send a transaction via connected wallet */
+  sendTransaction: (tx: TransactionRequest) => Promise<string>;
 }

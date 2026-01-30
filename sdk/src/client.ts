@@ -264,6 +264,44 @@ export {
   PartyType,
 } from './SDK.js';
 
+// SDK Modules (for browser use via BrowserHttpClient)
+export {
+  ProjectsModule,
+  InvestorsModule,
+  TokensModule,
+  TransfersModule,
+  ComplianceModule,
+  AssetsModule,
+  EventsModule,
+  WebhooksModule,
+  AuditModule,
+  GovernanceModule,
+  EscrowModule,
+  CashFlowModule,
+  DLDModule,
+  TicketsClient,
+  ResaleModule,
+  LegalModule,
+} from './modules/index.js';
+
+// Browser HTTP Client (for React/browser integrations with JWT auth)
+export {
+  BrowserHttpClient,
+  BrowserHttpError,
+} from './utils/browser-http.js';
+export type {
+  BrowserHttpClientConfig,
+  BrowserRequestOptions,
+} from './utils/browser-http.js';
+
+// Offline / Network utilities
+export { NetworkDetector } from './offline/NetworkDetector.js';
+export type { NetworkStatus, NetworkStatusCallback, NetworkDetectorOptions } from './offline/NetworkDetector.js';
+export { SyncManager } from './offline/SyncManager.js';
+export type { SyncProgress, SyncStatus, SyncManagerOptions, SyncProgressCallback, SyncStatusCallback } from './offline/SyncManager.js';
+export { OfflineQueue } from './offline/OfflineQueue.js';
+export type { QueuedOperation } from './offline/OfflineQueue.js';
+
 // API Types (for type-safe API calls)
 export type {
   TokenizationSDKConfig,

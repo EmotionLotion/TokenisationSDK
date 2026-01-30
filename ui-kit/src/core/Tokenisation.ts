@@ -116,8 +116,8 @@ class TokenisationClient implements TokenisationInstance {
     // Determine environment from key
     const isTest = config.publishableKey.startsWith('pk_test_');
     const defaultApiUrl = isTest
-      ? 'http://localhost:3001/api/v1'
-      : 'https://api.tokenisation.io/v1';
+      ? 'http://localhost:3001'
+      : 'https://api.tokenisation.io';
 
     // Initialize API client
     const apiConfig: ApiClientConfig = {

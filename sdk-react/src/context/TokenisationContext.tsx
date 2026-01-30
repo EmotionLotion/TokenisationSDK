@@ -2,6 +2,8 @@
  * TokenisationContext - Main SDK Provider
  *
  * Wrap your app with <TokenisationProvider> to enable all SDK features.
+ * Provides a shared BrowserHttpClient, SDK module instances, auth state,
+ * and wallet signing capabilities.
  *
  * @example
  * ```tsx
@@ -24,8 +26,29 @@ import {
   useState,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
+
+import {
+  BrowserHttpClient,
+  ProjectsModule,
+  InvestorsModule,
+  TokensModule,
+  TransfersModule,
+  ComplianceModule,
+  AssetsModule,
+  EventsModule,
+  WebhooksModule,
+  AuditModule,
+  GovernanceModule,
+  EscrowModule,
+  CashFlowModule,
+  DLDModule,
+  TicketsClient,
+  ResaleModule,
+  LegalModule,
+} from '@tokenisation/sdk/client';
 
 import type {
   TokenisationConfig,
@@ -34,9 +57,11 @@ import type {
   WalletConnection,
   WalletConnectOptions,
   Party,
-  StatusUpdate,
-  TransferSuccessEvent,
+  SDKModules,
 } from '../types/index.js';
+
+import { EIP1193WalletAdapter } from '../utils/wallet-adapter.js';
+import type { TransactionRequest } from '../utils/wallet-adapter.js';
 
 // ============================================================================
 // CONTEXT
@@ -71,6 +96,55 @@ export function TokenisationProvider({
   const [wallet, setWallet] = useState<WalletConnection | null>(null);
   const [currentParty, setCurrentParty] = useState<Party | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Ref for auth token so BrowserHttpClient callback always has current value
+  const authTokenRef = useRef<string | null>(null);
+  authTokenRef.current = authToken;
+
+  // Wallet adapter
+  const walletAdapter = useMemo(() => new EIP1193WalletAdapter(), []);
+
+  // BrowserHttpClient - shared across all hooks and modules
+  const api = useMemo(() => {
+    return new BrowserHttpClient({
+      baseUrl: config.apiUrl,
+      publishableKey: config.publishableKey,
+      getAccessToken: () => authTokenRef.current,
+      onAuthError: () => {
+        setAuthToken(null);
+        config.onAuthError?.();
+      },
+      orgId: config.orgId,
+      timeout: 30000,
+      retry: { maxRetries: 3, retryDelay: 1000 },
+    });
+  }, [config.apiUrl, config.publishableKey, config.orgId, config.onAuthError]);
+
+  // SDK modules - instantiated once, sharing the same HTTP client
+  const modules = useMemo<SDKModules>(() => {
+    // All SDK modules accept an HttpClient-compatible object.
+    // BrowserHttpClient provides the same interface (get/post/patch/delete/list).
+    const http = api as any;
+    return {
+      projects: new ProjectsModule(http),
+      assets: new AssetsModule(http),
+      investors: new InvestorsModule(http),
+      tokens: new TokensModule(http),
+      transfers: new TransfersModule(http),
+      compliance: new ComplianceModule(http),
+      events: new EventsModule(http),
+      webhooks: new WebhooksModule(http),
+      audit: new AuditModule(http),
+      governance: new GovernanceModule(http),
+      escrow: new EscrowModule(http),
+      cashflow: new CashFlowModule(http),
+      dld: new DLDModule(http),
+      tickets: new TicketsClient(http),
+      resale: new ResaleModule(http),
+      legal: new LegalModule(http),
+    };
+  }, [api]);
 
   // Initialize SDK on mount
   useEffect(() => {
@@ -85,9 +159,10 @@ export function TokenisationProvider({
           throw new Error('apiUrl is required in TokenisationConfig');
         }
 
-        // Check API health
-        const healthCheck = await fetch(`${config.apiUrl}/health`).catch(() => null);
-        if (!healthCheck?.ok) {
+        // Check API health using the shared client
+        try {
+          await api.get('/health');
+        } catch {
           console.warn('[TokenisationSDK] API health check failed, continuing anyway');
         }
 
@@ -104,7 +179,7 @@ export function TokenisationProvider({
     }
 
     initialize();
-  }, [config]);
+  }, [config, api]);
 
   // Connect wallet
   const connectWallet = useCallback(
@@ -179,6 +254,7 @@ export function TokenisationProvider({
 
     setWallet(null);
     setCurrentParty(null);
+    setAuthToken(null);
     callbacks?.onWalletDisconnect?.();
   }, [config, callbacks]);
 
@@ -233,20 +309,14 @@ export function TokenisationProvider({
   const fetchOrCreateParty = useCallback(
     async (walletAddress: string): Promise<void> => {
       try {
-        // Try to fetch existing party
-        const response = await fetch(
-          `${config.apiUrl}/api/v1/parties?walletAddress=${walletAddress}`,
-          {
-            headers: config.orgId ? { 'X-Org-Id': config.orgId } : {},
-          }
+        const response = await api.get<{ parties: Party[] }>(
+          '/api/v1/parties',
+          { walletAddress },
         );
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.parties && data.parties.length > 0) {
-            setCurrentParty(data.parties[0]);
-            return;
-          }
+        if (response.data.parties && response.data.parties.length > 0) {
+          setCurrentParty(response.data.parties[0]);
+          return;
         }
 
         // Party doesn't exist yet - that's okay, user needs to complete KYC
@@ -255,7 +325,22 @@ export function TokenisationProvider({
         console.warn('[TokenisationSDK] Failed to fetch party:', err);
       }
     },
-    [config]
+    [api]
+  );
+
+  // Wallet signing via EIP-1193
+  const signMessage = useCallback(
+    async (message: string): Promise<string> => {
+      return walletAdapter.signMessage(message);
+    },
+    [walletAdapter]
+  );
+
+  const sendTransaction = useCallback(
+    async (tx: TransactionRequest): Promise<string> => {
+      return walletAdapter.sendTransaction(tx);
+    },
+    [walletAdapter]
   );
 
   // Listen for wallet events
@@ -299,8 +384,18 @@ export function TokenisationProvider({
       disconnectWallet,
       switchNetwork,
       callbacks: callbacks ?? {},
+      api,
+      modules,
+      authToken,
+      setAuthToken,
+      signMessage,
+      sendTransaction,
     }),
-    [config, isInitialized, wallet, currentParty, connectWallet, disconnectWallet, switchNetwork, callbacks]
+    [
+      config, isInitialized, wallet, currentParty,
+      connectWallet, disconnectWallet, switchNetwork, callbacks,
+      api, modules, authToken, signMessage, sendTransaction,
+    ]
   );
 
   // Show error state
@@ -329,7 +424,7 @@ export function TokenisationProvider({
  * @example
  * ```tsx
  * function MyComponent() {
- *   const { wallet, connectWallet } = useTokenisation();
+ *   const { wallet, connectWallet, modules, api } = useTokenisation();
  *
  *   return (
  *     <button onClick={() => connectWallet()}>

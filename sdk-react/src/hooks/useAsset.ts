@@ -2,6 +2,9 @@
  * useAsset Hook - Asset Creation and Management
  *
  * Provides functionality for creating, fetching, and managing tokenized assets.
+ * Uses the shared BrowserHttpClient (`api`) from TokenisationContext instead of
+ * raw fetch() calls. FormData uploads still use fetch directly since
+ * BrowserHttpClient only handles JSON payloads.
  *
  * @example
  * ```tsx
@@ -103,35 +106,11 @@ export interface Evidence {
 // ============================================================================
 
 export function useAsset(): UseAssetReturn {
-  const { config, wallet, currentParty, callbacks } = useTokenisation();
+  const { api, config, wallet, currentParty, callbacks } = useTokenisation();
 
   const [currentAsset, setCurrentAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-
-  // Helper for API calls
-  const apiCall = useCallback(
-    async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(config.orgId ? { 'X-Org-Id': config.orgId } : {}),
-        ...(wallet?.address ? { 'X-Wallet-Address': wallet.address } : {}),
-      };
-
-      const response = await fetch(`${config.apiUrl}${endpoint}`, {
-        ...options,
-        headers: { ...headers, ...options?.headers },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.status}`);
-      }
-
-      return response.json();
-    },
-    [config, wallet]
-  );
 
   // Create asset
   const createAsset = useCallback(
@@ -159,26 +138,24 @@ export function useAsset(): UseAssetReturn {
         }
 
         // Create asset via API
-        const result = await apiCall<{
+        const response = await api.post<{
           asset: Asset;
           decision?: PolicyDecision;
           receipt?: DecisionReceipt;
         }>('/api/v1/assets', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: data.name,
-            symbol: data.symbol,
-            description: data.description,
-            rightType: data.rightType,
-            jurisdiction: data.jurisdiction,
-            totalShares: data.totalShares,
-            pricePerShare: data.pricePerShare,
-            ownerId: currentParty.id,
-            documents: documentIds,
-            metadata: data.metadata,
-          }),
+          name: data.name,
+          symbol: data.symbol,
+          description: data.description,
+          rightType: data.rightType,
+          jurisdiction: data.jurisdiction,
+          totalShares: data.totalShares,
+          pricePerShare: data.pricePerShare,
+          ownerId: currentParty.id,
+          documents: documentIds,
+          metadata: data.metadata,
         });
 
+        const result = response.data;
         setCurrentAsset(result.asset);
 
         return {
@@ -195,7 +172,7 @@ export function useAsset(): UseAssetReturn {
         setLoading(false);
       }
     },
-    [config, wallet, currentParty, apiCall]
+    [api, config, wallet, currentParty]
   );
 
   // Get asset by ID
@@ -205,8 +182,8 @@ export function useAsset(): UseAssetReturn {
       setError(null);
 
       try {
-        const result = await apiCall<{ asset: Asset }>(`/api/v1/assets/${assetId}`);
-        return result.asset;
+        const response = await api.get<{ asset: Asset }>(`/api/v1/assets/${assetId}`);
+        return response.data.asset;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -215,7 +192,7 @@ export function useAsset(): UseAssetReturn {
         setLoading(false);
       }
     },
-    [apiCall]
+    [api]
   );
 
   // List assets
@@ -225,19 +202,16 @@ export function useAsset(): UseAssetReturn {
       setError(null);
 
       try {
-        const params = new URLSearchParams();
-        if (filter?.state) params.set('state', filter.state);
-        if (filter?.rightType) params.set('rightType', filter.rightType);
-        if (filter?.jurisdiction) params.set('jurisdiction', filter.jurisdiction);
-        if (filter?.ownerId) params.set('ownerId', filter.ownerId);
-        if (filter?.limit) params.set('limit', String(filter.limit));
-        if (filter?.offset) params.set('offset', String(filter.offset));
+        const query: Record<string, string> = {};
+        if (filter?.state) query.state = filter.state;
+        if (filter?.rightType) query.rightType = filter.rightType;
+        if (filter?.jurisdiction) query.jurisdiction = filter.jurisdiction;
+        if (filter?.ownerId) query.ownerId = filter.ownerId;
+        if (filter?.limit) query.limit = String(filter.limit);
+        if (filter?.offset) query.offset = String(filter.offset);
 
-        const queryString = params.toString();
-        const endpoint = `/api/v1/assets${queryString ? `?${queryString}` : ''}`;
-
-        const result = await apiCall<{ assets: Asset[] }>(endpoint);
-        return result.assets;
+        const response = await api.get<{ assets: Asset[] }>('/api/v1/assets', query);
+        return response.data.assets;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -246,7 +220,7 @@ export function useAsset(): UseAssetReturn {
         setLoading(false);
       }
     },
-    [apiCall]
+    [api]
   );
 
   // Transition asset state
@@ -256,24 +230,23 @@ export function useAsset(): UseAssetReturn {
       setError(null);
 
       try {
-        const result = await apiCall<{
+        const response = await api.post<{
           success: boolean;
           newState: LifecycleState;
           decision?: PolicyDecision;
           receipt?: DecisionReceipt;
           error?: string;
         }>(`/api/v1/assets/${assetId}/transition`, {
-          method: 'POST',
-          body: JSON.stringify({
-            toState,
-            evidence,
-            actorId: currentParty?.id,
-          }),
+          toState,
+          evidence,
+          actorId: currentParty?.id,
         });
+
+        const result = response.data;
 
         if (result.success && currentAsset?.id === assetId) {
           const prevState = currentAsset.state;
-          setCurrentAsset({ ...currentAsset, state: result.newState });
+          setCurrentAsset({ ...currentAsset, state: result.newState as unknown as Asset['state'] });
 
           // Fire onStatusUpdate callback
           callbacks?.onStatusUpdate?.({
@@ -300,7 +273,7 @@ export function useAsset(): UseAssetReturn {
         setLoading(false);
       }
     },
-    [apiCall, currentParty, currentAsset, callbacks]
+    [api, currentParty, currentAsset, callbacks]
   );
 
   // Upload document
@@ -319,22 +292,19 @@ export function useAsset(): UseAssetReturn {
         });
 
         // Register document with API
-        const result = await apiCall<{ document: UploadedDocument }>('/api/v1/documents', {
-          method: 'POST',
-          body: JSON.stringify({
-            assetId,
-            filename: file.name,
-            storageUri,
-            mimeType: file.type,
-            size: file.size,
-            metadata,
-          }),
+        const response = await api.post<{ document: UploadedDocument }>('/api/v1/documents', {
+          assetId,
+          filename: file.name,
+          storageUri,
+          mimeType: file.type,
+          size: file.size,
+          metadata,
         });
 
-        return result.document;
+        return response.data.document;
       }
 
-      // Default: upload to server
+      // Default: upload to server using raw fetch (FormData not supported by BrowserHttpClient)
       const formData = new FormData();
       formData.append('file', file);
       formData.append('assetId', assetId);
@@ -353,18 +323,19 @@ export function useAsset(): UseAssetReturn {
       const result = await response.json();
       return result.document;
     },
-    [config, apiCall]
+    [api, config]
   );
 
   // Get documents for asset
   const getDocuments = useCallback(
     async (assetId: string): Promise<UploadedDocument[]> => {
-      const result = await apiCall<{ documents: UploadedDocument[] }>(
-        `/api/v1/documents?assetId=${assetId}`
+      const response = await api.get<{ documents: UploadedDocument[] }>(
+        '/api/v1/documents',
+        { assetId }
       );
-      return result.documents;
+      return response.data.documents;
     },
-    [apiCall]
+    [api]
   );
 
   return {

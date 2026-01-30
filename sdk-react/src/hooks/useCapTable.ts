@@ -34,7 +34,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useTokenisation } from '../context/index.js';
+import { useTokenisation } from '../context/TokenisationContext.js';
 
 // ============================================================================
 // Types
@@ -86,13 +86,13 @@ export function useCapTable(
   tokenId: string | undefined,
   options?: UseCapTableOptions,
 ): UseCapTableReturn {
-  const { config, wallet } = useTokenisation();
+  const { api } = useTokenisation();
 
   const [data, setData] = useState<CapTableData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
+  const cancelledRef = useRef(false);
 
   const {
     autoRefresh = false,
@@ -101,49 +101,31 @@ export function useCapTable(
   } = options ?? {};
 
   const fetchCapTable = useCallback(async () => {
-    if (!tokenId || disabled || !config.apiUrl) return;
+    if (!tokenId || disabled) return;
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+    cancelledRef.current = false;
 
     setLoading(true);
     setError(null);
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (config.orgId) headers['X-Org-Id'] = config.orgId;
-      if (wallet?.address) headers['X-Wallet-Address'] = wallet.address;
-
-      const response = await fetch(
-        `${config.apiUrl}/api/v1/ledger/cap-table/${encodeURIComponent(tokenId)}`,
-        { headers, signal: controller.signal },
+      const result = await api.get<CapTableData>(
+        '/api/v1/ledger/cap-table/' + encodeURIComponent(tokenId),
       );
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Failed to fetch cap table: ${response.status}`);
-      }
-
-      const json = await response.json();
-
-      if (!controller.signal.aborted) {
-        setData(json.data ?? json);
+      if (!cancelledRef.current) {
+        setData(result.data);
       }
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (cancelledRef.current) return;
       const e = err instanceof Error ? err : new Error(String(err));
-      if (!controller.signal.aborted) {
-        setError(e);
-      }
+      setError(e);
     } finally {
-      if (!controller.signal.aborted) {
+      if (!cancelledRef.current) {
         setLoading(false);
       }
     }
-  }, [tokenId, disabled, config.apiUrl, config.orgId, wallet?.address]);
+  }, [tokenId, disabled, api]);
 
   // Fetch on mount and when tokenId changes
   useEffect(() => {
@@ -164,7 +146,7 @@ export function useCapTable(
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      abortRef.current?.abort();
+      cancelledRef.current = true;
     };
   }, []);
 

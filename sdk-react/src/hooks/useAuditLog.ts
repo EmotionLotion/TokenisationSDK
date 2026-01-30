@@ -28,7 +28,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useTokenisation } from '../context/index.js';
+import { useTokenisation } from '../context/TokenisationContext.js';
 
 // ============================================================================
 // Types
@@ -99,7 +99,7 @@ export function useAuditLog(
   filters?: AuditLogFilters,
   options?: UseAuditLogOptions,
 ): UseAuditLogReturn {
-  const { config, wallet } = useTokenisation();
+  const { api } = useTokenisation();
 
   const {
     pageSize = DEFAULT_PAGE_SIZE,
@@ -114,26 +114,27 @@ export function useAuditLog(
   const [error, setError] = useState<Error | null>(null);
   const [offset, setOffset] = useState(0);
 
-  const abortRef = useRef<AbortController | null>(null);
+  const cancelledRef = useRef(false);
 
   // -------------------------------------------------------------------------
-  // Build query string
+  // Build query params object
   // -------------------------------------------------------------------------
 
-  const buildQuery = useCallback(
-    (currentOffset: number): string => {
-      const params = new URLSearchParams();
-      params.set('limit', String(pageSize));
-      params.set('offset', String(currentOffset));
+  const buildParams = useCallback(
+    (currentOffset: number): Record<string, string> => {
+      const params: Record<string, string> = {
+        limit: String(pageSize),
+        offset: String(currentOffset),
+      };
 
-      if (filters?.action) params.set('action', filters.action);
-      if (filters?.resourceType) params.set('resourceType', filters.resourceType);
-      if (filters?.resourceId) params.set('resourceId', filters.resourceId);
-      if (filters?.actorId) params.set('actorId', filters.actorId);
-      if (filters?.startDate) params.set('startDate', filters.startDate);
-      if (filters?.endDate) params.set('endDate', filters.endDate);
+      if (filters?.action) params.action = filters.action;
+      if (filters?.resourceType) params.resourceType = filters.resourceType;
+      if (filters?.resourceId) params.resourceId = filters.resourceId;
+      if (filters?.actorId) params.actorId = filters.actorId;
+      if (filters?.startDate) params.startDate = filters.startDate;
+      if (filters?.endDate) params.endDate = filters.endDate;
 
-      return params.toString();
+      return params;
     },
     [filters, pageSize],
   );
@@ -144,38 +145,24 @@ export function useAuditLog(
 
   const fetchEntries = useCallback(
     async (currentOffset: number, append: boolean) => {
-      if (disabled || !config.apiUrl) return;
+      if (disabled) return;
 
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
+      cancelledRef.current = false;
 
       setLoading(true);
       setError(null);
 
       try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        if (config.orgId) headers['X-Org-Id'] = config.orgId;
-        if (wallet?.address) headers['X-Wallet-Address'] = wallet.address;
+        const params = buildParams(currentOffset);
+        const result = (await api.get<{ entries: AuditEntry[]; total: number }>(
+          '/api/v1/audit',
+          params,
+        )).data;
 
-        const qs = buildQuery(currentOffset);
-        const response = await fetch(`${config.apiUrl}/api/v1/audit?${qs}`, {
-          headers,
-          signal: controller.signal,
-        });
+        const newEntries = result.entries;
+        const newTotal = result.total;
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Failed to fetch audit log: ${response.status}`);
-        }
-
-        const json = await response.json();
-        const newEntries: AuditEntry[] = json.data?.entries ?? json.entries ?? json.data ?? [];
-        const newTotal: number = json.data?.total ?? json.total ?? 0;
-
-        if (!controller.signal.aborted) {
+        if (!cancelledRef.current) {
           if (append) {
             setEntries((prev) => [...prev, ...newEntries]);
           } else {
@@ -185,18 +172,16 @@ export function useAuditLog(
           setOffset(currentOffset + newEntries.length);
         }
       } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (cancelledRef.current) return;
         const e = err instanceof Error ? err : new Error(String(err));
-        if (!controller.signal.aborted) {
-          setError(e);
-        }
+        setError(e);
       } finally {
-        if (!controller.signal.aborted) {
+        if (!cancelledRef.current) {
           setLoading(false);
         }
       }
     },
-    [disabled, config.apiUrl, config.orgId, wallet?.address, buildQuery],
+    [disabled, api, buildParams],
   );
 
   // -------------------------------------------------------------------------
@@ -235,7 +220,7 @@ export function useAuditLog(
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      abortRef.current?.abort();
+      cancelledRef.current = true;
     };
   }, []);
 

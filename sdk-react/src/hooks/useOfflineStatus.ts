@@ -6,9 +6,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { NetworkDetector } from '../../../sdk/src/offline/NetworkDetector';
-import type { SyncManager, SyncProgress, SyncStatus } from '../../../sdk/src/offline/SyncManager';
-import type { OfflineQueue } from '../../../sdk/src/offline/OfflineQueue';
+import type { NetworkDetector } from '@tokenisation/sdk/client';
+import type { SyncManager, SyncProgress, SyncStatus } from '@tokenisation/sdk/client';
+import type { OfflineQueue } from '@tokenisation/sdk/client';
 
 // ---------------------------------------------------------------------------
 // Types

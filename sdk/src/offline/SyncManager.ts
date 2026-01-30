@@ -5,8 +5,8 @@
  * (for knowing when to start syncing).
  */
 
-import type { OfflineQueue, QueuedOperation } from './OfflineQueue';
-import type { NetworkDetector } from './NetworkDetector';
+import type { OfflineQueue, QueuedOperation } from './OfflineQueue.js';
+import type { NetworkDetector } from './NetworkDetector.js';
 
 // ---------------------------------------------------------------------------
 // Types

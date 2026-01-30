@@ -35,7 +35,7 @@
 
 import React, { useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useTokenisation } from '../context/TokenisationContext.js';
-import type { WalletConnection, WalletProvider, WalletConnectOptions, Party, KYCStatus } from '../types/index.js';
+import type { KYCStatus } from '../types/index.js';
 
 // ============================================================================
 // TYPES

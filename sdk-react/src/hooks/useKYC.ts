@@ -105,7 +105,7 @@ const KYC_LEVEL_HIERARCHY: Record<KYCLevel, number> = {
 // ============================================================================
 
 export function useKYC(): UseKYCReturn {
-  const { config, wallet, currentParty } = useTokenisation();
+  const { api, config, wallet, currentParty } = useTokenisation();
 
   const [verification, setVerification] = useState<KYCVerification | null>(null);
   const [status, setStatus] = useState<KYCStatus>('not_started');
@@ -113,30 +113,6 @@ export function useKYC(): UseKYCReturn {
   const [isAccredited, setIsAccredited] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-
-  // Helper for API calls
-  const apiCall = useCallback(
-    async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(config.orgId ? { 'X-Org-Id': config.orgId } : {}),
-        ...(wallet?.address ? { 'X-Wallet-Address': wallet.address } : {}),
-      };
-
-      const response = await fetch(`${config.apiUrl}${endpoint}`, {
-        ...options,
-        headers: { ...headers, ...options?.headers },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.status}`);
-      }
-
-      return response.json();
-    },
-    [config, wallet]
-  );
 
   // Fetch current verification status
   const refresh = useCallback(async () => {
@@ -146,9 +122,10 @@ export function useKYC(): UseKYCReturn {
     setError(null);
 
     try {
-      const result = await apiCall<{ verification: KYCVerification | null }>(
-        `/api/v1/kyc/status?walletAddress=${wallet.address}`
-      );
+      const result = (await api.get<{ verification: KYCVerification | null }>(
+        '/api/v1/kyc/status',
+        { walletAddress: wallet.address },
+      )).data;
 
       if (result.verification) {
         setVerification(result.verification);
@@ -169,7 +146,7 @@ export function useKYC(): UseKYCReturn {
     } finally {
       setLoading(false);
     }
-  }, [wallet, apiCall]);
+  }, [wallet, api]);
 
   // Fetch on mount and wallet change
   useEffect(() => {
@@ -193,31 +170,28 @@ export function useKYC(): UseKYCReturn {
           throw new Error('Wallet not connected');
         }
 
-        const result = await apiCall<{
+        const result = (await api.post<{
           success: boolean;
           verificationId?: string;
           verificationUrl?: string;
           sdkToken?: string;
           error?: string;
         }>('/api/v1/kyc/initiate', {
-          method: 'POST',
-          body: JSON.stringify({
-            walletAddress: wallet.address,
-            level: requestedLevel,
-            redirectUrl: window.location.href,
-            webhookUrl: config.kyc?.webhookUrl,
-            prefill: prefill
-              ? {
-                  email: prefill.email,
-                  phone: prefill.phone,
-                  firstName: prefill.firstName,
-                  lastName: prefill.lastName,
-                  dateOfBirth: prefill.dateOfBirth,
-                  country: prefill.nationality,
-                }
-              : undefined,
-          }),
-        });
+          walletAddress: wallet.address,
+          level: requestedLevel,
+          redirectUrl: window.location.href,
+          webhookUrl: config.kyc?.webhookUrl,
+          prefill: prefill
+            ? {
+                email: prefill.email,
+                phone: prefill.phone,
+                firstName: prefill.firstName,
+                lastName: prefill.lastName,
+                dateOfBirth: prefill.dateOfBirth,
+                country: prefill.nationality,
+              }
+            : undefined,
+        })).data;
 
         if (result.success && result.verificationUrl) {
           setStatus('pending');
@@ -246,7 +220,7 @@ export function useKYC(): UseKYCReturn {
         setLoading(false);
       }
     },
-    [config, wallet, apiCall]
+    [api, config, wallet]
   );
 
   // Check if user meets required level
@@ -275,15 +249,12 @@ export function useKYC(): UseKYCReturn {
         throw new Error('KYC verification required for sanctions screening');
       }
 
-      const result = await apiCall<{
+      const result = (await api.post<{
         status: 'clear' | 'flagged' | 'blocked';
         matches?: unknown[];
       }>('/api/v1/kyc/sanctions/screen', {
-        method: 'POST',
-        body: JSON.stringify({
-          partyId: currentParty.id,
-        }),
-      });
+        partyId: currentParty.id,
+      })).data;
 
       return result;
     } catch (err) {
@@ -293,7 +264,7 @@ export function useKYC(): UseKYCReturn {
     } finally {
       setLoading(false);
     }
-  }, [wallet, currentParty, apiCall]);
+  }, [api, wallet, currentParty]);
 
   return {
     initiateKYC,

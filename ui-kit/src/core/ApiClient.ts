@@ -193,56 +193,56 @@ export class ApiClient {
   // Auth
   auth = {
     getNonce: (address: string) =>
-      this.post<{ nonce: string; expiresAt: string }>('/auth/siwe/nonce', { address }),
+      this.post<{ nonce: string; expiresAt: string }>('/api/v1/auth/siwe/nonce', { address }),
 
     verify: (message: string, signature: string) =>
-      this.post<{ token: string; refreshToken: string; party: any }>('/auth/siwe/verify', {
+      this.post<{ token: string; refreshToken: string; party: any }>('/api/v1/auth/siwe/verify', {
         message,
         signature,
       }),
 
-    me: () => this.get<{ party: any; wallets: any[] }>('/auth/me'),
+    me: () => this.get<{ party: any; wallets: any[] }>('/api/v1/auth/me'),
 
     refresh: (refreshToken: string) =>
-      this.post<{ token: string; refreshToken: string }>('/auth/refresh', { refreshToken }),
+      this.post<{ token: string; refreshToken: string }>('/api/v1/auth/refresh', { refreshToken }),
 
-    logout: () => this.post('/auth/logout'),
+    logout: () => this.post('/api/v1/auth/logout'),
   };
 
   // Parties (Identities)
   parties = {
     list: (params?: { page?: number; limit?: number }) =>
-      this.get<{ parties: any[]; total: number }>(`/parties${this.buildQuery(params)}`),
+      this.get<{ data: any[]; count: number }>(`/api/v1/parties${this.buildQuery(params)}`),
 
-    get: (id: string) => this.get<any>(`/parties/${id}`),
+    get: (id: string) => this.get<any>(`/api/v1/parties/${id}`),
 
     create: (data: {
       name: string;
       type: 'INDIVIDUAL' | 'ORGANIZATION';
       roles: string[];
       jurisdiction: string;
-    }) => this.post<any>('/parties', data),
+    }) => this.post<any>('/api/v1/parties', data),
 
     update: (id: string, data: Partial<{ name: string; metadata: any }>) =>
-      this.patch<any>(`/parties/${id}`, data),
+      this.patch<any>(`/api/v1/parties/${id}`, data),
 
     setKyc: (
       id: string,
       data: { verified: boolean; verificationLevel?: string; expiryDate?: string }
-    ) => this.post<any>(`/parties/${id}/kyc`, data),
+    ) => this.post<any>(`/api/v1/parties/${id}/kyc`, data),
 
     freeze: (id: string, reason?: string) =>
-      this.post<any>(`/parties/${id}/freeze`, { reason }),
+      this.post<any>(`/api/v1/parties/${id}/freeze`, { reason }),
 
-    unfreeze: (id: string) => this.post<any>(`/parties/${id}/unfreeze`),
+    unfreeze: (id: string) => this.post<any>(`/api/v1/parties/${id}/unfreeze`),
   };
 
   // Assets
   assets = {
     list: (params?: { state?: string; rightType?: string; page?: number; limit?: number }) =>
-      this.get<{ assets: any[]; total: number }>(`/assets${this.buildQuery(params)}`),
+      this.get<{ data: any[]; count: number }>(`/api/v1/assets${this.buildQuery(params)}`),
 
-    get: (id: string) => this.get<{ asset: any; balances: any }>(`/assets/${id}`),
+    get: (id: string) => this.get<{ asset: any; balances: any }>(`/api/v1/assets/${id}`),
 
     create: (data: {
       name: string;
@@ -251,34 +251,34 @@ export class ApiClient {
       jurisdiction: { countryCode: string };
       transferabilityRules?: any;
       metadata?: any;
-    }) => this.post<any>('/assets', data),
+    }) => this.post<any>('/api/v1/assets', data),
 
     transition: (id: string, toState: string) =>
-      this.post<{ asset: any; event: any }>(`/assets/${id}/transition`, { toState }),
+      this.post<{ asset: any; event: any }>(`/api/v1/assets/${id}/transition`, { toState }),
   };
 
   // Tokens
   tokens = {
     balances: (assetId: string) =>
-      this.get<{ balances: any; totalSupply: string }>(`/tokens/${assetId}/balances`),
+      this.get<{ data: any[]; count: number; totalSupply: string }>(`/api/v1/tokens/${assetId}/balances`),
 
     balance: (assetId: string, holderId: string) =>
-      this.get<{ balance: string }>(`/tokens/${assetId}/balances/${holderId}`),
+      this.get<{ balance: string }>(`/api/v1/tokens/${assetId}/balances/${holderId}`),
 
     mint: (assetId: string, to: string, amount: string) =>
-      this.post<{ success: boolean; balance: string; event: any }>(`/tokens/${assetId}/mint`, {
+      this.post<{ success: boolean; balance: string; event: any }>(`/api/v1/tokens/${assetId}/mint`, {
         to,
         amount,
       }),
 
     transfer: (assetId: string, from: string, to: string, amount: string) =>
       this.post<{ success: boolean; fromBalance: string; toBalance: string; event: any }>(
-        `/tokens/${assetId}/transfer`,
+        `/api/v1/tokens/${assetId}/transfer`,
         { from, to, amount }
       ),
 
     burn: (assetId: string, from: string, amount: string) =>
-      this.post<{ success: boolean; balance: string; event: any }>(`/tokens/${assetId}/burn`, {
+      this.post<{ success: boolean; balance: string; event: any }>(`/api/v1/tokens/${assetId}/burn`, {
         from,
         amount,
       }),
@@ -287,9 +287,9 @@ export class ApiClient {
   // Events
   events = {
     list: (params?: { assetId?: string; type?: string; limit?: number }) =>
-      this.get<{ events: any[]; total: number }>(`/events${this.buildQuery(params)}`),
+      this.get<{ data: any[]; count: number }>(`/api/v1/events${this.buildQuery(params)}`),
 
-    get: (id: string) => this.get<any>(`/events/${id}`),
+    get: (id: string) => this.get<any>(`/api/v1/events/${id}`),
   };
 
   // Helper to build query string

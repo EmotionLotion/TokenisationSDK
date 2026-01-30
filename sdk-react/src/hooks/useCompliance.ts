@@ -102,34 +102,10 @@ export interface UseComplianceReturn {
 // ============================================================================
 
 export function useCompliance(): UseComplianceReturn {
-  const { config, wallet, currentParty } = useTokenisation();
+  const { api, currentParty } = useTokenisation();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-
-  // Helper for API calls
-  const apiCall = useCallback(
-    async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(config.orgId ? { 'X-Org-Id': config.orgId } : {}),
-        ...(wallet?.address ? { 'X-Wallet-Address': wallet.address } : {}),
-      };
-
-      const response = await fetch(`${config.apiUrl}${endpoint}`, {
-        ...options,
-        headers: { ...headers, ...options?.headers },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.status}`);
-      }
-
-      return response.json();
-    },
-    [config, wallet]
-  );
 
   // Check transfer compliance
   const checkTransfer = useCallback(
@@ -138,16 +114,13 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<ComplianceCheckResult>(
+        const result = (await api.post<ComplianceCheckResult>(
           '/api/v1/compliance/check/transfer',
           {
-            method: 'POST',
-            body: JSON.stringify({
-              ...params,
-              actorId: currentParty?.id,
-            }),
-          }
-        );
+            ...params,
+            actorId: currentParty?.id,
+          },
+        )).data;
 
         return result;
       } catch (err) {
@@ -158,7 +131,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall, currentParty]
+    [api, currentParty]
   );
 
   // Check mint compliance
@@ -168,16 +141,13 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<ComplianceCheckResult>(
+        const result = (await api.post<ComplianceCheckResult>(
           '/api/v1/compliance/check/mint',
           {
-            method: 'POST',
-            body: JSON.stringify({
-              ...params,
-              actorId: currentParty?.id,
-            }),
-          }
-        );
+            ...params,
+            actorId: currentParty?.id,
+          },
+        )).data;
 
         return result;
       } catch (err) {
@@ -188,7 +158,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall, currentParty]
+    [api, currentParty]
   );
 
   // Check arbitrary action
@@ -198,19 +168,16 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<ComplianceCheckResult>(
+        const result = (await api.post<ComplianceCheckResult>(
           '/api/v1/compliance/check',
           {
-            method: 'POST',
-            body: JSON.stringify({
-              action,
-              context: {
-                ...context,
-                actorId: currentParty?.id,
-              },
-            }),
-          }
-        );
+            action,
+            context: {
+              ...context,
+              actorId: currentParty?.id,
+            },
+          },
+        )).data;
 
         return result;
       } catch (err) {
@@ -221,7 +188,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall, currentParty]
+    [api, currentParty]
   );
 
   // Get receipts for asset
@@ -231,9 +198,10 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<{ receipts: DecisionReceipt[] }>(
-          `/api/v1/compliance/receipts?assetId=${assetId}`
-        );
+        const result = (await api.get<{ receipts: DecisionReceipt[] }>(
+          '/api/v1/compliance/receipts',
+          { assetId },
+        )).data;
         return result.receipts;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -243,7 +211,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall]
+    [api]
   );
 
   // Get specific receipt
@@ -253,9 +221,9 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<{ receipt: DecisionReceipt }>(
-          `/api/v1/compliance/receipts/${receiptId}`
-        );
+        const result = (await api.get<{ receipt: DecisionReceipt }>(
+          `/api/v1/compliance/receipts/${receiptId}`,
+        )).data;
         return result.receipt;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -265,7 +233,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall]
+    [api]
   );
 
   // Verify receipt
@@ -275,9 +243,9 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<ReceiptVerification>(
-          `/api/v1/compliance/receipts/${receiptId}/verify`
-        );
+        const result = (await api.get<ReceiptVerification>(
+          `/api/v1/compliance/receipts/${receiptId}/verify`,
+        )).data;
         return result;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -287,7 +255,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall]
+    [api]
   );
 
   // Verify receipt chain
@@ -297,9 +265,10 @@ export function useCompliance(): UseComplianceReturn {
       setError(null);
 
       try {
-        const result = await apiCall<{ valid: boolean; brokenAt?: string }>(
-          `/api/v1/compliance/receipts/chain/verify?assetId=${assetId}`
-        );
+        const result = (await api.get<{ valid: boolean; brokenAt?: string }>(
+          '/api/v1/compliance/receipts/chain/verify',
+          { assetId },
+        )).data;
         return result;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -309,7 +278,7 @@ export function useCompliance(): UseComplianceReturn {
         setLoading(false);
       }
     },
-    [apiCall]
+    [api]
   );
 
   return {

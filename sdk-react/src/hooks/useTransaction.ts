@@ -5,26 +5,8 @@
  * estimation, wallet signature, submission (with SSE status tracking), and
  * confirmation.
  *
- * @example
- * ```tsx
- * function MintButton({ tokenId }: { tokenId: string }) {
- *   const { execute, currentStep, isLoading, txHash, error, retry, cancel } =
- *     useTransaction();
- *
- *   return (
- *     <div>
- *       <button
- *         onClick={() => execute('mint', { token: tokenId, amount: '1000' })}
- *         disabled={isLoading}
- *       >
- *         Mint
- *       </button>
- *       {error && <button onClick={retry}>Retry</button>}
- *       {txHash && <span>Tx: {txHash}</span>}
- *     </div>
- *   );
- * }
- * ```
+ * Phase 4: Wallet signing is now implemented via EIP-1193 wallet adapter
+ * from context instead of a placeholder stub.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -71,63 +53,15 @@ export interface StepData {
 }
 
 export interface UseTransactionReturn {
-  /** The current step in the flow */
   currentStep: TransactionStep;
-  /** Data collected at each step */
   stepData: StepData;
-  /** Current error, if any */
   error: Error | null;
-  /** Start the transaction flow */
   execute: (action: TransactionAction, params: TransactionParams) => Promise<void>;
-  /** Retry the current failed step */
   retry: () => void;
-  /** Cancel the in-progress flow */
   cancel: () => void;
-  /** Whether any step is in progress */
   isLoading: boolean;
-  /** Transaction hash (available after submission) */
   txHash: string | null;
-  /** Final receipt (available after confirmation) */
   receipt: TransactionReceipt | null;
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-async function apiFetch<T>(
-  url: string,
-  headers: Record<string, string>,
-  init?: RequestInit,
-): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `API error: ${res.status}`);
-  }
-
-  return res.json();
-}
-
-function buildSubmitEndpoint(action: TransactionAction, params: TransactionParams): string {
-  switch (action) {
-    case 'mint':
-      return `/api/v1/tokens/${encodeURIComponent(params.token)}/mint`;
-    case 'transfer':
-      return `/api/v1/transfers`;
-    case 'burn':
-      return `/api/v1/tokens/${encodeURIComponent(params.token)}/burn`;
-    case 'redeem':
-      return `/api/v1/tokens/${encodeURIComponent(params.token)}/redeem`;
-  }
 }
 
 // ============================================================================
@@ -135,7 +69,7 @@ function buildSubmitEndpoint(action: TransactionAction, params: TransactionParam
 // ============================================================================
 
 export function useTransaction(): UseTransactionReturn {
-  const { config, wallet } = useTokenisation();
+  const { config, wallet, api, modules, signMessage, sendTransaction } = useTokenisation();
 
   const [currentStep, setCurrentStep] = useState<TransactionStep>(TransactionStep.IDLE);
   const [stepData, setStepData] = useState<StepData>({});
@@ -149,13 +83,6 @@ export function useTransaction(): UseTransactionReturn {
   const lastActionRef = useRef<TransactionAction | null>(null);
   const lastParamsRef = useRef<TransactionParams | null>(null);
   const retryStepRef = useRef<TransactionStep | null>(null);
-
-  const apiHeaders = useCallback((): Record<string, string> => {
-    const h: Record<string, string> = {};
-    if (config.orgId) h['X-Org-Id'] = config.orgId;
-    if (wallet?.address) h['X-Wallet-Address'] = wallet.address;
-    return h;
-  }, [config.orgId, wallet?.address]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -171,80 +98,174 @@ export function useTransaction(): UseTransactionReturn {
   const runCompliance = useCallback(
     async (action: TransactionAction, params: TransactionParams): Promise<unknown> => {
       setCurrentStep(TransactionStep.COMPLIANCE_CHECK);
-      const result = await apiFetch<{ data: unknown }>(
-        `${config.apiUrl}/api/v1/compliance/evaluate`,
-        apiHeaders(),
+      const result = await api.post<{ data: unknown }>(
+        '/api/v1/compliance/evaluate',
         {
-          method: 'POST',
-          body: JSON.stringify({
-            action,
-            token: params.token,
-            from: params.from,
-            to: params.to,
-            amount: params.amount,
-          }),
+          action,
+          token: params.token,
+          from: params.from,
+          to: params.to,
+          amount: params.amount,
         },
       );
       setStepData((prev) => ({ ...prev, compliance: result.data }));
       return result.data;
     },
-    [config.apiUrl, apiHeaders],
+    [api],
   );
 
   const runGasEstimate = useCallback(
     async (action: TransactionAction, params: TransactionParams): Promise<unknown> => {
       setCurrentStep(TransactionStep.GAS_ESTIMATE);
-      const result = await apiFetch<{ data: unknown }>(
-        `${config.apiUrl}/api/v1/gas/estimate`,
-        apiHeaders(),
+      const result = await api.post<{ data: unknown }>(
+        '/api/v1/gas/estimate',
         {
-          method: 'POST',
-          body: JSON.stringify({
-            action,
-            token: params.token,
-            from: params.from,
-            to: params.to,
-            amount: params.amount,
-          }),
+          action,
+          token: params.token,
+          from: params.from,
+          to: params.to,
+          amount: params.amount,
         },
       );
       setStepData((prev) => ({ ...prev, gas: result.data }));
       return result.data;
     },
-    [config.apiUrl, apiHeaders],
+    [api],
   );
 
-  const runWalletSign = useCallback(async (): Promise<unknown> => {
-    setCurrentStep(TransactionStep.WALLET_SIGN);
-    // Wallet signing is handled externally (e.g. MetaMask). This step is a
-    // placeholder for the integration point. In production, the wallet adapter
-    // would be called here.
-    const signResult = { signed: true, address: wallet?.address };
-    setStepData((prev) => ({ ...prev, wallet: signResult }));
-    return signResult;
-  }, [wallet?.address]);
+  const runWalletSign = useCallback(
+    async (action: TransactionAction, params: TransactionParams): Promise<unknown> => {
+      setCurrentStep(TransactionStep.WALLET_SIGN);
+
+      if (!wallet?.address) {
+        throw new Error('Wallet not connected');
+      }
+
+      let signResult: unknown;
+
+      if (action === 'transfer' || action === 'redeem') {
+        // For transfers and redemptions, the server returns an unsigned tx.
+        // Fetch the unsigned transaction from the server.
+        const prepareResult = await api.post<{
+          data: { unsignedTx?: any; message?: string };
+        }>(
+          `/api/v1/transfers/prepare`,
+          {
+            action,
+            token: params.token,
+            from: params.from || wallet.address,
+            to: params.to,
+            amount: params.amount,
+          },
+        );
+
+        const prepared = prepareResult.data.data;
+
+        if (prepared?.unsignedTx) {
+          // Sign and send the transaction via wallet
+          const hash = await sendTransaction({
+            to: prepared.unsignedTx.to,
+            from: prepared.unsignedTx.from || wallet.address,
+            data: prepared.unsignedTx.data,
+            value: prepared.unsignedTx.value,
+            gasLimit: prepared.unsignedTx.gasLimit,
+            maxFeePerGas: prepared.unsignedTx.maxFeePerGas,
+            maxPriorityFeePerGas: prepared.unsignedTx.maxPriorityFeePerGas,
+            chainId: prepared.unsignedTx.chainId,
+          });
+
+          signResult = { signed: true, txHash: hash, address: wallet.address };
+        } else {
+          // Fallback: sign a structured message to prove wallet ownership
+          const message = prepared?.message || `Authorize ${action} of ${params.amount} tokens`;
+          const signature = await signMessage(message);
+          signResult = { signed: true, signature, address: wallet.address };
+        }
+      } else {
+        // For mints/burns, these are typically server-signed (relayer).
+        // Sign a structured message to prove wallet ownership.
+        const message = [
+          `Action: ${action}`,
+          `Token: ${params.token}`,
+          `Amount: ${params.amount}`,
+          params.to ? `To: ${params.to}` : '',
+          `Timestamp: ${new Date().toISOString()}`,
+        ].filter(Boolean).join('\n');
+
+        const signature = await signMessage(message);
+        signResult = { signed: true, signature, address: wallet.address };
+      }
+
+      setStepData((prev) => ({ ...prev, wallet: signResult }));
+      return signResult;
+    },
+    [wallet, api, signMessage, sendTransaction],
+  );
 
   const runSubmit = useCallback(
     async (action: TransactionAction, params: TransactionParams): Promise<TransactionReceipt> => {
       setCurrentStep(TransactionStep.SUBMITTING);
 
-      const endpoint = buildSubmitEndpoint(action, params);
-      const result = await apiFetch<{ data: { id?: string; txHash?: string; [k: string]: unknown } }>(
-        `${config.apiUrl}${endpoint}`,
-        apiHeaders(),
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            from: params.from,
+      // Use modules for submission when possible
+      let result: any;
+      const walletData = (stepData.wallet as any) || {};
+
+      switch (action) {
+        case 'mint':
+          result = await modules.tokens.issue(params.token, {
             to: params.to,
             amount: params.amount,
-          }),
-        },
-      );
+            signature: walletData.signature,
+          } as any);
+          break;
+        case 'transfer':
+          if (walletData.txHash) {
+            // Transaction was already sent on-chain via wallet
+            result = await api.post('/api/v1/transfers', {
+              tokenId: params.token,
+              fromWallet: params.from || wallet?.address,
+              toWallet: params.to,
+              amount: params.amount,
+              txHash: walletData.txHash,
+            });
+          } else {
+            result = await modules.transfers.create({
+              tokenId: params.token,
+              fromWallet: params.from || wallet?.address || '',
+              toWallet: params.to || '',
+              amount: params.amount,
+              metadata: { signature: walletData.signature },
+            } as any);
+          }
+          break;
+        case 'burn':
+          result = await modules.tokens.redeem(params.token, {
+            from: params.from || wallet?.address,
+            amount: params.amount,
+            signature: walletData.signature,
+          } as any);
+          break;
+        case 'redeem':
+          if (walletData.txHash) {
+            result = await api.post(`/api/v1/tokens/${encodeURIComponent(params.token)}/redeem`, {
+              from: params.from || wallet?.address,
+              amount: params.amount,
+              txHash: walletData.txHash,
+            });
+          } else {
+            result = await modules.tokens.redeem(params.token, {
+              from: params.from || wallet?.address,
+              amount: params.amount,
+              signature: walletData.signature,
+            } as any);
+          }
+          break;
+      }
 
-      const txId = result.data?.txHash || result.data?.id || '';
+      const data = result?.data?.data ?? result?.data ?? result ?? {};
+      const txId = walletData.txHash || data.txHash || data.id || '';
       setTxHash(String(txId));
-      setStepData((prev) => ({ ...prev, submission: result.data }));
+      setStepData((prev) => ({ ...prev, submission: data }));
 
       // Listen for real-time updates via SSE
       const receiptPromise = new Promise<TransactionReceipt>((resolve) => {
@@ -256,14 +277,13 @@ export function useTransaction(): UseTransactionReturn {
 
           const timeout = setTimeout(() => {
             es.close();
-            const fallback: TransactionReceipt = {
+            resolve({
               txHash: String(txId),
               status: 'confirmed',
               action,
               timestamp: new Date().toISOString(),
-              ...result.data,
-            };
-            resolve(fallback);
+              ...data,
+            });
           }, 60_000);
 
           es.onmessage = (event) => {
@@ -272,15 +292,14 @@ export function useTransaction(): UseTransactionReturn {
               if (payload.status === 'confirmed' || payload.eventType?.includes('confirmed')) {
                 clearTimeout(timeout);
                 es.close();
-                const r: TransactionReceipt = {
+                resolve({
                   txHash: payload.txHash || String(txId),
                   blockNumber: payload.blockNumber,
                   status: 'confirmed',
                   action,
                   timestamp: payload.timestamp || new Date().toISOString(),
                   ...payload,
-                };
-                resolve(r);
+                });
               }
             } catch {
               // ignore heartbeat
@@ -290,30 +309,28 @@ export function useTransaction(): UseTransactionReturn {
           es.onerror = () => {
             clearTimeout(timeout);
             es.close();
-            const fallback: TransactionReceipt = {
+            resolve({
               txHash: String(txId),
               status: 'confirmed',
               action,
               timestamp: new Date().toISOString(),
-              ...result.data,
-            };
-            resolve(fallback);
+              ...data,
+            });
           };
         } else {
-          const fallback: TransactionReceipt = {
+          resolve({
             txHash: String(txId),
             status: 'confirmed',
             action,
             timestamp: new Date().toISOString(),
-            ...result.data,
-          };
-          resolve(fallback);
+            ...data,
+          });
         }
       });
 
       return receiptPromise;
     },
-    [config.apiUrl, apiHeaders],
+    [config.apiUrl, api, modules, wallet, stepData.wallet],
   );
 
   // --------------------------------------------------------------------------
@@ -355,7 +372,7 @@ export function useTransaction(): UseTransactionReturn {
               await runGasEstimate(action, params);
               break;
             case TransactionStep.WALLET_SIGN:
-              await runWalletSign();
+              await runWalletSign(action, params);
               break;
             case TransactionStep.SUBMITTING: {
               const r = await runSubmit(action, params);
