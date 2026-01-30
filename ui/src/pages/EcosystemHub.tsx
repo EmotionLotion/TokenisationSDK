@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Activity, ChevronRight, ArrowUpRight, ArrowDownRight, Database, Plane,
-    Droplets, Truck, Share2, TrendingUp, Zap, ShieldCheck, Award, Code2, Brain, Users, Building2, Map, Cpu
+    Droplets, Truck, Share2, TrendingUp, Zap, ShieldCheck, Award, Code2, Brain, Users, Building2, Map, Cpu,
+    Presentation
 } from 'lucide-react';
 import { sdkStore } from '../store';
 import { QuickActionDemo, InlineDemoCard, scenarios } from '../components/QuickActionDemo';
@@ -249,6 +250,17 @@ export function EcosystemHub() {
                                     <span className="text-sm text-gray-500 font-mono">SDK v2.0</span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Guided Showcase CTA + Tier Badge */}
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => navigate('/showcase')}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F8B032] to-[#D69A31] text-black rounded-xl font-bold text-sm hover:opacity-90 transition-opacity shadow-lg shadow-[#F8B032]/20"
+                            >
+                                <Presentation className="w-4 h-4" />
+                                Guided Showcase
+                            </button>
                         </div>
 
                         {/* Tier Badge - Institutional Style */}

@@ -161,30 +161,7 @@ export interface TelematicsEvent {
   scoreImpact: number;
 }
 
-// Fly+ Types
-export interface FlightPass {
-  id: string;
-  tokenId?: string;
-  type: 'BASIC' | 'PREMIUM' | 'ELITE';
-  ownerAddress: string;
-  flightNumber?: string;
-  origin?: string;
-  destination?: string;
-  departureDate?: Date;
-  benefits: string[];
-  isActive: boolean;
-  transferable: boolean;
-  purchasePrice: string;
-  currentValue: string;
-}
-
-export interface FlightStatus {
-  flightNumber: string;
-  status: 'ON_TIME' | 'DELAYED' | 'CANCELLED' | 'BOARDING' | 'DEPARTED' | 'ARRIVED';
-  delay: number; // minutes
-  gate?: string;
-  lastUpdate: Date;
-}
+// Fly+ types removed - airline functionality lives in /showcase/airline
 
 // H2O Types
 export interface WaterCredit {
@@ -404,145 +381,7 @@ export function useDriverReputation(driverId?: string) {
   };
 }
 
-// ============================================================================
-// FLY+ HOOKS
-// ============================================================================
-
-/**
- * Hook for Fly+ Pass management
- */
-export function useFlyPlusPasses() {
-  const { createAsset, transitionAsset, assets } = useSDK();
-  const { simulateAhoyAction } = useAhoyState();
-  const { address } = useWallet();
-  const [passes, setPasses] = useState<FlightPass[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Load passes from assets
-  useEffect(() => {
-    const flyPlusAssets = assets.filter((a) => a.metadata?.vertical === 'FLYPLUS');
-
-    const loadedPasses: FlightPass[] = flyPlusAssets.map((asset) => ({
-      id: asset.id,
-      tokenId: asset.metadata?.tokenId as string,
-      type: (asset.metadata?.passType as FlightPass['type']) || 'BASIC',
-      ownerAddress: asset.metadata?.ownerAddress as string || '',
-      flightNumber: asset.metadata?.flightNumber as string,
-      origin: asset.metadata?.origin as string,
-      destination: asset.metadata?.destination as string,
-      departureDate: asset.metadata?.departureDate ? new Date(asset.metadata.departureDate as string) : undefined,
-      benefits: (asset.metadata?.benefits as string[]) || [],
-      isActive: asset.state === LifecycleState.ACTIVE,
-      transferable: asset.transferabilityRules?.mode !== TransferabilityMode.NON_TRANSFERABLE,
-      purchasePrice: (asset.metadata?.purchasePrice as string) || '0',
-      currentValue: (asset.metadata?.currentValue as string) || '0',
-    }));
-
-    setPasses(loadedPasses);
-  }, [assets]);
-
-  // Purchase a new pass
-  const purchasePass = useCallback(
-    async (passType: FlightPass['type'], flightDetails?: Partial<FlightPass>) => {
-      if (!address) return { success: false, error: 'Wallet not connected' };
-
-      setIsLoading(true);
-
-      try {
-        const benefits: Record<FlightPass['type'], string[]> = {
-          BASIC: ['Priority Boarding', 'Free Checked Bag'],
-          PREMIUM: ['Lounge Access', 'Priority Boarding', 'Free Upgrades', 'Free Checked Bags'],
-          ELITE: ['First Class Lounge', 'Guaranteed Upgrades', 'Concierge Service', 'Unlimited Bags'],
-        };
-
-        const prices: Record<FlightPass['type'], string> = {
-          BASIC: '99',
-          PREMIUM: '299',
-          ELITE: '999',
-        };
-
-        const asset = await createAsset({
-          name: `Fly+ ${passType} Pass`,
-          rightType: RightType.ACCESS,
-          description: `Fly+ ${passType} Access Pass NFT`,
-          jurisdiction: 'AE',
-          transferabilityRules: {
-            mode: TransferabilityMode.COMPLIANCE_GATED,
-            requireKyc: true,
-          },
-          metadata: {
-            vertical: 'FLYPLUS',
-            type: 'ACCESS_PASS_NFT',
-            passType,
-            ownerAddress: address,
-            flightNumber: flightDetails?.flightNumber,
-            origin: flightDetails?.origin,
-            destination: flightDetails?.destination,
-            departureDate: flightDetails?.departureDate?.toISOString(),
-            benefits: benefits[passType],
-            purchasePrice: prices[passType],
-            currentValue: prices[passType],
-          },
-        });
-
-        await transitionAsset(asset.id, LifecycleState.VERIFIED, 'system');
-        await transitionAsset(asset.id, LifecycleState.ACTIVE, 'system');
-
-        simulateAhoyAction('PASS_PURCHASED', 'FLYPLUS');
-
-        setIsLoading(false);
-        return { success: true, assetId: asset.id };
-      } catch (error) {
-        setIsLoading(false);
-        return { success: false, error: error instanceof Error ? error.message : 'Purchase failed' };
-      }
-    },
-    [address, createAsset, transitionAsset, simulateAhoyAction]
-  );
-
-  // Transfer pass to another user
-  const transferPass = useCallback(
-    async (passId: string, toAddress: string) => {
-      const pass = passes.find((p) => p.id === passId);
-      if (!pass || !pass.transferable) {
-        return { success: false, error: 'Pass not transferable' };
-      }
-
-      try {
-        // In production, this would call the NFT transfer function
-        simulateAhoyAction('PASS_TRANSFERRED', 'FLYPLUS');
-
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : 'Transfer failed' };
-      }
-    },
-    [passes, address, simulateAhoyAction]
-  );
-
-  // Check flight status (simulated oracle)
-  const checkFlightStatus = useCallback(async (flightNumber: string): Promise<FlightStatus> => {
-    // Simulated flight status from oracle
-    const statuses: FlightStatus['status'][] = ['ON_TIME', 'DELAYED', 'BOARDING'];
-    const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-
-    return {
-      flightNumber,
-      status: randomStatus,
-      delay: randomStatus === 'DELAYED' ? Math.floor(Math.random() * 120) + 15 : 0,
-      gate: `A${Math.floor(Math.random() * 20) + 1}`,
-      lastUpdate: new Date(),
-    };
-  }, []);
-
-  return {
-    passes,
-    isLoading,
-    purchasePass,
-    transferPass,
-    checkFlightStatus,
-  };
-}
+// FLY+ hook removed - airline functionality lives in /showcase/airline
 
 // ============================================================================
 // H2O HOOKS
@@ -575,7 +414,7 @@ export function useWaterCredits(meterId?: string) {
       co2Offset: (asset.metadata?.co2Offset as number) || 0,
       periodStart: new Date(asset.metadata?.periodStart as string || Date.now()),
       periodEnd: new Date(asset.metadata?.periodEnd as string || Date.now()),
-      verified: asset.state === LifecycleState.ACTIVE,
+      verified: String(asset.state) === String(LifecycleState.ACTIVE),
       oracleSource: (asset.metadata?.oracleSource as string) || 'IoT_ORACLE',
     }));
 
@@ -1952,7 +1791,6 @@ export function useFederatedML() {
  */
 export function useVerticalServices() {
   const driver = useDriverReputation();
-  const flyPlus = useFlyPlusPasses();
   const water = useWaterCredits();
   const smartCity = useSmartCity();
   const dataMarketplace = useDataMarketplace();
@@ -1960,7 +1798,6 @@ export function useVerticalServices() {
 
   return {
     comet: driver,
-    flyplus: flyPlus,
     h2o: water,
     iits: smartCity,
     ams: dataMarketplace,

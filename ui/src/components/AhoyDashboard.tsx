@@ -629,7 +629,7 @@ export function AhoyDashboard() {
                 onClick={() => sdkStore.simulateAhoyAction('DISCOUNT_REDEMPTION', 'FLYPLUS')}
                 className="p-3 border border-white/10 bg-white/5 rounded-xl hover:border-red-500/30 hover:bg-red-500/5 transition-all text-left group"
               >
-                <p className="text-sm font-medium text-gray-200 group-hover:text-white">Flight Discount</p>
+                <p className="text-sm font-medium text-gray-200 group-hover:text-white">Discount</p>
                 <p className="text-xs text-red-400 font-mono mt-1">-500 $AHOY</p>
               </button>
 

@@ -34,7 +34,7 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
 
   const stats = {
     totalAssets: assets.length,
-    activeAssets: assets.filter(a => a.state === LifecycleState.ACTIVE).length,
+    activeAssets: assets.filter(a => String(a.state) === String(LifecycleState.ACTIVE)).length,
     totalParties: parties.length,
     verifiedParties: parties.filter(p => (p as any).verificationLevel === 2).length,
   };
@@ -42,21 +42,21 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       asset.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesState = filterState === 'all' || asset.state === filterState;
+    const matchesState = filterState === 'all' || String(asset.state) === String(filterState);
     return matchesSearch && matchesState;
   });
 
-  const getStatusColor = (state: LifecycleState) => {
-    switch (state) {
-      case LifecycleState.ACTIVE: return 'text-accent bg-accent/10 border-accent/20';
-      case LifecycleState.VERIFIED: return 'text-primary bg-primary/10 border-primary/20';
-      case LifecycleState.DRAFT: return 'text-gray-400 bg-gray-500/10 border-gray-500/20';
-      case LifecycleState.PENDING_VERIFICATION: return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20';
+  const getStatusColor = (state: string) => {
+    switch (String(state)) {
+      case String(LifecycleState.ACTIVE): return 'text-accent bg-accent/10 border-accent/20';
+      case String(LifecycleState.VERIFIED): return 'text-primary bg-primary/10 border-primary/20';
+      case String(LifecycleState.DRAFT): return 'text-gray-400 bg-gray-500/10 border-gray-500/20';
+      case String(LifecycleState.PENDING_VERIFICATION): return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20';
       default: return 'text-gray-400 bg-gray-500/10';
     }
   };
 
-  const getTypeIcon = (type: RightType) => {
+  const getTypeIcon = (type: string | RightType | undefined) => {
     switch (type) {
       case RightType.OWNERSHIP: return <Building2 className="w-5 h-5 text-blue-400" />;
       case RightType.ACCESS: return <Ticket className="w-5 h-5 text-purple-400" />;
@@ -89,7 +89,7 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
     const defaultIssuerId = parties.length > 0 ? parties[0].id : 'default-issuer';
 
     // Create the asset from wizard data
-    const newAsset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> = {
+    const newAsset: Record<string, any> = {
       name: assetData.metadata.name || assetData.metadata.propertyType || assetData.template.name,
       rightType: mapProfileToRightType(assetData.template.profile),
       state: LifecycleState.DRAFT,
@@ -330,7 +330,7 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-4">
                           <div className="p-2.5 bg-gray-800 rounded-xl border border-white/10 group-hover:border-primary/50 transition-colors">
-                            {getTypeIcon(asset.rightType)}
+                            {getTypeIcon((asset as any).rightType)}
                           </div>
                           <div>
                             <p className="font-semibold text-white group-hover:text-primary transition-colors">{asset.name}</p>
@@ -339,7 +339,7 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="px-2.5 py-1 bg-white/5 rounded-md text-xs font-medium text-gray-300 border border-white/10">{asset.rightType}</span>
+                        <span className="px-2.5 py-1 bg-white/5 rounded-md text-xs font-medium text-gray-300 border border-white/10">{(asset as any).rightType}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center w-fit gap-1.5 ${getStatusColor(asset.state)}`}>
@@ -348,11 +348,11 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
                         </span>
                       </td>
                       <td className="px-6 py-4 font-mono text-gray-300">
-                        {formatBalance(asset.tokenInfo?.totalSupply?.toString() || '0')}
+                        {formatBalance((asset as any).tokenInfo?.totalSupply?.toString() || '0')}
                       </td>
                       <td className="px-6 py-4">
                         <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs font-medium">
-                          {typeof asset.jurisdiction === 'string' ? asset.jurisdiction : asset.jurisdiction.countryCode}
+                          {typeof (asset as any).jurisdiction === 'string' ? (asset as any).jurisdiction : (asset as any).jurisdiction?.countryCode ?? 'N/A'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
@@ -390,7 +390,7 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="p-3 bg-gray-800 rounded-xl border border-white/10 group-hover:border-primary/50 transition-colors">
-                    {getTypeIcon(asset.rightType)}
+                    {getTypeIcon((asset as any).rightType)}
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(asset.state)}`}>
                     {asset.state}
@@ -405,10 +405,10 @@ export function Dashboard({ onSelectAsset }: DashboardProps) {
                 <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
                   <div className="text-xs text-gray-500">
                     <span className="block">Supply</span>
-                    <span className="font-mono text-white">{formatBalance(asset.tokenInfo?.totalSupply?.toString() || '0')}</span>
+                    <span className="font-mono text-white">{formatBalance((asset as any).tokenInfo?.totalSupply?.toString() || '0')}</span>
                   </div>
                   <span className="px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-xs">
-                    {typeof asset.jurisdiction === 'string' ? asset.jurisdiction : asset.jurisdiction.countryCode}
+                    {typeof (asset as any).jurisdiction === 'string' ? (asset as any).jurisdiction : (asset as any).jurisdiction?.countryCode ?? 'N/A'}
                   </span>
                 </div>
               </div>

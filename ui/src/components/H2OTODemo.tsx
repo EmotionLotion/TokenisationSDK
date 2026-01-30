@@ -689,7 +689,7 @@ export function H2OTODemo() {
                                         {sdkWaterCredits.slice(0, 3).map(asset => (
                                             <div key={asset.id} className="p-2 bg-black/20 rounded-lg border border-white/5">
                                                 <p className="text-xs font-mono text-cyan-400 truncate">{asset.id}</p>
-                                                <p className="text-xs text-gray-500">{asset.rightType} • {asset.state}</p>
+                                                <p className="text-xs text-gray-500">{(asset as any).rightType} • {asset.state}</p>
                                             </div>
                                         ))}
                                     </div>

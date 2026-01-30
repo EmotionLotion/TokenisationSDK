@@ -1,0 +1,9 @@
+packages:
+  - sdk
+  - ui
+  - ui-kit
+  - sdk-react
+  - sdk-react-native
+  - server
+  - packages/*
+  - website

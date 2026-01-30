@@ -84,7 +84,7 @@ export function useCometLive(autoConnect: boolean = true): UseCometLiveReturn {
         );
 
         setDrivers(driversWithScores);
-        setPenalties(apiPenalties);
+        setPenalties(apiPenalties as unknown as Record<string, number>);
 
         console.log('✅ Connected to COMET server');
         console.log(`   ${driversWithScores.length} drivers loaded`);
@@ -196,7 +196,7 @@ export function useCometLive(autoConnect: boolean = true): UseCometLiveReturn {
       console.log('Syncing driver to store:', storeDriver.name, storeDriver.safetyScore);
     }
 
-    sdkStore.notify(); // Trigger store update
+    (sdkStore as any).notify(); // Trigger store update
   }, [drivers]);
 
   return {

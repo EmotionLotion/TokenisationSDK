@@ -432,6 +432,36 @@ export interface TokenisationCallbacks {
   onKYCStatusChange?: (status: KYCStatus) => void;
   /** Called on asset state change */
   onAssetStateChange?: (assetId: string, newState: LifecycleState) => void;
+  /** Called on any lifecycle status update (asset, transfer, compliance) */
+  onStatusUpdate?: (update: StatusUpdate) => void;
+  /** Called after a successful token transfer */
+  onTransferSuccess?: (transfer: TransferSuccessEvent) => void;
+}
+
+/**
+ * Status update event for lifecycle transitions
+ */
+export interface StatusUpdate {
+  type: 'asset' | 'transfer' | 'compliance' | 'kyc';
+  entityId: string;
+  previousStatus: string;
+  newStatus: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Transfer success event with full details
+ */
+export interface TransferSuccessEvent {
+  assetId: string;
+  fromAddress: string;
+  toAddress: string;
+  amount: string;
+  txHash?: string;
+  decision?: PolicyDecision;
+  receipt?: DecisionReceipt;
+  timestamp: string;
 }
 
 // ============================================================================
@@ -462,4 +492,7 @@ export interface TokenisationContextValue {
 
   /** Switch network */
   switchNetwork: (chainId: number) => Promise<void>;
+
+  /** Event callbacks (exposed for hooks to fire) */
+  callbacks: TokenisationCallbacks;
 }

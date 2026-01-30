@@ -1,13 +1,14 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Settings, Bell, Search, Box, Shield,
-    ArrowLeftRight, Radio, Wallet, Code, UserCheck, Sparkles, ChevronDown, Palette, Landmark,
-    Banknote, Vote, Lock, Award, Coins
+    ArrowLeftRight, Radio, Wallet, Code, Code2, UserCheck, Sparkles, ChevronDown, Palette, Landmark,
+    Banknote, Vote, Lock, Award, Coins, Presentation, Bug
 } from 'lucide-react';
 import { AhoyLogo } from '../components/AhoyLogo';
 import { SdkInsightPanel } from '../components/SdkInsightPanel';
 import { WalletButton } from '../components/WalletButton';
 import { ChainSelector } from '../components/ChainSelector';
+import { PersonaSwitcher } from '../components/PersonaSwitcher';
 
 // Navigation structure following StripeSDKPlan Section 9.1
 const MAIN_NAV = [
@@ -33,6 +34,9 @@ const DEV_NAV = [
     { path: '/developers', icon: Code, label: 'Developers' },
     { path: '/uikit', icon: Palette, label: 'UI Kit Demo' },
     { path: '/demo', icon: Sparkles, label: 'SDK Demos', end: true },
+    { path: '/showcase', icon: Presentation, label: 'Showcase' },
+    { path: '/playground', icon: Code2, label: 'Playground' },
+    { path: '/debugger', icon: Bug, label: 'Debugger' },
     { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -151,6 +155,9 @@ export function PlatformLayout() {
 
                     {/* Right Actions */}
                     <div className="flex items-center gap-4">
+                        {/* Persona Switcher */}
+                        <PersonaSwitcher />
+
                         {/* Chain Selector - show testnets in dev mode */}
                         <ChainSelector showTestnets={true} />
 

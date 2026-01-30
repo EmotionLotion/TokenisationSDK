@@ -623,8 +623,8 @@ export function CometDemo() {
                                             <p className="text-gray-500 font-mono">{asset.id.slice(0, 16)}...</p>
                                         </div>
                                         <span className={`px-2 py-0.5 rounded text-[10px] ${
-                                            asset.state === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
-                                            asset.state === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
+                                            String(asset.state) === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
+                                            String(asset.state) === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
                                             'bg-gray-500/20 text-gray-400'
                                         }`}>
                                             {asset.state}

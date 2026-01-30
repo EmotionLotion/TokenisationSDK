@@ -22,7 +22,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTokenisation } from '../context/TokenisationContext.js';
-import type { TokenInfo, PolicyDecision, DecisionReceipt } from '../types/index.js';
+import type { TokenInfo, PolicyDecision, DecisionReceipt, TransferSuccessEvent } from '../types/index.js';
 
 // ============================================================================
 // TYPES
@@ -87,7 +87,7 @@ export interface UseTokensReturn {
 // ============================================================================
 
 export function useTokens(assetId: string): UseTokensReturn {
-  const { config, wallet, currentParty } = useTokenisation();
+  const { config, wallet, currentParty, callbacks } = useTokenisation();
 
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [totalSupply, setTotalSupply] = useState<string>('0');
@@ -231,6 +231,18 @@ export function useTokens(assetId: string): UseTokensReturn {
 
         if (result.success) {
           await refresh();
+
+          // Fire onTransferSuccess callback
+          callbacks?.onTransferSuccess?.({
+            assetId,
+            fromAddress: fromAddress,
+            toAddress: toAddress,
+            amount,
+            txHash: result.txHash,
+            decision: result.decision,
+            receipt: result.receipt,
+            timestamp: new Date().toISOString(),
+          });
         }
 
         return {
@@ -248,7 +260,7 @@ export function useTokens(assetId: string): UseTokensReturn {
         setLoading(false);
       }
     },
-    [assetId, wallet, currentParty, apiCall, refresh]
+    [assetId, wallet, currentParty, apiCall, refresh, callbacks]
   );
 
   // Burn tokens

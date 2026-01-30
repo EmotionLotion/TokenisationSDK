@@ -34,6 +34,8 @@ import type {
   WalletConnection,
   WalletConnectOptions,
   Party,
+  StatusUpdate,
+  TransferSuccessEvent,
 } from '../types/index.js';
 
 // ============================================================================
@@ -296,8 +298,9 @@ export function TokenisationProvider({
       connectWallet,
       disconnectWallet,
       switchNetwork,
+      callbacks: callbacks ?? {},
     }),
-    [config, isInitialized, wallet, currentParty, connectWallet, disconnectWallet, switchNetwork]
+    [config, isInitialized, wallet, currentParty, connectWallet, disconnectWallet, switchNetwork, callbacks]
   );
 
   // Show error state

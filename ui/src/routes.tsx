@@ -12,6 +12,11 @@ import { NexusApp } from './pages/apps/NexusApp';
 import { EquityApp } from './pages/apps/EquityApp';
 import { IITSApp } from './pages/apps/IITSApp';
 import { GTSApp } from './pages/apps/GTSApp';
+import { RealEstateApp } from './pages/apps/RealEstateApp';
+import { HotelApp } from './pages/apps/HotelApp';
+import { ConcertApp } from './pages/apps/ConcertApp';
+import { CarRentalApp } from './pages/apps/CarRentalApp';
+import { ShowcaseApp } from './pages/apps/ShowcaseApp';
 
 // Existing page components (will be migrated)
 import { Dashboard } from './components/Dashboard';
@@ -37,6 +42,24 @@ import { CashFlowDashboard } from './components/CashFlowDashboard';
 import { GovernancePortal } from './components/GovernancePortal';
 import { EscrowTracker } from './components/EscrowTracker';
 import { SoulboundProgress } from './components/SoulboundProgress';
+
+// Module 3: Time-Travel Debugger
+import { DebuggerPage } from './pages/DebuggerPage';
+
+// Module 4: Headless Demo
+import { HeadlessDemo } from './pages/HeadlessDemo';
+
+// Module 5: Documentation & Comparison Pages
+import { LibraryPage } from './components/LibraryPage';
+import { HeadlessDocsPage } from './components/HeadlessDocsPage';
+import { HeadlessVsLibrary } from './components/HeadlessVsLibrary';
+
+// Module 6: Partner Admin Demo
+import { PartnerApprovalDemo } from './components/blueprints/PartnerApprovalDemo';
+
+// Module 2: Interactive Playground (lazy-loaded)
+import { lazy, Suspense } from 'react';
+const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then(m => ({ default: m.PlaygroundPage })));
 
 export const router = createBrowserRouter([
     {
@@ -85,10 +108,36 @@ export const router = createBrowserRouter([
                 path: 'app/gts',
                 element: <GTSApp />,
             },
+            // New Vertical Apps
+            {
+                path: 'app/real-estate',
+                element: <RealEstateApp />,
+            },
+            {
+                path: 'app/hotel',
+                element: <HotelApp />,
+            },
+            {
+                path: 'app/concert',
+                element: <ConcertApp />,
+            },
+            {
+                path: 'app/car-rental',
+                element: <CarRentalApp />,
+            },
+            // Guided Showcase
+            {
+                path: 'showcase',
+                element: <ShowcaseApp />,
+            },
+            {
+                path: 'showcase/:vertical',
+                element: <ShowcaseApp />,
+            },
             // Platform Pages
             {
                 path: 'assets',
-                element: <Dashboard onSelectAsset={() => {}} />,
+                element: <Dashboard onSelectAsset={() => { }} />,
             },
             {
                 path: 'identities',
@@ -167,6 +216,43 @@ export const router = createBrowserRouter([
             {
                 path: 'soulbound',
                 element: <SoulboundProgress />,
+            },
+            // Module 3: Time-Travel Debugger
+            {
+                path: 'debugger',
+                element: <DebuggerPage />,
+            },
+            // Module 2: Interactive Playground
+            {
+                path: 'playground',
+                element: <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-500">Loading Playground...</div>}><PlaygroundPage /></Suspense>,
+            },
+            {
+                path: 'playground/:vertical',
+                element: <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-500">Loading Playground...</div>}><PlaygroundPage /></Suspense>,
+            },
+            // Module 4: Headless Demo
+            {
+                path: 'headless',
+                element: <HeadlessDemo />,
+            },
+            // Module 5: Documentation & Comparison Pages
+            {
+                path: 'library',
+                element: <LibraryPage />,
+            },
+            {
+                path: 'headless-docs',
+                element: <HeadlessDocsPage />,
+            },
+            {
+                path: 'headless-vs-library',
+                element: <HeadlessVsLibrary />,
+            },
+            // Module 6: Partner Admin Demo
+            {
+                path: 'partner-demo',
+                element: <PartnerApprovalDemo />,
             },
         ],
     },

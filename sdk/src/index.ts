@@ -52,6 +52,8 @@ export type {
 } from './utils/pagination.js';
 
 // API Types
+// Note: Asset and AssetState are intentionally NOT exported here so that the
+// richer Model Asset (from ./models/index.js wildcard export) takes precedence.
 export type {
   TokenizationSDKConfig,
   PaginatedResponse,
@@ -63,8 +65,6 @@ export type {
   ApiKey,
   Project,
   Document,
-  Asset,
-  AssetState,
   Investor,
   InvestorWallet,
   InvestorStatus,
@@ -366,3 +366,81 @@ export type {
   Escrow,
   Milestone,
 } from './SDK.js';
+
+// ============================================
+// Factory: createTokenisationSDK (Event-Driven Wrapper)
+// ============================================
+
+import { TokenisationSDK as _TokenisationSDK } from './SDK.js';
+
+export interface CreateTokenisationSDKConfig {
+  /** SDK configuration passed to TokenisationSDK constructor */
+  sdkConfig?: ConstructorParameters<typeof _TokenisationSDK>[0];
+  /** Called when an asset transitions state */
+  onStatusUpdate?: (assetId: string, from: string, to: string) => void;
+  /** Called on successful transfer */
+  onTransferSuccess?: (transferId: string, from: string, to: string, amount: string) => void;
+  /** Called when a compliance check fails */
+  onComplianceFailure?: (assetId: string, reason: string) => void;
+}
+
+export type TokenisationEventType = 'statusUpdate' | 'transferSuccess' | 'complianceFailure';
+
+export interface TokenisationSDKWithEvents {
+  sdk: _TokenisationSDK;
+  subscribe: (
+    event: TokenisationEventType,
+    handler: (...args: any[]) => void,
+  ) => () => void;
+  emit: (event: TokenisationEventType, ...args: any[]) => void;
+}
+
+/**
+ * Factory function that wraps TokenisationSDK with an event subscription system.
+ *
+ * @example
+ * ```ts
+ * const { sdk, subscribe } = createTokenisationSDK({
+ *   onStatusUpdate: (assetId, from, to) => console.log(`Asset ${assetId}: ${from} → ${to}`),
+ * });
+ *
+ * const unsub = subscribe('transferSuccess', (id, from, to, amt) => {
+ *   console.log(`Transfer ${id}: ${from} → ${to} (${amt})`);
+ * });
+ *
+ * // later
+ * unsub();
+ * ```
+ */
+export function createTokenisationSDK(
+  config: CreateTokenisationSDKConfig = {},
+): TokenisationSDKWithEvents {
+  const sdk = new _TokenisationSDK(config.sdkConfig);
+
+  const handlers: Record<TokenisationEventType, Set<(...args: any[]) => void>> = {
+    statusUpdate: new Set(),
+    transferSuccess: new Set(),
+    complianceFailure: new Set(),
+  };
+
+  // Wire initial callbacks
+  if (config.onStatusUpdate) handlers.statusUpdate.add(config.onStatusUpdate);
+  if (config.onTransferSuccess) handlers.transferSuccess.add(config.onTransferSuccess);
+  if (config.onComplianceFailure) handlers.complianceFailure.add(config.onComplianceFailure);
+
+  function emit(event: TokenisationEventType, ...args: any[]) {
+    handlers[event].forEach(fn => fn(...args));
+  }
+
+  function subscribe(
+    event: TokenisationEventType,
+    handler: (...args: any[]) => void,
+  ): () => void {
+    handlers[event].add(handler);
+    return () => {
+      handlers[event].delete(handler);
+    };
+  }
+
+  return { sdk, subscribe, emit };
+}

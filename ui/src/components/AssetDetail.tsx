@@ -70,11 +70,11 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
     return sdkStore.subscribe(update);
   }, [initialAsset.id]);
 
-  const validNextStates = LIFECYCLE_TRANSITIONS[asset.state];
-  const issuer = parties.find(p => p.id === asset.issuerId);
+  const validNextStates = LIFECYCLE_TRANSITIONS[asset.state as unknown as LifecycleState];
+  const issuer = parties.find(p => p.id === (asset as any).issuerId);
 
   const handleTransition = async (toState: LifecycleState) => {
-    const result = await sdkStore.transition(asset.id, toState, asset.issuerId);
+    const result = await sdkStore.transition(asset.id, toState, (asset as any).issuerId || '');
     if (result.success) {
       setMessage({ type: 'success', text: `Transitioned to ${toState}` });
     } else {
@@ -142,18 +142,18 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
 
   const allStates = Object.values(LifecycleState);
 
-  const getStatusColor = (state: LifecycleState) => {
-    switch (state) {
-      case LifecycleState.ACTIVE: return 'text-accent bg-accent/10 border-accent/20';
-      case LifecycleState.VERIFIED: return 'text-primary bg-primary/10 border-primary/20';
-      case LifecycleState.DRAFT: return 'text-gray-400 bg-white/5 border-white/10';
-      case LifecycleState.PENDING_VERIFICATION: return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20';
+  const getStatusColor = (state: string) => {
+    switch (String(state)) {
+      case String(LifecycleState.ACTIVE): return 'text-accent bg-accent/10 border-accent/20';
+      case String(LifecycleState.VERIFIED): return 'text-primary bg-primary/10 border-primary/20';
+      case String(LifecycleState.DRAFT): return 'text-gray-400 bg-white/5 border-white/10';
+      case String(LifecycleState.PENDING_VERIFICATION): return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20';
       default: return 'text-gray-400 bg-white/5';
     }
   };
 
   const totalHolders = balances.length;
-  const totalSupply = parseInt(asset.tokenInfo?.totalSupply?.toString() || '0');
+  const totalSupply = parseInt((asset as any).tokenInfo?.totalSupply?.toString() || '0');
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -205,7 +205,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                   <div>
                     <p className="text-xs text-gray-500">Jurisdiction</p>
                     <p className="text-lg font-bold text-white">
-                      {typeof asset.jurisdiction === 'string' ? asset.jurisdiction : asset.jurisdiction.countryCode}
+                      {typeof (asset as any).jurisdiction === 'string' ? (asset as any).jurisdiction : (asset as any).jurisdiction?.countryCode ?? 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -221,7 +221,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b border-white/5">
                     <span className="text-sm text-gray-400">Right Type</span>
-                    <span className="text-sm font-medium text-white bg-white/5 px-3 py-1 rounded-lg">{asset.rightType}</span>
+                    <span className="text-sm font-medium text-white bg-white/5 px-3 py-1 rounded-lg">{(asset as any).rightType}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-white/5">
                     <span className="text-sm text-gray-400">State</span>
@@ -250,7 +250,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                   Quick Actions
                 </h3>
                 <div className="space-y-2">
-                  {asset.state === LifecycleState.ACTIVE ? (
+                  {String(asset.state) === String(LifecycleState.ACTIVE) ? (
                     <>
                       <button
                         onClick={() => setActiveTab('holders')}
@@ -342,7 +342,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
       case 'holders':
         return (
           <div className="space-y-6">
-            {asset.state === LifecycleState.ACTIVE && (
+            {String(asset.state) === String(LifecycleState.ACTIVE) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="glass-card rounded-xl p-5 border border-white/10 border-l-4 border-l-green-500">
                   <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
@@ -448,7 +448,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                   <Coins className="w-12 h-12 mb-3 opacity-20" />
                   <p>No tokens minted yet</p>
-                  {asset.state === LifecycleState.ACTIVE && (
+                  {String(asset.state) === String(LifecycleState.ACTIVE) && (
                     <p className="text-xs mt-1">Use the mint form above to issue tokens</p>
                   )}
                 </div>
@@ -528,8 +528,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
 
               <div className="flex flex-wrap items-center gap-2 mb-6">
                 {allStates.map((state, index) => {
-                  const isActive = state === asset.state;
-                  const isPast = allStates.indexOf(asset.state) > index;
+                  const isActive = String(state) === String(asset.state);
+                  const isPast = allStates.findIndex(s => String(s) === String(asset.state)) > index;
 
                   return (
                     <div key={state} className="flex items-center">
@@ -555,7 +555,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 {validNextStates.length > 0 ? (
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-gray-400">Available Transitions:</span>
-                    {validNextStates.map(state => (
+                    {validNextStates.map((state: LifecycleState) => (
                       <button
                         key={state}
                         onClick={() => handleTransition(state)}
@@ -584,8 +584,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <button
-                  disabled={asset.state !== LifecycleState.ACTIVE}
-                  className={`p-4 rounded-xl border text-left transition-all ${asset.state === LifecycleState.ACTIVE
+                  disabled={String(asset.state) !== String(LifecycleState.ACTIVE)}
+                  className={`p-4 rounded-xl border text-left transition-all ${String(asset.state) === String(LifecycleState.ACTIVE)
                     ? 'border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 cursor-pointer'
                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                     }`}
@@ -600,8 +600,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 </button>
 
                 <button
-                  disabled={asset.state !== LifecycleState.ACTIVE}
-                  className={`p-4 rounded-xl border text-left transition-all ${asset.state === LifecycleState.ACTIVE
+                  disabled={String(asset.state) !== String(LifecycleState.ACTIVE)}
+                  className={`p-4 rounded-xl border text-left transition-all ${String(asset.state) === String(LifecycleState.ACTIVE)
                     ? 'border-green-500/30 bg-green-500/10 hover:bg-green-500/20 cursor-pointer'
                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                     }`}
@@ -616,8 +616,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 </button>
 
                 <button
-                  disabled={asset.state !== LifecycleState.ACTIVE}
-                  className={`p-4 rounded-xl border text-left transition-all ${asset.state === LifecycleState.ACTIVE
+                  disabled={String(asset.state) !== String(LifecycleState.ACTIVE)}
+                  className={`p-4 rounded-xl border text-left transition-all ${String(asset.state) === String(LifecycleState.ACTIVE)
                     ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 cursor-pointer'
                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                     }`}
@@ -632,8 +632,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 </button>
 
                 <button
-                  disabled={asset.state !== LifecycleState.ACTIVE}
-                  className={`p-4 rounded-xl border text-left transition-all ${asset.state === LifecycleState.ACTIVE
+                  disabled={String(asset.state) !== String(LifecycleState.ACTIVE)}
+                  className={`p-4 rounded-xl border text-left transition-all ${String(asset.state) === String(LifecycleState.ACTIVE)
                     ? 'border-red-500/30 bg-red-500/10 hover:bg-red-500/20 cursor-pointer'
                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                     }`}
@@ -648,8 +648,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 </button>
 
                 <button
-                  disabled={asset.state !== LifecycleState.ACTIVE}
-                  className={`p-4 rounded-xl border text-left transition-all ${asset.state === LifecycleState.ACTIVE
+                  disabled={String(asset.state) !== String(LifecycleState.ACTIVE)}
+                  className={`p-4 rounded-xl border text-left transition-all ${String(asset.state) === String(LifecycleState.ACTIVE)
                     ? 'border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 cursor-pointer'
                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                     }`}
@@ -664,8 +664,8 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 </button>
 
                 <button
-                  disabled={asset.state !== LifecycleState.ACTIVE}
-                  className={`p-4 rounded-xl border text-left transition-all ${asset.state === LifecycleState.ACTIVE
+                  disabled={String(asset.state) !== String(LifecycleState.ACTIVE)}
+                  className={`p-4 rounded-xl border text-left transition-all ${String(asset.state) === String(LifecycleState.ACTIVE)
                     ? 'border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 cursor-pointer'
                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                     }`}
@@ -680,7 +680,7 @@ export function AssetDetail({ asset: initialAsset, onBack }: AssetDetailProps) {
                 </button>
               </div>
 
-              {asset.state !== LifecycleState.ACTIVE && (
+              {String(asset.state) !== String(LifecycleState.ACTIVE) && (
                 <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-yellow-400" />
                   <p className="text-sm text-yellow-400">

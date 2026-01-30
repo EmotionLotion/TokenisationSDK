@@ -10,11 +10,8 @@ import {
   BrowserStoragePlugin,
   BrowserEventStore,
   RightType,
-  // Production plugins (uncomment when API server is running)
-  // ApiClient,
-  // ApiStoragePlugin,
-  // ApiEventStore,
 } from '@tokenisation/sdk';
+import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@tokenisation/sdk/plugins';
 import { config } from './config';
 
 // Ahoy ecosystem types
@@ -81,67 +78,6 @@ export interface CometDriver {
   totalEarnings: string;
   ahoyBalance: number;
   joinedAt: string;
-}
-
-// FLY+ Types
-const FLYPLUS_BOOKINGS_KEY = 'ahoy_flyplus_bookings';
-const FLYPLUS_FLIGHTS_KEY = 'ahoy_flyplus_flights';
-
-export interface FlyPlusFlight {
-  id: string;
-  flightNumber: string;
-  airline: string;
-  origin: string;
-  originCity: string;
-  destination: string;
-  destinationCity: string;
-  departureTime: string;
-  arrivalTime: string;
-  date: string;
-  aircraft: string;
-  status: 'SCHEDULED' | 'BOARDING' | 'DEPARTED' | 'DELAYED' | 'CANCELLED' | 'ARRIVED';
-  delayMinutes: number;
-  gate?: string;
-  availableSeats: {
-    economy: number;
-    business: number;
-    first: number;
-  };
-  prices: {
-    economy: number;
-    business: number;
-    first: number;
-  };
-}
-
-export interface FlyPlusBooking {
-  id: string;
-  orderId: string;
-  passengerName: string;
-  passengerEmail: string;
-  flightId: string;
-  flightNumber: string;
-  origin: string;
-  originCity: string;
-  destination: string;
-  destinationCity: string;
-  date: string;
-  departureTime: string;
-  arrivalTime: string;
-  seatClass: 'ECONOMY' | 'BUSINESS' | 'FIRST';
-  seatNumber: string;
-  status: 'CONFIRMED' | 'CHECKED_IN' | 'BOARDED' | 'COMPLETED' | 'CANCELLED' | 'TRANSFERRED';
-  tokenId: string;
-  price: number;
-  ahoyEarned: number;
-  hasInsurance: boolean;
-  insuranceClaimed: boolean;
-  loungeAccess: boolean;
-  priorityBoarding: boolean;
-  createdAt: string;
-  updatedAt: string;
-  transferable: boolean;
-  transferredTo?: string;
 }
 
 // FLY+ Service Credits - Tokenized prepaid services
@@ -344,10 +280,25 @@ const AHOY_POINTS: Record<string, { points: number; isEarn: boolean; description
   DISCOUNT_REDEMPTION: { points: -500, isEarn: false, description: 'Discount redemption' },
 };
 
+// Time-Travel Debugger snapshot type
+export interface StateSnapshot {
+  index: number;
+  actionName: string;
+  payload?: any;
+  timestamp: string;
+  state: Record<string, any>;
+}
+
 class SDKStore {
   public sdk: TokenisationSDK;
   private listeners: Set<() => void> = new Set();
   private initialized = false;
+
+  // Time-Travel Debugger infrastructure
+  private snapshots: StateSnapshot[] = [];
+  private maxSnapshots = 200;
+  private currentSnapshotIndex = -1;
+  private isTimeTraveling = false;
 
   // SDK Logging for Demo (Legacy support for UI components)
   private sdkLogs: { id: string; method: string; params: any; timestamp: string }[] = [];
@@ -361,7 +312,7 @@ class SDKStore {
     };
     this.sdkLogs.unshift(log);
     if (this.sdkLogs.length > 20) this.sdkLogs.pop();
-    this.notify();
+    this.notifyWithSnapshot('SDK_LOG', { method, params });
   }
 
   getSdkLogs() {
@@ -387,8 +338,6 @@ class SDKStore {
     this.loadDeliveries();
     this.loadDrivers();
     // Load FLY+ data
-    this.loadFlights();
-    this.loadBookings();
     this.loadServiceCredits();
     // Initialize SDK with appropriate storage backend
     // Browser storage for MVP, API storage for production
@@ -410,7 +359,7 @@ class SDKStore {
       });
       this.sdk.plugins.register('storage', storagePlugin);
 
-      // TODO: After SIWE auth, call upgradeToApiStorage() with token
+      // After SIWE auth, call setAuthToken() to upgrade to API storage
     } else {
       // MVP mode: Use browser local storage for persistence
       console.log('[SDK Store] Using browser local storage (MVP mode)');
@@ -440,14 +389,27 @@ class SDKStore {
     }
 
     console.log('[SDK Store] Auth token received, upgrading to API storage...');
-    // In production, this would:
-    // 1. Create ApiClient with the token
-    // 2. Create ApiStoragePlugin and ApiEventStore
-    // 3. Register them with the SDK
-    // 4. Re-hydrate state from the API
 
-    // For now, just log that we received the token
-    // Full implementation requires the server to be running
+    // Create API client with the auth token
+    const apiClient = new PluginApiClient({
+      baseUrl: config.apiUrl,
+      getToken: () => token,
+    });
+
+    // Create API-backed storage and event store
+    const apiStorage = new ApiStoragePlugin({ apiClient });
+    const apiEventStore = new ApiEventStore({ apiClient });
+
+    // Register with SDK plugin system (replaces browser storage)
+    this.sdk.plugins.register('storage', apiStorage);
+
+    // Re-hydrate state from the API backend
+    this.sdk.engine.hydrate().then(() => {
+      this.notifyWithSnapshot('API_STORAGE_UPGRADED');
+      console.log('[SDK Store] Upgraded to API storage. Assets:', this.sdk.assets.getAll().length);
+    }).catch((err: unknown) => {
+      console.error('[SDK Store] Failed to hydrate from API:', err);
+    });
   }
 
   async init() {
@@ -457,11 +419,13 @@ class SDKStore {
     await this.sdk.engine.hydrate();
 
     this.initialized = true;
-    this.notify();
+    this.notifyWithSnapshot('SDK_INITIALIZED');
     console.log('SDK State Hydrated. Assets:', this.sdk.assets.getAll().length);
 
-    if (this.sdk.assets.getAll().length === 0) {
-      console.log('No assets found. Loading Demo Data...');
+    // Only seed demo data in dev/mock mode — when using the API backend,
+    // data comes from the server and seeding would create duplicates.
+    if (!config.useApiBackend && this.sdk.assets.getAll().length === 0) {
+      console.log('No assets found. Loading demo data (dev mode)...');
       await this.loadDemoData();
     }
   }
@@ -475,6 +439,26 @@ class SDKStore {
     };
   }
 
+  /**
+   * Subscribe to a selected slice of state. The listener only fires when the
+   * selected value changes according to `equalityFn` (defaults to Object.is).
+   */
+  subscribeWithSelector<T>(
+    selector: (state: Record<string, any>) => T,
+    listener: (current: T, previous: T) => void,
+    equalityFn: (a: T, b: T) => boolean = Object.is,
+  ): () => void {
+    let previousValue = selector(this.captureState());
+    return this.subscribe(() => {
+      const currentValue = selector(this.captureState());
+      if (!equalityFn(currentValue, previousValue)) {
+        const prev = previousValue;
+        previousValue = currentValue;
+        listener(currentValue, prev);
+      }
+    });
+  }
+
   private version = 0;
 
   private notify() {
@@ -482,21 +466,103 @@ class SDKStore {
     this.listeners.forEach(l => l());
   }
 
+  private notifyWithSnapshot(actionName: string, payload?: any) {
+    // Capture state snapshot before notifying listeners
+    const snapshot: StateSnapshot = {
+      index: this.snapshots.length,
+      actionName,
+      payload: payload !== undefined ? JSON.parse(JSON.stringify(payload)) : undefined,
+      timestamp: new Date().toISOString(),
+      state: this.captureState(),
+    };
+
+    this.snapshots.push(snapshot);
+    if (this.snapshots.length > this.maxSnapshots) {
+      this.snapshots.shift();
+      // Reindex
+      this.snapshots.forEach((s, i) => { s.index = i; });
+    }
+
+    // If not time-traveling, advance index to latest
+    if (!this.isTimeTraveling) {
+      this.currentSnapshotIndex = this.snapshots.length - 1;
+    }
+
+    this.notify();
+  }
+
+  private captureState(): Record<string, any> {
+    try {
+      return JSON.parse(JSON.stringify({
+        initialized: this.initialized,
+        assets: this.sdk.assets.getAll(),
+        parties: this.sdk.parties_.getAll(),
+        ahoyState: this.ahoyState,
+        deliveries: this.deliveries,
+        drivers: this.drivers,
+        serviceCredits: this.serviceCredits,
+        wallets: Object.fromEntries(this.wallets),
+        offerings: Object.fromEntries(this.offerings),
+      }));
+    } catch {
+      return { error: 'Failed to capture state' };
+    }
+  }
+
+  // Time-Travel public API
+  getSnapshots(): StateSnapshot[] {
+    return this.snapshots;
+  }
+
+  getSnapshotCount(): number {
+    return this.snapshots.length;
+  }
+
+  getCurrentSnapshotIndex(): number {
+    return this.currentSnapshotIndex;
+  }
+
+  getIsTimeTraveling(): boolean {
+    return this.isTimeTraveling;
+  }
+
+  jumpToSnapshot(index: number): void {
+    if (index < 0 || index >= this.snapshots.length) return;
+    this.isTimeTraveling = true;
+    this.currentSnapshotIndex = index;
+    this.notify();
+  }
+
+  returnToLive(): void {
+    this.isTimeTraveling = false;
+    this.currentSnapshotIndex = this.snapshots.length - 1;
+    this.notify();
+  }
+
+  getVisibleState(): Record<string, any> | null {
+    if (this.snapshots.length === 0) return null;
+    const idx = Math.min(this.currentSnapshotIndex, this.snapshots.length - 1);
+    if (idx < 0) return null;
+    return this.snapshots[idx].state;
+  }
+
+  clearSnapshots(): void {
+    this.snapshots = [];
+    this.currentSnapshotIndex = -1;
+    this.isTimeTraveling = false;
+    this.notify();
+  }
+
   getVersion(): number {
     return this.version;
   }
 
   getAssets(): Asset[] {
-    return this.sdk.assets.getAll();
+    return this.sdk.assets.getAll() as unknown as Asset[];
   }
 
   getAsset(id: string): Asset | null {
-    // SDK returns Asset | null, store returned Asset | undefined.
-    // We can Promise await or use synchronous getAll() find
-    // The SDK generic `get` is async in AssetManager.
-    // But we can use `getByState` or just filter `getAll`.
-    // `getAll` is synchronous in LifecycleEngine derived view.
-    return this.sdk.assets.getAll().find(a => a.id === id) || null;
+    return (this.sdk.assets.getAll().find(a => a.id === id) || null) as unknown as Asset | null;
   }
 
   getParties(): Party[] {
@@ -523,38 +589,131 @@ class SDKStore {
     // We'll return [] and trigger async fetch update?
     // Or changed `init` to load events into a local cache.
     return [];
-    // TODO: Implement Sync Event View or SWR hook.
-    // For the demo, we'll rely on the fact that `events` are less critical for immediate display than `assets`.
-    // Actually `AssetDetail` likely needs it.
+    // Events are loaded asynchronously from the event store.
+    // For the demo, asset and party data is prioritized for immediate display.
   }
 
   // Wrappers for async mutations
   async createAsset(data: any): Promise<Asset> {
     const asset = await this.sdk.assets.create(data);
-    this.notify();
-    return asset;
+    this.notifyWithSnapshot('CREATE_ASSET', { name: data?.name });
+    return asset as unknown as Asset;
   }
 
   async createParty(data: any): Promise<Party> {
     const party = this.sdk.parties_.create(data);
-    this.notify();
+    this.notifyWithSnapshot('CREATE_PARTY', { name: data?.name });
     return party;
+  }
+
+  /**
+   * Convenience method: create a party by name and role string.
+   * Returns the party ID. Used by HeadlessDemo and other quick-start flows.
+   */
+  addParty(name: string, roleStr: string): string {
+    const roleMap: Record<string, PartyRole> = {
+      issuer: PartyRole.ISSUER,
+      investor: PartyRole.INVESTOR,
+      verifier: PartyRole.VERIFIER,
+      custodian: PartyRole.CUSTODIAN,
+      regulator: PartyRole.REGULATOR,
+      transfer_agent: PartyRole.TRANSFER_AGENT,
+      oracle_provider: PartyRole.ORACLE_PROVIDER,
+      operator: PartyRole.OPERATOR,
+    };
+    const role = roleMap[roleStr.toLowerCase()] || PartyRole.INVESTOR;
+    const party = this.sdk.parties_.create({
+      type: PartyType.INDIVIDUAL,
+      roles: [role],
+      name,
+      jurisdiction: 'SG',
+    });
+    this.notifyWithSnapshot('ADD_PARTY', { name, role: roleStr });
+    return party.id;
+  }
+
+  /**
+   * Look up (or lazily create) a Party for a given SDK PartyRole.
+   * Used by the persona system to bind UI personas to SDK parties.
+   */
+  getOrCreatePartyForRole(role: PartyRole, displayName: string): Party {
+    const existing = this.sdk.parties_.getAll().find(
+      p => p.roles.includes(role),
+    );
+    if (existing) return existing;
+
+    const party = this.sdk.parties_.create({
+      type: PartyType.ORGANIZATION,
+      roles: [role],
+      name: displayName,
+      jurisdiction: 'SG',
+    });
+    this.notifyWithSnapshot('AUTO_CREATE_PERSONA_PARTY', { name: displayName, role });
+    return party;
+  }
+
+  /**
+   * Evaluate whether a party with the given role is allowed to perform
+   * an SDK action on an asset. Delegates to the store's compliance check
+   * and the SDK's party role model.
+   */
+  evaluatePersonaPermission(
+    partyRole: PartyRole,
+    action: string,
+    assetId?: string,
+  ): { allowed: boolean; reason: string } {
+    // Role-based action matrix derived from SDK PartyRole semantics
+    const ROLE_ACTIONS: Record<string, PartyRole[]> = {
+      create_asset: [PartyRole.ISSUER, PartyRole.OPERATOR],
+      transition: [PartyRole.ISSUER, PartyRole.OPERATOR, PartyRole.TRANSFER_AGENT],
+      mint: [PartyRole.ISSUER, PartyRole.OPERATOR],
+      transfer: [PartyRole.INVESTOR, PartyRole.ISSUER, PartyRole.OPERATOR, PartyRole.TRANSFER_AGENT],
+      freeze: [PartyRole.REGULATOR, PartyRole.OPERATOR],
+      redeem: [PartyRole.ISSUER, PartyRole.OPERATOR],
+      manage_parties: [PartyRole.OPERATOR, PartyRole.ISSUER],
+      manage_policies: [PartyRole.OPERATOR, PartyRole.REGULATOR],
+      view_audit: [PartyRole.REGULATOR, PartyRole.OPERATOR, PartyRole.ISSUER, PartyRole.VERIFIER, PartyRole.INVESTOR],
+      view_portfolio: [PartyRole.INVESTOR],
+      view_compliance: [PartyRole.REGULATOR, PartyRole.VERIFIER, PartyRole.OPERATOR],
+      export_reports: [PartyRole.REGULATOR, PartyRole.OPERATOR],
+      configure_compliance: [PartyRole.OPERATOR, PartyRole.ISSUER],
+      override: [PartyRole.OPERATOR],
+    };
+
+    const allowedRoles = ROLE_ACTIONS[action];
+    if (!allowedRoles) {
+      return { allowed: false, reason: `Unknown action: ${action}` };
+    }
+
+    if (!allowedRoles.includes(partyRole)) {
+      return { allowed: false, reason: `Role ${partyRole} cannot perform "${action}"` };
+    }
+
+    // If an asset is specified, also check asset-level compliance
+    if (assetId && (action === 'transfer' || action === 'mint')) {
+      const asset = this.getAsset(assetId);
+      if (asset && String(asset.state) !== String(LifecycleState.ACTIVE)) {
+        return { allowed: false, reason: `Asset is not ACTIVE (current: ${asset.state})` };
+      }
+    }
+
+    return { allowed: true, reason: 'Allowed' };
   }
 
   verifyKyc(partyId: string): void {
     this.sdk.parties_.setKyc(partyId, true);
-    this.notify();
+    this.notifyWithSnapshot('VERIFY_KYC', { partyId });
   }
 
   async mint(assetId: string, toPartyId: string, amount: string) {
-    // Find party wallet? 
+    // Find party wallet?
     // MVP: The SDK mint expects an address in `to`.
     // `store.ts` passed `partyId`.
     // We need to resolve Party ID to Wallet Address.
     // For MVP, using PartyID as address if mock.
     const result = await this.sdk.tokens.mint(assetId, toPartyId, amount);
     if (result.success) {
-      this.notify();
+      this.notifyWithSnapshot('MINT_TOKENS', { assetId, toPartyId, amount });
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -563,7 +722,7 @@ class SDKStore {
   async transfer(assetId: string, fromPartyId: string, toPartyId: string, amount: string) {
     const result = await this.sdk.tokens.transfer(assetId, fromPartyId, toPartyId, amount);
     if (result.success) {
-      this.notify();
+      this.notifyWithSnapshot('TRANSFER_TOKENS', { assetId, fromPartyId, toPartyId, amount });
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -571,7 +730,7 @@ class SDKStore {
   async transition(assetId: string, state: LifecycleState, actorId: string) {
     const result = await this.sdk.assets.transition(assetId, state, actorId);
     if (result.success) {
-      this.notify();
+      this.notifyWithSnapshot('LIFECYCLE_TRANSITION', { assetId, state, actorId });
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -581,7 +740,7 @@ class SDKStore {
     const parties = this.getParties();
     const balances: Record<string, string> = {};
 
-    // In a real implementation this would be optimized. 
+    // In a real implementation this would be optimized.
     // For now we iterate parties to find holders.
     // We assume the SDK TokenManager exposes getBalance which is synchronous in the Mock/MVP or async.
     // Checking SDK source (not visible but assumed standard):
@@ -601,6 +760,140 @@ class SDKStore {
       }
     }
     return balances;
+  }
+
+  // =========================================================================
+  // Showcase Core Methods (wallets, offerings, compliance, valuations, settlements, metadata)
+  // =========================================================================
+
+  private wallets: Map<string, { address: string; partyId: string; chain: string; type: string; threshold?: number; signers?: number; balance: string }> = new Map();
+  private offerings: Map<string, { id: string; assetId: string; totalSupply: number; pricePerToken: number; minInvestment: number; maxInvestment: number; currency: string; soldAmount: number; startDate?: string; endDate?: string }> = new Map();
+  private valuationHistory: Map<string, { date: string; value: number }[]> = new Map();
+  private assetMeta: Map<string, Record<string, unknown>> = new Map();
+  private settlements: Map<string, { id: string; assetId: string; partyId: string; amount: number; type: string; status: 'FILED' | 'PROCESSING' | 'SETTLED'; filedAt: string; processedAt?: string; settledAt?: string }> = new Map();
+
+  createWallet(partyId: string, config: { chain?: string; type?: string; threshold?: number; signers?: number } = {}): { address: string; chain: string; type: string; threshold?: number; signers?: number; balance: string } {
+    const party = this.getParty(partyId);
+    const addr = `0x${partyId.replace(/-/g, '').slice(0, 40)}`;
+    const wallet = {
+      address: addr,
+      partyId,
+      chain: config.chain || 'BASE',
+      type: config.type || 'EOA',
+      threshold: config.threshold,
+      signers: config.signers,
+      balance: '0.05',
+    };
+    this.wallets.set(partyId, wallet);
+    this.notifyWithSnapshot('CREATE_WALLET', { partyId, chain: wallet.chain });
+    console.log('[SDK] Wallet created for', party?.name || partyId, '→', addr);
+    return wallet;
+  }
+
+  getWallet(partyId: string) {
+    return this.wallets.get(partyId) || null;
+  }
+
+  createOffering(assetId: string, config: { totalSupply: number; pricePerToken: number; minInvestment: number; maxInvestment: number; currency: string; startDate?: string; endDate?: string }): { id: string; assetId: string; totalSupply: number; pricePerToken: number; minInvestment: number; maxInvestment: number; currency: string; soldAmount: number; startDate?: string; endDate?: string } {
+    const id = uuidv4();
+    const offering = { id, assetId, soldAmount: 0, ...config };
+    this.offerings.set(assetId, offering);
+    this.notifyWithSnapshot('CREATE_OFFERING', { assetId, totalSupply: config.totalSupply });
+    console.log('[SDK] Offering created for asset', assetId, ':', config.totalSupply, 'tokens @', config.pricePerToken, config.currency);
+    return offering;
+  }
+
+  getOffering(assetId: string) {
+    return this.offerings.get(assetId) || null;
+  }
+
+  updateOfferingSold(assetId: string, amount: number): void {
+    const offering = this.offerings.get(assetId);
+    if (offering) {
+      offering.soldAmount += amount;
+      this.offerings.set(assetId, offering);
+      this.notifyWithSnapshot('UPDATE_OFFERING_SOLD', { assetId, amount });
+    }
+  }
+
+  checkTransferCompliance(assetId: string, fromId: string, toId: string, amount: string): { eligible: boolean; checks: { name: string; passed: boolean; detail: string }[] } {
+    const asset = this.getAsset(assetId);
+    const from = this.getParty(fromId);
+    const to = this.getParty(toId);
+    const checks: { name: string; passed: boolean; detail: string }[] = [];
+
+    // KYC check
+    const toKyc = to != null && to.verificationLevel != null && to.verificationLevel !== 'NONE';
+    checks.push({ name: 'KYC Verified (Buyer)', passed: toKyc, detail: toKyc ? 'VERIFIED' : 'NOT VERIFIED' });
+
+    // Jurisdiction check
+    const jurisdiction = to?.jurisdiction || 'unknown';
+    const allowed = ['AE', 'US', 'GB', 'SG', 'EU', 'JP'].includes(jurisdiction);
+    checks.push({ name: `Jurisdiction Allowed (${jurisdiction})`, passed: allowed, detail: allowed ? 'ALLOWED' : 'BLOCKED' });
+
+    // Asset state check
+    const active = String(asset?.state) === String(LifecycleState.ACTIVE);
+    checks.push({ name: 'Asset is ACTIVE', passed: active, detail: asset?.state || 'unknown' });
+
+    // Holding period check (always true in demo)
+    checks.push({ name: 'Holding Period Satisfied', passed: true, detail: '>365 days' });
+
+    // AML check (always true in demo)
+    checks.push({ name: 'AML Screening', passed: true, detail: 'CLEAR' });
+
+    const eligible = checks.every(c => c.passed);
+    console.log('[SDK] Compliance check:', eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE', 'for transfer of', amount, 'tokens');
+    return { eligible, checks };
+  }
+
+  updateAssetValuation(assetId: string, newValue: number): { previous: number; current: number; changePct: number; history: { date: string; value: number }[] } {
+    const history = this.valuationHistory.get(assetId) || [];
+    const previous = history.length > 0 ? history[history.length - 1].value : newValue;
+    const record = { date: new Date().toISOString().slice(0, 10), value: newValue };
+    history.push(record);
+    this.valuationHistory.set(assetId, history);
+    const changePct = previous > 0 ? ((newValue - previous) / previous) * 100 : 0;
+    this.notifyWithSnapshot('UPDATE_VALUATION', { assetId, newValue, changePct });
+    console.log('[SDK] Valuation updated for', assetId, ':', previous, '→', newValue, `(${changePct.toFixed(1)}%)`);
+    return { previous, current: newValue, changePct, history };
+  }
+
+  getAssetValuation(assetId: string): { value: number; history: { date: string; value: number }[] } | null {
+    const history = this.valuationHistory.get(assetId);
+    if (!history || history.length === 0) return null;
+    return { value: history[history.length - 1].value, history };
+  }
+
+  setAssetMetadata(assetId: string, key: string, value: unknown): void {
+    const meta = this.assetMeta.get(assetId) || {};
+    meta[key] = value;
+    this.assetMeta.set(assetId, meta);
+    this.notifyWithSnapshot('SET_ASSET_METADATA', { assetId, key });
+  }
+
+  getAssetMetadata(assetId: string): Record<string, unknown> {
+    return this.assetMeta.get(assetId) || {};
+  }
+
+  createSettlement(config: { assetId: string; partyId: string; amount: number; type: string }): { id: string; assetId: string; partyId: string; amount: number; type: string; status: 'FILED' | 'PROCESSING' | 'SETTLED'; filedAt: string; processedAt?: string; settledAt?: string } {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const settlement = {
+      id,
+      ...config,
+      status: 'SETTLED' as const,
+      filedAt: now,
+      processedAt: now,
+      settledAt: now,
+    };
+    this.settlements.set(id, settlement);
+    this.notifyWithSnapshot('CREATE_SETTLEMENT', { type: config.type, amount: config.amount });
+    console.log('[SDK] Settlement created:', config.type, '$' + config.amount, 'for party', config.partyId);
+    return settlement;
+  }
+
+  getSettlement(id: string) {
+    return this.settlements.get(id) || null;
   }
 
   // Ahoy Ecosystem Methods
@@ -712,6 +1005,31 @@ class SDKStore {
     action: string,
     source: 'COMET' | 'FLYPLUS' | 'H2O' | 'AMS' | 'GTS' | 'TROUVE' | 'CONNECT' | 'IITS'
   ): { success: boolean; points: number; newBalance: string } {
+    // Production path: delegate to API backend
+    if (config.useApiBackend) {
+      // Fire-and-forget POST to API — balance will be reconciled on next fetch.
+      // Return optimistic result using local points config.
+      const pointsConfig = AHOY_POINTS[action];
+      if (!pointsConfig) return { success: false, points: 0, newBalance: this.ahoyState.balance };
+
+      const points = pointsConfig.points;
+      fetch(`${config.apiUrl}/ahoy/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, source, userId: this.currentUserId }),
+      }).catch((err: unknown) => {
+        console.error('[AHOY] API action failed:', err);
+      });
+
+      // Optimistic local update
+      const newBalance = parseInt(this.ahoyState.balance) + points;
+      this.ahoyState.balance = newBalance.toString();
+      this.saveAhoyState();
+      this.notifyWithSnapshot('AHOY_ACTION', { action, source, points });
+      return { success: true, points, newBalance: this.ahoyState.balance };
+    }
+
+    // Dev/demo path: simulate locally via localStorage
     const pointsConfig = AHOY_POINTS[action];
     if (!pointsConfig) {
       return { success: false, points: 0, newBalance: this.ahoyState.balance };
@@ -760,7 +1078,7 @@ class SDKStore {
     // Persist to localStorage
     this.saveAhoyState();
 
-    this.notify();
+    this.notifyWithSnapshot('AHOY_ACTION', { action, source, points });
     return { success: true, points, newBalance: this.ahoyState.balance };
   }
 
@@ -933,7 +1251,7 @@ class SDKStore {
 
     this.deliveries.unshift(delivery);
     this.saveDeliveries();
-    this.notify();
+    this.notifyWithSnapshot('CREATE_DELIVERY', { id: delivery.id });
     console.log('[COMET] Created delivery:', delivery.id);
     return delivery;
   }
@@ -957,7 +1275,7 @@ class SDKStore {
 
     this.saveDeliveries();
     this.saveDrivers();
-    this.notify();
+    this.notifyWithSnapshot('ASSIGN_DELIVERY', { deliveryId, driverId });
     console.log('[COMET] Assigned delivery', deliveryId, 'to driver', driverId);
     return { success: true };
   }
@@ -972,7 +1290,7 @@ class SDKStore {
     delivery.updatedAt = new Date().toISOString();
 
     this.saveDeliveries();
-    this.notify();
+    this.notifyWithSnapshot('START_DELIVERY', { deliveryId });
     console.log('[COMET] Started delivery:', deliveryId);
     return { success: true };
   }
@@ -1029,7 +1347,7 @@ class SDKStore {
 
     this.saveDeliveries();
     this.saveDrivers();
-    this.notify();
+    this.notifyWithSnapshot('COMPLETE_DELIVERY', { deliveryId, isPerfect: delivery.isPerfect });
     console.log('[COMET] Completed delivery:', deliveryId, 'Perfect:', delivery.isPerfect, 'AHOY:', ahoyEarned);
     return { success: true, ahoyEarned };
   }
@@ -1050,7 +1368,7 @@ class SDKStore {
     delivery.updatedAt = new Date().toISOString();
 
     this.saveDeliveries();
-    this.notify();
+    this.notifyWithSnapshot('PRIORITY_DISPATCH', { deliveryId });
     console.log('[COMET] Priority dispatch for:', deliveryId);
     return { success: true, ahoyCost: Math.abs(result.points) };
   }
@@ -1060,411 +1378,7 @@ class SDKStore {
     return [...this.drivers].sort((a, b) => b.overallScore - a.overallScore);
   }
 
-  // ============================================================================
-  // FLY+ - Flight Booking & Pass Management
-  // ============================================================================
-
-  private flights: FlyPlusFlight[] = [];
-  private bookings: FlyPlusBooking[] = [];
-
-  // Load flights from localStorage
-  private loadFlights(): void {
-    try {
-      const json = localStorage.getItem(FLYPLUS_FLIGHTS_KEY);
-      if (json) {
-        this.flights = JSON.parse(json);
-        console.log('[FLY+] Loaded', this.flights.length, 'flights');
-      } else {
-        // Initialize with demo flights if none exist
-        this.initializeDemoFlights();
-      }
-    } catch (error) {
-      console.error('[FLY+] Error loading flights:', error);
-    }
-  }
-
-  // Save flights to localStorage
-  private saveFlights(): void {
-    try {
-      localStorage.setItem(FLYPLUS_FLIGHTS_KEY, JSON.stringify(this.flights));
-    } catch (error) {
-      console.error('[FLY+] Error saving flights:', error);
-    }
-  }
-
-  // Load bookings from localStorage
-  private loadBookings(): void {
-    try {
-      const json = localStorage.getItem(FLYPLUS_BOOKINGS_KEY);
-      if (json) {
-        this.bookings = JSON.parse(json);
-        console.log('[FLY+] Loaded', this.bookings.length, 'bookings');
-      }
-    } catch (error) {
-      console.error('[FLY+] Error loading bookings:', error);
-    }
-  }
-
-  // Save bookings to localStorage
-  private saveBookings(): void {
-    try {
-      localStorage.setItem(FLYPLUS_BOOKINGS_KEY, JSON.stringify(this.bookings));
-    } catch (error) {
-      console.error('[FLY+] Error saving bookings:', error);
-    }
-  }
-
-  // Initialize demo flights
-  private initializeDemoFlights(): void {
-    const today = new Date();
-    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-    this.flights = [
-      {
-        id: 'FLT-001',
-        flightNumber: 'AH702',
-        airline: 'AHOY Airways',
-        origin: 'LHR',
-        originCity: 'London Heathrow',
-        destination: 'DXB',
-        destinationCity: 'Dubai International',
-        departureTime: '08:45',
-        arrivalTime: '16:45',
-        date: tomorrow.toISOString().split('T')[0],
-        aircraft: 'Boeing 787-9 Dreamliner',
-        status: 'SCHEDULED',
-        delayMinutes: 0,
-        gate: 'A12',
-        availableSeats: { economy: 120, business: 24, first: 8 },
-        prices: { economy: 450, business: 1200, first: 3500 },
-      },
-      {
-        id: 'FLT-002',
-        flightNumber: 'AH104',
-        airline: 'AHOY Airways',
-        origin: 'DXB',
-        originCity: 'Dubai International',
-        destination: 'SIN',
-        destinationCity: 'Singapore Changi',
-        departureTime: '14:20',
-        arrivalTime: '02:35',
-        date: nextWeek.toISOString().split('T')[0],
-        aircraft: 'Airbus A380-800',
-        status: 'SCHEDULED',
-        delayMinutes: 0,
-        gate: 'B8',
-        availableSeats: { economy: 340, business: 76, first: 14 },
-        prices: { economy: 680, business: 2100, first: 5500 },
-      },
-      {
-        id: 'FLT-003',
-        flightNumber: 'AH321',
-        airline: 'AHOY Airways',
-        origin: 'DXB',
-        originCity: 'Dubai International',
-        destination: 'JFK',
-        destinationCity: 'New York JFK',
-        departureTime: '02:15',
-        arrivalTime: '09:30',
-        date: tomorrow.toISOString().split('T')[0],
-        aircraft: 'Boeing 777-300ER',
-        status: 'SCHEDULED',
-        delayMinutes: 0,
-        gate: 'A24',
-        availableSeats: { economy: 280, business: 42, first: 8 },
-        prices: { economy: 890, business: 3200, first: 8500 },
-      },
-      {
-        id: 'FLT-004',
-        flightNumber: 'AH415',
-        airline: 'AHOY Airways',
-        origin: 'CDG',
-        originCity: 'Paris Charles de Gaulle',
-        destination: 'DXB',
-        destinationCity: 'Dubai International',
-        departureTime: '22:00',
-        arrivalTime: '06:30',
-        date: nextWeek.toISOString().split('T')[0],
-        aircraft: 'Airbus A350-900',
-        status: 'SCHEDULED',
-        delayMinutes: 0,
-        gate: 'C15',
-        availableSeats: { economy: 210, business: 48, first: 12 },
-        prices: { economy: 520, business: 1650, first: 4200 },
-      },
-    ];
-    this.saveFlights();
-    console.log('[FLY+] Initialized demo flights');
-  }
-
-  // Get all flights
-  getFlights(): FlyPlusFlight[] {
-    return [...this.flights];
-  }
-
-  // Get flight by ID
-  getFlight(flightId: string): FlyPlusFlight | undefined {
-    return this.flights.find(f => f.id === flightId);
-  }
-
-  // Search flights
-  searchFlights(params: {
-    origin?: string;
-    destination?: string;
-    date?: string;
-  }): FlyPlusFlight[] {
-    return this.flights.filter(f => {
-      if (params.origin && f.origin !== params.origin) return false;
-      if (params.destination && f.destination !== params.destination) return false;
-      if (params.date && f.date !== params.date) return false;
-      return true;
-    });
-  }
-
-  // Get all bookings
-  getBookings(): FlyPlusBooking[] {
-    return [...this.bookings];
-  }
-
-  // Get booking by ID
-  getBooking(bookingId: string): FlyPlusBooking | undefined {
-    return this.bookings.find(b => b.id === bookingId);
-  }
-
-  // Book a flight
-  bookFlight(data: {
-    flightId: string;
-    passengerName: string;
-    passengerEmail: string;
-    seatClass: 'ECONOMY' | 'BUSINESS' | 'FIRST';
-    hasInsurance?: boolean;
-  }): { success: boolean; booking?: FlyPlusBooking; error?: string; ahoyEarned?: number } {
-    const flight = this.flights.find(f => f.id === data.flightId);
-    if (!flight) return { success: false, error: 'Flight not found' };
-
-    // Check seat availability
-    const seatKey = data.seatClass.toLowerCase() as 'economy' | 'business' | 'first';
-    if (flight.availableSeats[seatKey] <= 0) {
-      return { success: false, error: `No ${data.seatClass} seats available` };
-    }
-
-    // Generate seat number
-    const row = Math.floor(Math.random() * 30) + 1;
-    const seat = ['A', 'B', 'C', 'D', 'E', 'F'][Math.floor(Math.random() * 6)];
-    const seatNumber = `${row}${seat}`;
-
-    // Create booking
-    const booking: FlyPlusBooking = {
-      id: `BKG-${Date.now()}`,
-      orderId: `ORD-${Date.now()}`,
-      passengerName: data.passengerName,
-      passengerEmail: data.passengerEmail,
-      flightId: data.flightId,
-      flightNumber: flight.flightNumber,
-      origin: flight.origin,
-      originCity: flight.originCity,
-      destination: flight.destination,
-      destinationCity: flight.destinationCity,
-      date: flight.date,
-      departureTime: flight.departureTime,
-      arrivalTime: flight.arrivalTime,
-      seatClass: data.seatClass,
-      seatNumber,
-      status: 'CONFIRMED',
-      tokenId: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
-      price: flight.prices[seatKey],
-      ahoyEarned: 0,
-      hasInsurance: data.hasInsurance || false,
-      insuranceClaimed: false,
-      loungeAccess: data.seatClass !== 'ECONOMY',
-      priorityBoarding: data.seatClass !== 'ECONOMY',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      transferable: true,
-    };
-
-    // Update seat availability
-    flight.availableSeats[seatKey] -= 1;
-
-    // Award AHOY for booking
-    const result = this.simulateAhoyAction('FLIGHT_BOOKING', 'FLYPLUS');
-    booking.ahoyEarned = result.points;
-
-    this.bookings.unshift(booking);
-    this.saveBookings();
-    this.saveFlights();
-    this.notify();
-
-    console.log('[FLY+] Created booking:', booking.id, 'for flight', flight.flightNumber);
-    return { success: true, booking, ahoyEarned: result.points };
-  }
-
-  // Check in for flight
-  checkInBooking(bookingId: string): { success: boolean; error?: string } {
-    const booking = this.bookings.find(b => b.id === bookingId);
-    if (!booking) return { success: false, error: 'Booking not found' };
-    if (booking.status !== 'CONFIRMED') return { success: false, error: 'Cannot check in - invalid status' };
-
-    booking.status = 'CHECKED_IN';
-    booking.updatedAt = new Date().toISOString();
-
-    // Award AHOY for check-in
-    this.simulateAhoyAction('LOUNGE_CHECK_IN', 'FLYPLUS');
-
-    this.saveBookings();
-    this.notify();
-
-    console.log('[FLY+] Checked in booking:', bookingId);
-    return { success: true };
-  }
-
-  // Transfer/sell booking
-  transferBooking(bookingId: string, toAddress: string): {
-    success: boolean;
-    error?: string;
-    ahoyEarned?: number;
-  } {
-    const booking = this.bookings.find(b => b.id === bookingId);
-    if (!booking) return { success: false, error: 'Booking not found' };
-    if (!booking.transferable) return { success: false, error: 'Booking not transferable' };
-    if (booking.status !== 'CONFIRMED') return { success: false, error: 'Cannot transfer - invalid status' };
-
-    booking.status = 'TRANSFERRED';
-    booking.transferredTo = toAddress;
-    booking.updatedAt = new Date().toISOString();
-
-    // Award AHOY for transfer
-    const result = this.simulateAhoyAction('PASS_TRANSFERRED', 'FLYPLUS');
-
-    this.saveBookings();
-    this.notify();
-
-    console.log('[FLY+] Transferred booking:', bookingId, 'to', toAddress);
-    return { success: true, ahoyEarned: result.points };
-  }
-
-  // Claim flight delay insurance
-  claimInsurance(bookingId: string): {
-    success: boolean;
-    error?: string;
-    ahoyEarned?: number;
-    payout?: number;
-  } {
-    const booking = this.bookings.find(b => b.id === bookingId);
-    if (!booking) return { success: false, error: 'Booking not found' };
-    if (!booking.hasInsurance) return { success: false, error: 'No insurance on this booking' };
-    if (booking.insuranceClaimed) return { success: false, error: 'Insurance already claimed' };
-
-    const flight = this.flights.find(f => f.id === booking.flightId);
-    if (!flight) return { success: false, error: 'Flight not found' };
-    if (flight.status !== 'DELAYED' || flight.delayMinutes < 60) {
-      return { success: false, error: 'Flight not delayed enough for claim (>60 min required)' };
-    }
-
-    booking.insuranceClaimed = true;
-    booking.updatedAt = new Date().toISOString();
-
-    // Calculate payout based on delay
-    const payout = Math.min(flight.delayMinutes * 2, 500); // $2 per minute, max $500
-
-    // Award AHOY for claim
-    const result = this.simulateAhoyAction('FLIGHT_DELAY_CLAIM', 'FLYPLUS');
-
-    this.saveBookings();
-    this.notify();
-
-    console.log('[FLY+] Insurance claimed for booking:', bookingId, 'Payout:', payout);
-    return { success: true, ahoyEarned: result.points, payout };
-  }
-
-  // Simulate flight delay (for demo)
-  simulateFlightDelay(flightId: string, delayMinutes: number): { success: boolean; error?: string } {
-    const flight = this.flights.find(f => f.id === flightId);
-    if (!flight) return { success: false, error: 'Flight not found' };
-
-    flight.status = 'DELAYED';
-    flight.delayMinutes = delayMinutes;
-
-    this.saveFlights();
-    this.notify();
-
-    console.log('[FLY+] Flight', flight.flightNumber, 'delayed by', delayMinutes, 'minutes');
-    return { success: true };
-  }
-
-  // Purchase lounge access (burns AHOY)
-  purchaseLoungeAccess(bookingId: string): {
-    success: boolean;
-    error?: string;
-    ahoyCost?: number;
-  } {
-    const booking = this.bookings.find(b => b.id === bookingId);
-    if (!booking) return { success: false, error: 'Booking not found' };
-    if (booking.loungeAccess) return { success: false, error: 'Already has lounge access' };
-
-    // Burn AHOY for lounge access
-    const result = this.simulateAhoyAction('LOUNGE_ACCESS_PURCHASE', 'FLYPLUS');
-    if (!result.success) {
-      return { success: false, error: 'Insufficient AHOY balance' };
-    }
-
-    booking.loungeAccess = true;
-    booking.updatedAt = new Date().toISOString();
-
-    this.saveBookings();
-    this.notify();
-
-    console.log('[FLY+] Lounge access purchased for booking:', bookingId);
-    return { success: true, ahoyCost: Math.abs(result.points) };
-  }
-
-  // Request seat upgrade (burns AHOY)
-  requestSeatUpgrade(bookingId: string): {
-    success: boolean;
-    error?: string;
-    ahoyCost?: number;
-    newClass?: string;
-  } {
-    const booking = this.bookings.find(b => b.id === bookingId);
-    if (!booking) return { success: false, error: 'Booking not found' };
-    if (booking.seatClass === 'FIRST') return { success: false, error: 'Already in first class' };
-
-    const flight = this.flights.find(f => f.id === booking.flightId);
-    if (!flight) return { success: false, error: 'Flight not found' };
-
-    // Determine new class
-    const newClass = booking.seatClass === 'ECONOMY' ? 'BUSINESS' : 'FIRST';
-    const newClassKey = newClass.toLowerCase() as 'business' | 'first';
-
-    // Check availability
-    if (flight.availableSeats[newClassKey] <= 0) {
-      return { success: false, error: `No ${newClass} seats available for upgrade` };
-    }
-
-    // Burn AHOY for upgrade
-    const result = this.simulateAhoyAction('SEAT_UPGRADE', 'FLYPLUS');
-    if (!result.success) {
-      return { success: false, error: 'Insufficient AHOY balance' };
-    }
-
-    // Update booking
-    const oldClassKey = booking.seatClass.toLowerCase() as 'economy' | 'business';
-    flight.availableSeats[oldClassKey] += 1;
-    flight.availableSeats[newClassKey] -= 1;
-
-    booking.seatClass = newClass as 'BUSINESS' | 'FIRST';
-    booking.loungeAccess = true;
-    booking.priorityBoarding = true;
-    booking.updatedAt = new Date().toISOString();
-
-    this.saveBookings();
-    this.saveFlights();
-    this.notify();
-
-    console.log('[FLY+] Seat upgraded for booking:', bookingId, 'to', newClass);
-    return { success: true, ahoyCost: Math.abs(result.points), newClass };
-  }
+  // Flight booking functionality removed - see /showcase/airline
 
   // ============================================================================
   // FLY+ Service Credits - Tokenized Prepaid Services
@@ -1544,7 +1458,7 @@ class SDKStore {
     this.serviceCredits.purchasedAt = new Date().toISOString();
     this.saveServiceCredits();
 
-    this.notify();
+    this.notifyWithSnapshot('PURCHASE_SERVICE_CREDITS', { amount, ahoyCost });
     console.log('[FLY+] Purchased', amount, 'service credits for', ahoyCost, 'AHOY');
     return { success: true, ahoyCost, newBalance: this.serviceCredits.balance };
   }
@@ -1584,7 +1498,7 @@ class SDKStore {
     this.serviceRedemptions.unshift(redemption);
 
     this.saveServiceCredits();
-    this.notify();
+    this.notifyWithSnapshot('REDEEM_SERVICE_CREDITS', { serviceType, creditsUsed: service.tokenCost });
 
     console.log('[FLY+] Redeemed', service.tokenCost, 'credits for', service.name);
     return { success: true, creditsUsed: service.tokenCost, redemption };
@@ -1646,7 +1560,7 @@ class SDKStore {
     const realEstate = await this.sdk.assets.create({
       name: 'Dubai Marina Tower - Unit 1501',
       rightType: RightType.OWNERSHIP,
-      // Actually checking imports, RightType is NOT imported in store.ts. 
+      // Actually checking imports, RightType is NOT imported in store.ts.
       // Let's check imports.
       // imports: TokenisationSDK, LifecycleState, Asset, Party, BaseEvent, PartyType, PartyRole...
       // I should add RightType to imports first.
@@ -1667,8 +1581,15 @@ class SDKStore {
 
     await this.sdk.tokens.mint(realEstate.id, investor1.id, '500');
 
-    this.notify();
+    this.notifyWithSnapshot('LOAD_DEMO_DATA');
   }
 }
 
 export const sdkStore = new SDKStore();
+
+// ============================================================================
+// ZUSTAND STORE RE-EXPORT (backward-compatible shim)
+// ============================================================================
+// New code should prefer importing from './core/store' directly.
+export { useSDKStore } from './core/store';
+export type { SDKStoreState } from './core/store';

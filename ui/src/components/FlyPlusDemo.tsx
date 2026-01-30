@@ -2,25 +2,23 @@
  * FlyPlusDemo - Travel Services with Tokenization
  *
  * Demonstrates:
- * - Flight Pass NFTs - Transferable travel access tokens
- * - Delay Insurance - Oracle-triggered automatic payouts
+ * - Tokenized Service Credits - Prepaid services (luggage, check-in, etc.)
  * - AHOY Token earn/burn flows for travel services
  * - Real SDK asset creation with marketplace
- * - Tokenized Service Credits - Prepaid services (luggage, check-in, etc.)
+ *
+ * Note: Airline ticket functionality lives in /showcase/airline.
+ * FLY+ will be redesigned around non-airline travel experiences.
  */
 
 import { useState, useEffect, useSyncExternalStore } from 'react';
 import {
-    Plane, QrCode, ShieldCheck, CheckCircle2,
-    AlertCircle, DollarSign, Users, Scale, Plus,
+    Plane, CheckCircle2,
     Coins, TrendingUp, TrendingDown, Sparkles, Ticket, Clock,
-    Luggage, CreditCard, Package, ShieldPlus
+    Luggage, CreditCard, Package, Users, ShieldCheck
 } from 'lucide-react';
-import { useFlyPlusPasses, FlightPass } from '../hooks/useVerticals';
 import { useAhoyState, useSDK } from '../contexts/SDKContext';
-import { AhoyBalanceWidget, AhoyActionButton } from './AhoyBalanceWidget';
-import { sdkStore, type FlyPlusFlight, type FlyPlusBooking, type FlyPlusServiceType, FLYPLUS_SERVICE_CATALOG } from '../store';
-import { FlightSelector, BoardingPass } from '@tokenisation/sdk/components'; // Import SDK components
+import { AhoyBalanceWidget } from './AhoyBalanceWidget';
+import { sdkStore, type FlyPlusServiceType, FLYPLUS_SERVICE_CATALOG } from '../store';
 
 // Custom hook for FlyPlus store data
 function useFlyPlusStore() {
@@ -30,61 +28,29 @@ function useFlyPlusStore() {
     useSyncExternalStore(subscribe, getSnapshot);
 
     return {
-        flights: sdkStore.getFlights(),
-        bookings: sdkStore.getBookings(),
         serviceCredits: sdkStore.getServiceCredits(),
         serviceCatalog: sdkStore.getServiceCatalog(),
         serviceRedemptions: sdkStore.getServiceRedemptions(),
-        bookFlight: sdkStore.bookFlight.bind(sdkStore),
-        checkIn: sdkStore.checkInBooking.bind(sdkStore),
-        transferBooking: sdkStore.transferBooking.bind(sdkStore),
-        claimInsurance: sdkStore.claimInsurance.bind(sdkStore),
-        simulateDelay: sdkStore.simulateFlightDelay.bind(sdkStore),
-        purchaseLoungeAccess: sdkStore.purchaseLoungeAccess.bind(sdkStore),
-        requestSeatUpgrade: sdkStore.requestSeatUpgrade.bind(sdkStore),
         purchaseServiceCredits: sdkStore.purchaseServiceCredits.bind(sdkStore),
         redeemServiceCredits: sdkStore.redeemServiceCredits.bind(sdkStore),
     };
 }
 
 export function FlyPlusDemo() {
-    const [activeTab, setActiveTab] = useState<'trips' | 'services' | 'tokenization' | 'wallet'>('trips');
-    const [showSellModal, setShowSellModal] = useState(false);
-    const [showBookModal, setShowBookModal] = useState(false);
-    const [selectedTicket, setSelectedTicket] = useState<FlyPlusBooking | null>(null);
-    const [selectedFlight, setSelectedFlight] = useState<FlyPlusFlight | null>(null);
-    const [sellPrice, setSellPrice] = useState('250');
+    const [activeTab, setActiveTab] = useState<'trips' | 'services' | 'tokenization' | 'wallet'>('services');
     const [creditsToBuy, setCreditsToBuy] = useState(100);
     const [isProcessing, setIsProcessing] = useState(false);
     const [recentAction, setRecentAction] = useState<{ action: string; points: number } | null>(null);
 
     // Wire to real store data
     const {
-        flights,
-        bookings,
         serviceCredits,
         serviceCatalog,
-        bookFlight,
-        checkIn,
-        transferBooking,
-        claimInsurance,
-        simulateDelay,
-        purchaseLoungeAccess,
-        requestSeatUpgrade,
         purchaseServiceCredits,
         redeemServiceCredits,
     } = useFlyPlusStore();
 
-    // Wire to SDK via hooks for legacy support
-    const {
-        passes,
-        isLoading,
-        purchasePass,
-        transferPass,
-        checkFlightStatus
-    } = useFlyPlusPasses();
-
-    const { ahoyState, simulateAhoyAction } = useAhoyState();
+    const { ahoyState } = useAhoyState();
     const { assets } = useSDK();
 
     // Get FLYPLUS-related assets from SDK
@@ -97,52 +63,6 @@ export function FlyPlusDemo() {
             return () => clearTimeout(timer);
         }
     }, [recentAction]);
-
-    // Use real bookings from store
-    const activeBookings = bookings.filter(b => b.status !== 'TRANSFERRED' && b.status !== 'CANCELLED');
-
-    // Handler: Book a flight
-    const handleBookFlight = async (flight: FlyPlusFlight, seatClass: 'ECONOMY' | 'BUSINESS' | 'FIRST') => {
-        setIsProcessing(true);
-        const result = bookFlight({
-            flightId: flight.id,
-            passengerName: 'Demo User',
-            passengerEmail: 'demo@ahoy.com',
-            seatClass,
-            hasInsurance: true,
-        });
-        if (result.success && result.ahoyEarned) {
-            setRecentAction({ action: 'Flight Booked!', points: result.ahoyEarned });
-        }
-        setIsProcessing(false);
-        setShowBookModal(false);
-        setSelectedFlight(null);
-    };
-
-    // Handler: Check in
-    const handleCheckIn = (bookingId: string) => {
-        const result = checkIn(bookingId);
-        if (result.success) {
-            setRecentAction({ action: 'Checked In!', points: 25 });
-        }
-    };
-
-    // Handler: Simulate delay for testing insurance
-    const handleSimulateDelay = (flightId: string) => {
-        const delayMinutes = 90 + Math.floor(Math.random() * 60); // 90-150 min delay
-        simulateDelay(flightId, delayMinutes);
-        setRecentAction({ action: `Flight Delayed ${delayMinutes}min`, points: 0 });
-    };
-
-    // Handler: Claim insurance
-    const handleClaimInsurance = (bookingId: string) => {
-        const result = claimInsurance(bookingId);
-        if (result.success && result.ahoyEarned) {
-            setRecentAction({ action: `Insurance Claimed! $${result.payout}`, points: result.ahoyEarned });
-        } else if (result.error) {
-            setRecentAction({ action: result.error, points: 0 });
-        }
-    };
 
     // Handler: Purchase service credits
     const handlePurchaseCredits = () => {
@@ -167,44 +87,6 @@ export function FlyPlusDemo() {
         }
     };
 
-    const handleSellTicket = async () => {
-        if (!selectedTicket) return;
-        setIsProcessing(true);
-
-        const result = transferBooking(selectedTicket.id, '0xBuyerAddress123');
-        if (result.success && result.ahoyEarned) {
-            setRecentAction({ action: 'Pass Transferred', points: result.ahoyEarned });
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setIsProcessing(false);
-        setShowSellModal(false);
-        setSelectedTicket(null);
-    };
-
-    const handleLoungeAccess = async (bookingId: string) => {
-        const result = purchaseLoungeAccess(bookingId);
-        if (result.success) {
-            setRecentAction({ action: 'Lounge Access Purchased', points: -result.ahoyCost! });
-        } else {
-            setRecentAction({ action: result.error || 'Purchase failed', points: 0 });
-        }
-    };
-
-    const handleSeatUpgrade = async (bookingId: string) => {
-        const result = requestSeatUpgrade(bookingId);
-        if (result.success) {
-            setRecentAction({ action: `Upgraded to ${result.newClass}`, points: -result.ahoyCost! });
-        } else {
-            setRecentAction({ action: result.error || 'Upgrade failed', points: 0 });
-        }
-    };
-
-    // Get flight status for a booking
-    const getFlightForBooking = (booking: FlyPlusBooking) => {
-        return flights.find(f => f.id === booking.flightId);
-    };
-
     return (
         <div className="max-w-6xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
@@ -217,7 +99,7 @@ export function FlyPlusDemo() {
                     <div>
                         <h1 className="text-2xl font-bold text-white">FLY+</h1>
                         <p className="text-sm text-sky-400 font-medium">Sovereign Travel Identity</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Tokenized flight passes & insurance</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Tokenized service credits & travel experiences</p>
                     </div>
                 </div>
 
@@ -248,7 +130,7 @@ export function FlyPlusDemo() {
                     className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'trips' ? 'bg-sky-500 text-white' : 'text-gray-400 hover:text-white'
                         }`}
                 >
-                    <Plane className="w-4 h-4" /> My Trips
+                    <Plane className="w-4 h-4" /> Experiences
                 </button>
                 <button
                     onClick={() => setActiveTab('services')}
@@ -278,127 +160,25 @@ export function FlyPlusDemo() {
                 </button>
             </div>
 
-            {/* Trips Tab */}
+            {/* Experiences Tab (formerly Trips) */}
             {activeTab === 'trips' && (
                 <div className="grid grid-cols-3 gap-6">
                     <div className="col-span-2 space-y-4">
-                        {/* My Bookings */}
-                        {activeBookings.length === 0 ? (
-                            <div className="glass-card p-8 rounded-2xl border border-white/10 text-center">
-                                <Plane className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                                <p className="text-gray-400">No bookings yet. Book a flight to get started!</p>
-                            </div>
-                        ) : (
-                            activeBookings.map(booking => {
-                                const flight = getFlightForBooking(booking);
-                                if (!flight) return null;
-
-                                return (
-                                    <div key={booking.id} className="mb-4">
-                                        <BoardingPass
-                                            flight={{
-                                                id: flight.id,
-                                                airline: 'FlyPlus',
-                                                flightNumber: flight.flightNumber,
-                                                origin: flight.origin,
-                                                destination: flight.destination,
-                                                time: flight.departureTime,
-                                                price: `$${flight.prices.economy}`
-                                            }}
-                                            passengerName={booking.passengerName}
-                                            seat={booking.seatNumber}
-                                        />
-
-                                        {/* Action Buttons (kept from original app) */}
-                                        <div className="flex gap-2 mt-2">
-                                            {booking.status === 'CONFIRMED' && (
-                                                <button
-                                                    onClick={() => handleCheckIn(booking.id)}
-                                                    className="px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold"
-                                                >
-                                                    Check In
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
-                        {/* Available Flights */}
-                        <div className="glass-card p-6 rounded-2xl border border-white/10">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Plus className="w-5 h-5 text-sky-400" />
-                                    Book a Flight
-                                </h3>
-                            </div>
-                            <div className="space-y-3">
-                                {/* Use SDK FlightSelector */}
-                                <FlightSelector
-                                    onSelect={(flight) => {
-                                        // Map back to internal type for compatibility
-                                        const internalFlight = flights.find(f => f.id === flight.id);
-                                        if (internalFlight) {
-                                            setSelectedFlight(internalFlight);
-                                            setShowBookModal(true);
-                                        }
-                                    }}
-                                />
-                            </div>
+                        <div className="glass-card p-8 rounded-2xl border border-white/10 text-center">
+                            <Plane className="w-12 h-12 text-sky-400 mx-auto mb-4" />
+                            <h2 className="text-xl font-bold text-white mb-2">Coming Soon</h2>
+                            <p className="text-gray-400 max-w-md mx-auto">
+                                FLY+ experiences will be redesigned. Airline ticketing is available
+                                in the <span className="text-sky-400 font-medium">Airline Showcase</span>.
+                            </p>
+                            <p className="text-xs text-gray-500 mt-4">
+                                Future: tokenized travel experiences, loyalty passes, and more.
+                            </p>
                         </div>
                     </div>
 
                     {/* Sidebar */}
                     <div className="space-y-4">
-                        {/* AHOY Actions */}
-                        <div className="glass-card p-4 rounded-xl border border-white/10">
-                            <h3 className="font-bold text-white mb-3 flex items-center gap-2">
-                                <Coins className="w-4 h-4 text-amber-400" /> AHOY Actions
-                            </h3>
-                            <div className="space-y-2 text-xs">
-                                <div className="flex justify-between items-center p-2 bg-green-500/5 rounded-lg border border-green-500/10">
-                                    <span className="text-gray-300">Book Flight</span>
-                                    <span className="text-green-400 font-bold">+50 AHOY</span>
-                                </div>
-                                <div className="flex justify-between items-center p-2 bg-green-500/5 rounded-lg border border-green-500/10">
-                                    <span className="text-gray-300">Transfer Pass</span>
-                                    <span className="text-green-400 font-bold">+20 AHOY</span>
-                                </div>
-                                <div className="flex justify-between items-center p-2 bg-green-500/5 rounded-lg border border-green-500/10">
-                                    <span className="text-gray-300">Insurance Claim</span>
-                                    <span className="text-green-400 font-bold">+50 AHOY</span>
-                                </div>
-                                <div className="flex justify-between items-center p-2 bg-red-500/5 rounded-lg border border-red-500/10">
-                                    <span className="text-gray-300">Lounge Access</span>
-                                    <span className="text-red-400 font-bold">-50 AHOY</span>
-                                </div>
-                                <div className="flex justify-between items-center p-2 bg-red-500/5 rounded-lg border border-red-500/10">
-                                    <span className="text-gray-300">Seat Upgrade</span>
-                                    <span className="text-red-400 font-bold">-150 AHOY</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Demo Controls */}
-                        <div className="glass-card p-4 rounded-xl border border-orange-500/20 bg-gradient-to-b from-orange-900/10 to-transparent">
-                            <h3 className="font-bold text-white mb-3 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-orange-400" /> Demo Controls
-                            </h3>
-                            <p className="text-xs text-gray-400 mb-3">
-                                Simulate a flight delay to test insurance claims.
-                            </p>
-                            {flights.slice(0, 2).map(flight => (
-                                <button
-                                    key={flight.id}
-                                    onClick={() => handleSimulateDelay(flight.id)}
-                                    disabled={flight.status === 'DELAYED'}
-                                    className="w-full mb-2 py-2 bg-orange-500/10 border border-orange-500/30 text-orange-400 rounded-lg hover:bg-orange-500/20 transition-all text-xs font-bold disabled:opacity-50"
-                                >
-                                    {flight.status === 'DELAYED' ? `${flight.flightNumber} Already Delayed` : `Delay ${flight.flightNumber}`}
-                                </button>
-                            ))}
-                        </div>
-
                         {/* Service Credits Balance */}
                         <div className="glass-card p-4 rounded-xl border border-green-500/20 bg-gradient-to-b from-green-900/10 to-transparent">
                             <div className="flex items-center justify-between mb-2">
@@ -416,6 +196,27 @@ export function FlyPlusDemo() {
                             >
                                 View Services
                             </button>
+                        </div>
+
+                        {/* AHOY Actions */}
+                        <div className="glass-card p-4 rounded-xl border border-white/10">
+                            <h3 className="font-bold text-white mb-3 flex items-center gap-2">
+                                <Coins className="w-4 h-4 text-amber-400" /> AHOY Actions
+                            </h3>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex justify-between items-center p-2 bg-green-500/5 rounded-lg border border-green-500/10">
+                                    <span className="text-gray-300">Purchase Credits</span>
+                                    <span className="text-green-400 font-bold">Earn AHOY</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-green-500/5 rounded-lg border border-green-500/10">
+                                    <span className="text-gray-300">Redeem Service</span>
+                                    <span className="text-green-400 font-bold">Use Credits</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-green-500/5 rounded-lg border border-green-500/10">
+                                    <span className="text-gray-300">Referral</span>
+                                    <span className="text-green-400 font-bold">+200 AHOY</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -596,91 +397,73 @@ export function FlyPlusDemo() {
             {/* Tokenization Tab */}
             {activeTab === 'tokenization' && (
                 <div className="space-y-6">
-                    {/* Tokenization Flow */}
+                    {/* Tokenization Placeholder */}
                     <div className="glass-card p-6 rounded-xl border border-amber-500/20">
                         <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                             <Coins className="w-5 h-5 text-amber-400" />
                             FLY+ Tokenization Model
                         </h2>
+                        <p className="text-gray-400 mb-6">
+                            FLY+ uses tokenized service credits as a prepaid value system. Credits are
+                            purchased with AHOY tokens and redeemed for premium travel services.
+                        </p>
 
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">
-                                <div className="w-12 h-12 mx-auto mb-2 bg-sky-500/20 rounded-full flex items-center justify-center">
-                                    <Plane className="w-6 h-6 text-sky-400" />
+                                <div className="w-12 h-12 mx-auto mb-2 bg-amber-500/20 rounded-full flex items-center justify-center">
+                                    <Coins className="w-6 h-6 text-amber-400" />
                                 </div>
-                                <p className="text-sm font-bold text-white">Book Flight</p>
-                                <p className="text-xs text-gray-400 mt-1">Purchase creates Pass NFT</p>
-                            </div>
-                            <div className="flex items-center justify-center">
-                                <div className="w-full h-0.5 bg-gradient-to-r from-sky-500 to-green-500" />
+                                <p className="text-sm font-bold text-white">Convert AHOY</p>
+                                <p className="text-xs text-gray-400 mt-1">Exchange AHOY for Fly+ Credits</p>
                             </div>
                             <div className="text-center">
                                 <div className="w-12 h-12 mx-auto mb-2 bg-green-500/20 rounded-full flex items-center justify-center">
-                                    <Coins className="w-6 h-6 text-green-400" />
+                                    <CreditCard className="w-6 h-6 text-green-400" />
                                 </div>
-                                <p className="text-sm font-bold text-white">Earn AHOY</p>
-                                <p className="text-xs text-gray-400 mt-1">+100 AHOY per booking</p>
-                            </div>
-                            <div className="flex items-center justify-center">
-                                <div className="w-full h-0.5 bg-gradient-to-r from-green-500 to-purple-500" />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-4 mt-6">
-                            <div className="text-center">
-                                <div className="w-12 h-12 mx-auto mb-2 bg-purple-500/20 rounded-full flex items-center justify-center">
-                                    <DollarSign className="w-6 h-6 text-purple-400" />
-                                </div>
-                                <p className="text-sm font-bold text-white">Trade/Transfer</p>
-                                <p className="text-xs text-gray-400 mt-1">Sell passes in marketplace</p>
-                            </div>
-                            <div className="flex items-center justify-center">
-                                <div className="w-full h-0.5 bg-gradient-to-r from-purple-500 to-amber-500" />
+                                <p className="text-sm font-bold text-white">Hold Credits</p>
+                                <p className="text-xs text-gray-400 mt-1">Prepaid service tokens in your wallet</p>
                             </div>
                             <div className="text-center">
-                                <div className="w-12 h-12 mx-auto mb-2 bg-amber-500/20 rounded-full flex items-center justify-center">
-                                    <Scale className="w-6 h-6 text-amber-400" />
+                                <div className="w-12 h-12 mx-auto mb-2 bg-sky-500/20 rounded-full flex items-center justify-center">
+                                    <Sparkles className="w-6 h-6 text-sky-400" />
                                 </div>
-                                <p className="text-sm font-bold text-white">Insurance</p>
-                                <p className="text-xs text-gray-400 mt-1">Oracle-triggered payouts</p>
-                            </div>
-                            <div className="flex items-center justify-center">
-                                <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 to-sky-500" />
+                                <p className="text-sm font-bold text-white">Redeem Services</p>
+                                <p className="text-xs text-gray-400 mt-1">Use credits for premium services</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Token Types */}
                     <div className="grid grid-cols-3 gap-4">
-                        <div className="glass-card p-5 rounded-xl border border-sky-500/20 bg-gradient-to-b from-sky-900/10 to-transparent">
+                        <div className="glass-card p-5 rounded-xl border border-green-500/20 bg-gradient-to-b from-green-900/10 to-transparent">
                             <div className="flex items-center gap-2 mb-3">
-                                <Ticket className="w-5 h-5 text-sky-400" />
-                                <h3 className="font-bold text-white">Flight Pass NFT</h3>
+                                <CreditCard className="w-5 h-5 text-green-400" />
+                                <h3 className="font-bold text-white">Service Credits</h3>
                             </div>
                             <p className="text-xs text-gray-400 mb-3">
-                                Transferable flight access token. Can be sold in marketplace before departure.
+                                Prepaid tokens for travel services. Exchanged 1:1 from AHOY tokens.
                             </p>
                             <div className="text-xs space-y-1 text-gray-500">
-                                <p>• Flight details on-chain</p>
-                                <p>• Transfer to any wallet</p>
-                                <p>• Sell for AHOY tokens</p>
-                                <p>• Automatic check-in</p>
+                                <p>• 1:1 AHOY exchange rate</p>
+                                <p>• Redeemable for services</p>
+                                <p>• Transferable between users</p>
+                                <p>• No expiry</p>
                             </div>
                         </div>
 
                         <div className="glass-card p-5 rounded-xl border border-amber-500/20 bg-gradient-to-b from-amber-900/10 to-transparent">
                             <div className="flex items-center gap-2 mb-3">
-                                <Scale className="w-5 h-5 text-amber-400" />
-                                <h3 className="font-bold text-white">Insurance Escrow</h3>
+                                <Coins className="w-5 h-5 text-amber-400" />
+                                <h3 className="font-bold text-white">AHOY Integration</h3>
                             </div>
                             <p className="text-xs text-gray-400 mb-3">
-                                Smart contract insurance backed by Chainlink oracles for flight status.
+                                Earn AHOY through travel activity, convert to service credits for premium experiences.
                             </p>
                             <div className="text-xs space-y-1 text-gray-500">
-                                <p>• Oracle-verified delays</p>
-                                <p>• Automatic payout</p>
-                                <p>• No claims process</p>
-                                <p>• Instant settlement</p>
+                                <p>• Earn from ecosystem activity</p>
+                                <p>• Convert to Fly+ Credits</p>
+                                <p>• Tier-based multipliers</p>
+                                <p>• Cross-vertical rewards</p>
                             </div>
                         </div>
 
@@ -693,7 +476,7 @@ export function FlyPlusDemo() {
                                 Soulbound token tracking travel history and tier benefits.
                             </p>
                             <div className="text-xs space-y-1 text-gray-500">
-                                <p>• Flight miles record</p>
+                                <p>• Activity history</p>
                                 <p>• Tier progression</p>
                                 <p>• Non-transferable</p>
                                 <p>• Lifetime benefits</p>
@@ -712,7 +495,7 @@ export function FlyPlusDemo() {
                                             <p className="text-white font-medium">{asset.name}</p>
                                             <p className="text-gray-500 font-mono">{asset.id.slice(0, 16)}...</p>
                                         </div>
-                                        <span className={`px-2 py-0.5 rounded text-[10px] ${asset.state === 'ACTIVE' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                                        <span className={`px-2 py-0.5 rounded text-[10px] ${String(asset.state) === 'ACTIVE' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
                                             }`}>
                                             {asset.state}
                                         </span>
@@ -727,46 +510,6 @@ export function FlyPlusDemo() {
             {/* Benefits Tab */}
             {activeTab === 'wallet' && (
                 <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-bold text-white">Premium Services</h2>
-
-                        <div className="glass-card p-5 rounded-xl border border-sky-500/20">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-bold text-white">Lounge Access</h3>
-                                <span className="text-xs text-gray-400">Single use</span>
-                            </div>
-                            <p className="text-xs text-gray-400 mb-4">
-                                Access to premium airport lounges with complimentary food and drinks.
-                            </p>
-                            <AhoyActionButton
-                                label="Purchase Access"
-                                points={50}
-                                isEarn={false}
-                                onClick={handleLoungeAccess}
-                                icon={<Sparkles className="w-4 h-4" />}
-                                className="w-full"
-                            />
-                        </div>
-
-                        <div className="glass-card p-5 rounded-xl border border-purple-500/20">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-bold text-white">Seat Upgrade</h3>
-                                <span className="text-xs text-gray-400">Next class up</span>
-                            </div>
-                            <p className="text-xs text-gray-400 mb-4">
-                                Upgrade to the next seat class when available.
-                            </p>
-                            <AhoyActionButton
-                                label="Request Upgrade"
-                                points={150}
-                                isEarn={false}
-                                onClick={handleSeatUpgrade}
-                                icon={<TrendingUp className="w-4 h-4" />}
-                                className="w-full"
-                            />
-                        </div>
-                    </div>
-
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-white">Your Benefits</h2>
 
@@ -785,165 +528,35 @@ export function FlyPlusDemo() {
                                 {ahoyState.tier !== 'BRONZE' && (
                                     <div className="flex items-center gap-2 text-green-400">
                                         <CheckCircle2 className="w-4 h-4" />
-                                        <span>Priority Boarding</span>
+                                        <span>Priority Service Access</span>
                                     </div>
                                 )}
                                 {['GOLD', 'PLATINUM', 'DIAMOND'].includes(ahoyState.tier) && (
                                     <div className="flex items-center gap-2 text-green-400">
                                         <CheckCircle2 className="w-4 h-4" />
-                                        <span>Lounge Access</span>
+                                        <span>Premium Tier Rewards</span>
                                     </div>
                                 )}
                                 {['PLATINUM', 'DIAMOND'].includes(ahoyState.tier) && (
                                     <div className="flex items-center gap-2 text-green-400">
                                         <CheckCircle2 className="w-4 h-4" />
-                                        <span>Free Upgrades</span>
+                                        <span>Exclusive Experiences</span>
                                     </div>
                                 )}
                             </div>
                         </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <h2 className="text-lg font-bold text-white">Grow Your Network</h2>
 
                         <div className="glass-card p-5 rounded-xl border border-green-500/20">
                             <h3 className="font-bold text-white mb-3">Refer a Friend</h3>
                             <p className="text-xs text-gray-400 mb-3">
-                                Earn 200 AHOY when your friend makes their first booking.
+                                Earn 200 AHOY when your friend joins the FLY+ ecosystem.
                             </p>
                             <button className="w-full py-2 bg-green-500/10 border border-green-500/30 text-green-400 rounded-lg hover:bg-green-500/20 transition-all text-sm font-bold">
                                 Share Referral Link +200 AHOY
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Book Flight Modal */}
-            {showBookModal && selectedFlight && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-                    <div className="w-full max-w-md bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="p-6 border-b border-white/10 flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-white">Book Flight</h3>
-                            <button onClick={() => { setShowBookModal(false); setSelectedFlight(null); }} className="text-gray-400 hover:text-white">Close</button>
-                        </div>
-
-                        <div className="p-6 space-y-6">
-                            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs text-gray-400">Flight</span>
-                                    <span className="text-sm font-mono text-sky-400">{selectedFlight.flightNumber}</span>
-                                </div>
-                                <div className="flex items-center justify-center gap-4">
-                                    <div className="text-center">
-                                        <p className="text-2xl font-bold text-white">{selectedFlight.origin}</p>
-                                        <p className="text-xs text-gray-400">{selectedFlight.originCity}</p>
-                                    </div>
-                                    <Plane className="w-5 h-5 text-sky-400 rotate-90" />
-                                    <div className="text-center">
-                                        <p className="text-2xl font-bold text-white">{selectedFlight.destination}</p>
-                                        <p className="text-xs text-gray-400">{selectedFlight.destinationCity}</p>
-                                    </div>
-                                </div>
-                                <div className="mt-3 text-center text-xs text-gray-400">
-                                    {selectedFlight.date} • {selectedFlight.departureTime} - {selectedFlight.arrivalTime}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-2">Select Class</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {(['ECONOMY', 'BUSINESS', 'FIRST'] as const).map((seatClass) => {
-                                        const key = seatClass.toLowerCase() as 'economy' | 'business' | 'first';
-                                        const available = selectedFlight.availableSeats[key] > 0;
-                                        return (
-                                            <button
-                                                key={seatClass}
-                                                onClick={() => handleBookFlight(selectedFlight, seatClass)}
-                                                disabled={isProcessing || !available}
-                                                className={`p-3 rounded-xl border transition-all text-center ${available
-                                                    ? 'bg-white/5 border-white/10 hover:border-sky-500/30 hover:bg-sky-500/10'
-                                                    : 'bg-gray-800/50 border-gray-700/50 opacity-50 cursor-not-allowed'
-                                                    }`}
-                                            >
-                                                <p className="text-xs font-bold text-white">{seatClass}</p>
-                                                <p className="text-lg font-mono text-sky-400">${selectedFlight.prices[key]}</p>
-                                                <p className="text-[10px] text-gray-500">{selectedFlight.availableSeats[key]} seats</p>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            <div className="p-3 bg-green-500/10 rounded-xl border border-green-500/20 flex gap-3">
-                                <ShieldPlus className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="text-xs font-bold text-green-200">Flight Insurance Included</p>
-                                    <p className="text-[10px] text-gray-400 mt-1">
-                                        Automatic payout if flight is delayed &gt;60 minutes
-                                    </p>
-                                </div>
-                            </div>
-
-                            <p className="text-xs text-green-400 text-center">Earn +50 AHOY for booking!</p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Sell Modal */}
-            {showSellModal && selectedTicket && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-                    <div className="w-full max-w-md bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="p-6 border-b border-white/10 flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-white">Sell Ticket</h3>
-                            <button onClick={() => setShowSellModal(false)} className="text-gray-400 hover:text-white">Close</button>
-                        </div>
-
-                        <div className="p-6 space-y-6">
-                            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                <p className="text-xs text-gray-400 mb-1">Asset Token ID</p>
-                                <p className="text-sm font-mono text-sky-400 break-all">{selectedTicket.tokenId}</p>
-                                <div className="mt-3 flex items-center justify-between">
-                                    <span className="text-sm text-gray-200">{selectedTicket.origin} → {selectedTicket.destination}</span>
-                                    <span className="text-sm text-gray-200">{selectedTicket.date}</span>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-2">Resale Price (AHOY)</label>
-                                <div className="relative">
-                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                                    <input
-                                        type="number"
-                                        value={sellPrice}
-                                        onChange={(e) => setSellPrice(e.target.value)}
-                                        className="w-full bg-black/20 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-sky-500 transition-colors"
-                                    />
-                                </div>
-                                <p className="text-xs text-green-400 mt-2">You'll earn +20 AHOY for this transfer</p>
-                            </div>
-
-                            <div className="p-3 bg-sky-500/10 rounded-xl border border-sky-500/20 flex gap-3">
-                                <Users className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="text-xs font-bold text-sky-200">Matching Engine</p>
-                                    <p className="text-[10px] text-gray-400 mt-1">
-                                        The SDK will automatically match your ticket with the highest bidder.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleSellTicket}
-                                disabled={isProcessing}
-                                className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 rounded-xl font-bold text-white shadow-lg hover:scale-[1.02] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        Executing Smart Contract...
-                                    </>
-                                ) : (
-                                    'Confirm Transaction'
-                                )}
                             </button>
                         </div>
                     </div>

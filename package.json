@@ -1,12 +1,25 @@
 {
     "name": "tokenisation-platform",
     "private": true,
+    "packageManager": "pnpm@9.15.0",
     "workspaces": [
         "sdk",
+        "ui",
+        "ui-kit",
+        "sdk-react",
+        "sdk-react-native",
         "server",
-        "packages/*"
+        "packages/*",
+        "website"
     ],
     "scripts": {
-        "test:conformance": "npm run test --workspace=@tokenisation/conformance-suite"
+        "test:conformance": "npm run test --workspace=@tokenisation/conformance-suite",
+        "test:e2e": "playwright test",
+        "changeset": "changeset",
+        "version": "changeset version"
+    },
+    "devDependencies": {
+        "@changesets/cli": "^2.27.0",
+        "@playwright/test": "^1.42.0"
     }
 }

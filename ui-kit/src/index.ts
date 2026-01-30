@@ -206,3 +206,17 @@ export {
   AddressList,
   ContractAddress,
 } from './generic';
+
+// ============================================
+// Components - Compliance & Persona
+// ============================================
+export { ComplianceStepper } from './components/ComplianceStepper';
+export type { ComplianceStepperProps, StepConfig } from './components/ComplianceStepper';
+
+export { PersonaSwitcher as PersonaSwitcherComponent } from './components/PersonaSwitcher';
+export type { PersonaSwitcherProps, Persona } from './components/PersonaSwitcher';
+
+export { TicketCard } from './components/TicketCard';
+export type { TicketCardProps } from './components/TicketCard';
+
+export { StatusBadge as StateBadge } from './generic';

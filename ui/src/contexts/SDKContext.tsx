@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from 'react';
 import { sdkStore } from '../store';
-import { LifecycleState, type Asset, type Party } from '@tokenisation/sdk';
+import { LifecycleState, PartyRole, type Asset, type Party } from '@tokenisation/sdk';
 
 // ============================================================================
 // TYPES
@@ -57,6 +57,10 @@ interface SDKContextValue {
   // Ahoy ecosystem
   ahoyState: ReturnType<typeof sdkStore.getAhoyState>;
   simulateAhoyAction: typeof sdkStore.simulateAhoyAction;
+
+  // Persona-aware operations
+  evaluatePermission: (role: PartyRole, action: string, assetId?: string) => { allowed: boolean; reason: string };
+  getOrCreatePartyForRole: (role: PartyRole, displayName: string) => Party;
 }
 
 interface ServiceMetrics {
@@ -187,12 +191,12 @@ export function SDKProvider({ children }: SDKProviderProps) {
       );
     }
 
-    const activeAssets = assets.filter(a => a.state === LifecycleState.ACTIVE);
+    const activeAssets = assets.filter(a => String(a.state) === String(LifecycleState.ACTIVE));
     const pendingAssets = assets.filter(a =>
-      a.state === LifecycleState.PENDING_VERIFICATION ||
-      a.state === LifecycleState.VERIFIED
+      String(a.state) === String(LifecycleState.PENDING_VERIFICATION) ||
+      String(a.state) === String(LifecycleState.VERIFIED)
     );
-    const draftAssets = assets.filter(a => a.state === LifecycleState.DRAFT);
+    const draftAssets = assets.filter(a => String(a.state) === String(LifecycleState.DRAFT));
 
     const totalValue = assets.reduce((sum, a) => {
       const value = parseFloat(a.metadata?.value as string || '0');
@@ -234,6 +238,19 @@ export function SDKProvider({ children }: SDKProviderProps) {
     []
   );
 
+  // Persona-aware SDK operations
+  const evaluatePermission = useCallback(
+    (role: PartyRole, action: string, assetId?: string) =>
+      sdkStore.evaluatePersonaPermission(role, action, assetId),
+    [],
+  );
+
+  const getOrCreatePartyForRole = useCallback(
+    (role: PartyRole, displayName: string) =>
+      sdkStore.getOrCreatePartyForRole(role, displayName),
+    [],
+  );
+
   const value: SDKContextValue = {
     sdk: sdkStore.sdk,
     isInitialized,
@@ -251,6 +268,8 @@ export function SDKProvider({ children }: SDKProviderProps) {
     sdkLogs: storeState.sdkLogs,
     ahoyState: storeState.ahoyState,
     simulateAhoyAction,
+    evaluatePermission,
+    getOrCreatePartyForRole,
   };
 
   return <SDKContext.Provider value={value}>{children}</SDKContext.Provider>;

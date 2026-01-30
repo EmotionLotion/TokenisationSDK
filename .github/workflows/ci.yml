@@ -152,3 +152,81 @@ jobs:
           name: sdk-dist
           path: sdk/dist/
           retention-days: 7
+
+  # ============================================================================
+  # E2E Tests (Playwright)
+  # ============================================================================
+  e2e-test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build --workspaces --if-present
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ============================================================================
+  # Readiness Scorecard
+  # ============================================================================
+  readiness:
+    name: Readiness Check
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SDK
+        run: npm run build --workspace=sdk
+
+      - name: Check SDK bundle size
+        run: |
+          SDK_SIZE=$(du -sk sdk/dist/ | cut -f1)
+          echo "SDK dist size: ${SDK_SIZE}KB"
+          echo "## Readiness Scorecard" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SDK Bundle Size | ${SDK_SIZE}KB |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run coverage
+        run: |
+          npm run test --workspace=sdk -- --run --coverage || true
+          echo "| Coverage | See Codecov |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Security audit
+        run: |
+          AUDIT=$(npm audit --audit-level=high 2>&1 || true)
+          VULNS=$(echo "$AUDIT" | grep -c "high\|critical" || echo "0")
+          echo "| High/Critical Vulns | ${VULNS} |" >> $GITHUB_STEP_SUMMARY

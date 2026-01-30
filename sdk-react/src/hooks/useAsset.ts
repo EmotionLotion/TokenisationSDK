@@ -103,7 +103,7 @@ export interface Evidence {
 // ============================================================================
 
 export function useAsset(): UseAssetReturn {
-  const { config, wallet, currentParty } = useTokenisation();
+  const { config, wallet, currentParty, callbacks } = useTokenisation();
 
   const [currentAsset, setCurrentAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(false);
@@ -272,7 +272,17 @@ export function useAsset(): UseAssetReturn {
         });
 
         if (result.success && currentAsset?.id === assetId) {
+          const prevState = currentAsset.state;
           setCurrentAsset({ ...currentAsset, state: result.newState });
+
+          // Fire onStatusUpdate callback
+          callbacks?.onStatusUpdate?.({
+            type: 'asset',
+            entityId: assetId,
+            previousStatus: prevState,
+            newStatus: result.newState,
+            timestamp: new Date().toISOString(),
+          });
         }
 
         return {
@@ -290,7 +300,7 @@ export function useAsset(): UseAssetReturn {
         setLoading(false);
       }
     },
-    [apiCall, currentParty, currentAsset]
+    [apiCall, currentParty, currentAsset, callbacks]
   );
 
   // Upload document
