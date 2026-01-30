@@ -13,7 +13,7 @@ import {
   Hotel, Car, ChevronRight, Wallet, TrendingUp, ClipboardCheck,
 } from 'lucide-react';
 import { sdkStore } from '../store';
-import { LifecycleState } from '@tokenisation/sdk';
+import { LifecycleState, RightType, PartyRole } from '@tokenisation/sdk';
 import { isKycVerified } from '../types';
 
 // ============================================================================
@@ -194,8 +194,18 @@ function LifecycleSection() {
       'H2O Atlantis Suite', 'GTS Premium SUV Rental',
     ];
     const name = names[assets.length % names.length];
-    sdkStore.logSdkCall('assets.create', { name, description: `Tokenised asset: ${name}` });
-    const asset = await sdkStore.createAsset({ name, description: `Tokenised asset: ${name}` });
+    // Ensure an issuer party exists
+    const issuer = sdkStore.getOrCreatePartyForRole(PartyRole.ISSUER, 'Demo Issuer');
+    const issuerId = issuer.id;
+    const params = {
+      name,
+      description: `Tokenised asset: ${name}`,
+      rightType: RightType.OWNERSHIP,
+      jurisdiction: { countryCode: 'AE', accreditedOnly: false, blockedJurisdictions: [] },
+      issuerId,
+    };
+    sdkStore.logSdkCall('assets.create', params);
+    const asset = await sdkStore.createAsset(params);
     show(`Asset created: ${asset.name} [${asset.id}] — state: DRAFT`);
   };
 
