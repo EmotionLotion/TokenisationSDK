@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   TokenisationSDK,
   LifecycleState,
-  type Asset,
+  type Asset as SDKAsset,
   type Party,
   type BaseEvent,
   PartyType,
@@ -28,8 +28,195 @@ import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@
 import { config } from '../config';
 import type { Persona, ComplianceRules } from './types';
 
+/** UI-friendly Asset type with guaranteed runtime fields */
+type Asset = SDKAsset & { id: string; name: string; state: any; metadata?: any; [key: string]: any };
+
 // ============================================================================
-// TYPES
+// TYPES — Cross-Cutting Features
+// ============================================================================
+
+// --- CCID ---
+export enum CCIDVertical {
+  REAL_ESTATE = 'REAL_ESTATE',
+  AIRLINE = 'AIRLINE',
+  CAR_RENTAL = 'CAR_RENTAL',
+  HOTEL = 'HOTEL',
+  CONCERT = 'CONCERT',
+}
+
+export interface VerticalClearance {
+  vertical: CCIDVertical;
+  cleared: boolean;
+  attestationIds: string[];
+  clearedAt?: string;
+  sourceVertical?: CCIDVertical;
+}
+
+export interface CCIDIdentity {
+  wallet: string;
+  registeredAt: string;
+  clearances: VerticalClearance[];
+  linkedWallets: string[];
+}
+
+export interface CCIDEligibilityResult {
+  eligible: boolean;
+  vertical: CCIDVertical;
+  satisfied: string[];
+  missing: string[];
+}
+
+// --- DECO ---
+export enum DecoProofType {
+  BALANCE_THRESHOLD = 'BALANCE_THRESHOLD',
+  ACCREDITED_INVESTOR = 'ACCREDITED_INVESTOR',
+  AGE_VERIFICATION = 'AGE_VERIFICATION',
+  INSURANCE_COVERAGE = 'INSURANCE_COVERAGE',
+}
+
+export enum DecoSessionStatus {
+  PENDING = 'PENDING',
+  ATTESTING = 'ATTESTING',
+  PROVING = 'PROVING',
+  VERIFIED = 'VERIFIED',
+  FAILED = 'FAILED',
+  EXPIRED = 'EXPIRED',
+}
+
+export interface DecoProofResult {
+  sessionId: string;
+  proofType: DecoProofType;
+  predicate: string;
+  threshold?: string;
+  status: DecoSessionStatus;
+  proofHash?: string;
+  validUntil?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- CRE ---
+export interface DONConfig {
+  donId: string;
+  nodeCount: number;
+  threshold: number;
+  network: string;
+  capabilities: string[];
+}
+
+export interface WorkflowStatus {
+  name: string;
+  description: string;
+  triggerType: 'cron' | 'http' | 'evm_log' | 'evm_cron' | 'http_cron';
+  capabilities: string[];
+  linkedVertical?: string;
+  lastExecution?: string;
+  status: 'active' | 'paused' | 'error';
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflowName: string;
+  triggeredAt: string;
+  steps: { name: string; status: 'pending' | 'running' | 'done' | 'failed'; detail?: string }[];
+  result?: Record<string, unknown>;
+  completedAt?: string;
+}
+
+// --- Amadeus ---
+export interface FlightOffer {
+  id: string;
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departure: string;
+  arrival: string;
+  cabin: string;
+  price: string;
+  currency: string;
+  seatsAvailable: number;
+}
+
+export interface FlightStatusResult {
+  flightNumber: string;
+  status: 'SCHEDULED' | 'BOARDING' | 'DEPARTED' | 'IN_FLIGHT' | 'LANDED' | 'DELAYED' | 'CANCELLED';
+  departure: string;
+  arrival: string;
+  delayMinutes: number;
+  gate?: string;
+  terminal?: string;
+  donConsensus: { agreed: number; total: number };
+  qualifiesForRefund: boolean;
+}
+
+export interface RefundTriggerResult {
+  flightNumber: string;
+  ticketTokenId: string;
+  refundAmount: string;
+  currency: string;
+  status: 'triggered' | 'processing' | 'settled' | 'denied';
+  txHash?: string;
+  confidence: number;
+}
+
+// --- Royalty ---
+export interface RoyaltyConfig {
+  artistBps: number;
+  promoterBps: number;
+  artistAddress: string;
+  promoterAddress: string;
+  minSalePrice: number;
+  royaltyCap?: number;
+  primarySaleExempt: boolean;
+}
+
+export interface RoyaltySettlementResult {
+  id: string;
+  tokenAddress: string;
+  seller: string;
+  buyer: string;
+  salePrice: number;
+  artistAmount: number;
+  promoterAmount: number;
+  sellerProceeds: number;
+  capped: boolean;
+  settledAt: string;
+  txHash: string;
+}
+
+// --- x402 ---
+export interface X402PricingRule {
+  operation: string;
+  price: string;
+  tokenSymbol: string;
+  description: string;
+}
+
+export interface X402ManifestEntry {
+  endpoint: string;
+  method: string;
+  price: string;
+  tokenSymbol: string;
+  description: string;
+}
+
+// --- Simulation ---
+export interface SimulationConfig {
+  name: string;
+  description: string;
+  testScenarios: { input: Record<string, unknown>; expectedOutput: Record<string, unknown> }[];
+}
+
+export interface SimulationResult {
+  configName: string;
+  scenarios: { input: Record<string, unknown>; expected: Record<string, unknown>; actual: Record<string, unknown>; passed: boolean }[];
+  allPassed: boolean;
+  executedAt: string;
+}
+
+// ============================================================================
+// TYPES — Core
 // ============================================================================
 
 export interface StateSnapshot {
@@ -183,7 +370,7 @@ export interface SDKStoreState {
   isTimeTraveling: boolean;
 
   // SDK Logs
-  sdkLogs: { id: string; method: string; params: any; timestamp: string }[];
+  sdkLogs: { id: string; method: string; params: any; timestamp: string; cost?: string; tokenSymbol?: string }[];
 
   // Ahoy ecosystem
   ahoyState: AhoyState;
@@ -205,13 +392,40 @@ export interface SDKStoreState {
   assetMeta: Map<string, Record<string, unknown>>;
   settlements: Map<string, SettlementEntry>;
 
+  // Portfolio (API-backed)
+  portfolio: {
+    holdings: { tokenId: string; tokenName: string; tokenSymbol: string; walletAddress: string; balance: string; lockedBalance: string }[];
+    totalPositions: number;
+    loading: boolean;
+    error: string | null;
+  };
+
   // Whitelist (new)
   whitelistedAddresses: Set<string>;
+
+  // CCID
+  ccidIdentities: Map<string, CCIDIdentity>;
+  // DECO
+  decoSessions: Map<string, DecoProofResult>;
+  // CRE
+  creWorkflows: WorkflowStatus[];
+  creExecutions: WorkflowExecution[];
+  // Amadeus
+  flightSearchResults: FlightOffer[];
+  monitoredFlights: Map<string, FlightStatusResult>;
+  // Royalty
+  royaltyConfigs: Map<string, RoyaltyConfig>;
+  royaltySettlements: RoyaltySettlementResult[];
+  // x402
+  x402PricingRules: X402PricingRule[];
+  // Simulations
+  simulationConfigs: SimulationConfig[];
+  simulationResults: Map<string, SimulationResult>;
 
   // Actions
   init: () => Promise<void>;
   logSdkCall: (method: string, params: any) => void;
-  getSdkLogs: () => { id: string; method: string; params: any; timestamp: string }[];
+  getSdkLogs: () => { id: string; method: string; params: any; timestamp: string; cost?: string; tokenSymbol?: string }[];
 
   // Asset actions
   getAssets: () => Asset[];
@@ -297,11 +511,54 @@ export interface SDKStoreState {
   isWhitelisted: (address: string) => boolean;
   triggerOracleUpdate: (assetId: string, data: Record<string, unknown>) => void;
 
+  // Portfolio
+  fetchPortfolio: (investorId: string) => Promise<void>;
+
   // Auth
   setAuthToken: (token: string) => void;
 
   // Demo
   loadDemoData: () => Promise<void>;
+
+  // CCID Actions
+  registerCCIDIdentity: (wallet: string) => CCIDIdentity;
+  checkCCIDEligibility: (wallet: string, vertical: CCIDVertical) => CCIDEligibilityResult;
+  clearCCIDVertical: (wallet: string, vertical: CCIDVertical, attestationIds: string[]) => void;
+  getCCIDIdentity: (wallet: string) => CCIDIdentity | null;
+  getAllCCIDClearances: (wallet: string) => VerticalClearance[];
+
+  // DECO Actions
+  initiateDecoProof: (request: { proofType: DecoProofType; predicate: string; threshold?: string }) => string;
+  advanceDecoSession: (sessionId: string) => DecoProofResult;
+  getDecoSession: (sessionId: string) => DecoProofResult | null;
+  getDecoHistory: () => DecoProofResult[];
+
+  // CRE Actions
+  getWorkflows: () => WorkflowStatus[];
+  executeWorkflow: (workflowName: string, input: Record<string, unknown>) => WorkflowExecution;
+  getWorkflowExecutions: (workflowName?: string) => WorkflowExecution[];
+
+  // Amadeus Actions
+  searchFlights: (params: { origin: string; dest: string; date: string; cabin?: string }) => FlightOffer[];
+  getFlightStatus: (flightNumber: string) => FlightStatusResult;
+  verifyDelayWithAI: (flightNumber: string, claimedDelay: number) => { confirmed: boolean; confidence: number };
+  triggerParametricRefund: (flightNumber: string, ticketTokenId: string) => RefundTriggerResult;
+
+  // Royalty Actions
+  getRoyaltyConfig: (tokenAddress: string) => RoyaltyConfig;
+  setRoyaltyConfig: (tokenAddress: string, config: RoyaltyConfig) => void;
+  calculateRoyaltySplit: (salePrice: number, config: RoyaltyConfig) => { artistAmount: number; promoterAmount: number; sellerProceeds: number; capped: boolean };
+  simulateRoyaltySettlement: (tokenAddress: string, seller: string, buyer: string, price: number) => RoyaltySettlementResult;
+
+  // x402 Actions
+  getOperationCost: (operation: string) => { price: string; tokenSymbol: string } | null;
+  getX402Manifest: () => X402ManifestEntry[];
+  chargeForOperation: (operation: string) => boolean;
+
+  // Simulation Actions
+  getSimulationConfigs: () => SimulationConfig[];
+  runSimulation: (configName: string) => SimulationResult;
+  runAllSimulations: () => Map<string, SimulationResult>;
 }
 
 // ============================================================================
@@ -436,6 +693,87 @@ function initDemoDrivers(): CometDriver[] {
 }
 
 // ============================================================================
+// CROSS-CUTTING FEATURE DEFAULTS
+// ============================================================================
+
+const DEFAULT_VERTICAL_REQUIREMENTS: Record<CCIDVertical, string[]> = {
+  [CCIDVertical.REAL_ESTATE]: ['KYC_VERIFIED', 'ACCREDITED_INVESTOR', 'PROOF_OF_FUNDS'],
+  [CCIDVertical.AIRLINE]: ['KYC_VERIFIED', 'PASSPORT_VERIFIED'],
+  [CCIDVertical.CAR_RENTAL]: ['KYC_VERIFIED', 'DRIVERS_LICENSE', 'INSURANCE_VERIFIED'],
+  [CCIDVertical.HOTEL]: ['KYC_VERIFIED', 'PAYMENT_VERIFIED'],
+  [CCIDVertical.CONCERT]: ['KYC_VERIFIED', 'AGE_VERIFIED'],
+};
+
+const DEFAULT_CRE_WORKFLOWS: WorkflowStatus[] = [
+  { name: 'NAV Calculation', description: 'Calculate Net Asset Value for real estate tokens', triggerType: 'cron', capabilities: ['HTTP', 'EVM'], linkedVertical: 'Real Estate', status: 'active' },
+  { name: 'Flight Status', description: 'Monitor flight status for parametric insurance', triggerType: 'http_cron', capabilities: ['HTTP', 'Cron'], linkedVertical: 'Airline', status: 'active' },
+  { name: 'Car Rental Telematics', description: 'Process telematics data from rental vehicles', triggerType: 'cron', capabilities: ['HTTP', 'EVM'], linkedVertical: 'Car Rental', status: 'active' },
+  { name: 'Hotel Check-In', description: 'Verify guest identity and activate room access', triggerType: 'http', capabilities: ['HTTP'], linkedVertical: 'Hotel', status: 'active' },
+  { name: 'Concert Royalty', description: 'Enforce royalty splits on secondary ticket sales', triggerType: 'evm_log', capabilities: ['EVM'], linkedVertical: 'Concert', status: 'active' },
+  { name: 'Price Monitor', description: 'Monitor asset prices across DEX/CEX sources', triggerType: 'evm_cron', capabilities: ['EVM', 'HTTP'], status: 'active' },
+  { name: 'Lockup Monitor', description: 'Track token lockup expiry and auto-release', triggerType: 'evm_cron', capabilities: ['EVM', 'Cron'], status: 'active' },
+  { name: 'Utilization Oracle', description: 'Calculate platform utilization metrics', triggerType: 'cron', capabilities: ['HTTP'], status: 'active' },
+  { name: 'Travel Shield Monitor', description: 'Monitor travel disruption events for insurance', triggerType: 'http_cron', capabilities: ['HTTP', 'Cron'], linkedVertical: 'Airline', status: 'active' },
+  { name: 'Market Settlement', description: 'Settle secondary market transactions atomically', triggerType: 'evm_log', capabilities: ['EVM'], status: 'active' },
+];
+
+const DEFAULT_X402_PRICING: X402PricingRule[] = [
+  { operation: 'createAsset', price: '1.00', tokenSymbol: 'USDC', description: 'Create a new tokenized asset' },
+  { operation: 'searchFlights', price: '0.10', tokenSymbol: 'USDC', description: 'Search Amadeus flight offers' },
+  { operation: 'getFlightStatus', price: '0.05', tokenSymbol: 'USDC', description: 'Get real-time flight status' },
+  { operation: 'initiateDecoProof', price: '0.50', tokenSymbol: 'USDC', description: 'Start a DECO privacy proof' },
+  { operation: 'executeWorkflow', price: '0.25', tokenSymbol: 'USDC', description: 'Execute a CRE workflow' },
+  { operation: 'checkCCIDEligibility', price: '0.05', tokenSymbol: 'USDC', description: 'Check CCID vertical eligibility' },
+  { operation: 'simulateRoyaltySettlement', price: '0.10', tokenSymbol: 'USDC', description: 'Simulate royalty settlement' },
+  { operation: 'triggerParametricRefund', price: '0.75', tokenSymbol: 'USDC', description: 'Trigger parametric refund' },
+  { operation: 'runSimulation', price: '0.15', tokenSymbol: 'USDC', description: 'Run a CRE simulation' },
+  { operation: 'verifyDelayWithAI', price: '0.20', tokenSymbol: 'USDC', description: 'AI-verify flight delay claim' },
+];
+
+const DEFAULT_SIMULATION_CONFIGS: SimulationConfig[] = [
+  {
+    name: 'NAV Calculation',
+    description: 'Simulate NAV calculation for a real estate portfolio',
+    testScenarios: [
+      { input: { propertyValue: 10000000, rentalIncome: 45000, occupancy: 0.95 }, expectedOutput: { nav: 10450000, yieldPercent: 4.5 } },
+      { input: { propertyValue: 5000000, rentalIncome: 20000, occupancy: 0.80 }, expectedOutput: { nav: 5160000, yieldPercent: 3.2 } },
+    ],
+  },
+  {
+    name: 'Flight Status',
+    description: 'Simulate flight status oracle with DON consensus',
+    testScenarios: [
+      { input: { flightNumber: 'AH702', scheduledDeparture: '2024-06-15T10:00:00Z' }, expectedOutput: { status: 'DELAYED', delayMinutes: 195, qualifiesForRefund: true } },
+      { input: { flightNumber: 'AH101', scheduledDeparture: '2024-06-15T14:00:00Z' }, expectedOutput: { status: 'SCHEDULED', delayMinutes: 0, qualifiesForRefund: false } },
+    ],
+  },
+  {
+    name: 'Car Rental Telematics',
+    description: 'Simulate telematics data processing for rental vehicle',
+    testScenarios: [
+      { input: { vehicleId: 'VH-001', mileage: 150, fuelLevel: 0.4, damageDetected: false }, expectedOutput: { depositReturn: true, fuelCharge: 0, damageCharge: 0 } },
+      { input: { vehicleId: 'VH-002', mileage: 500, fuelLevel: 0.1, damageDetected: true }, expectedOutput: { depositReturn: false, fuelCharge: 45, damageCharge: 500 } },
+    ],
+  },
+  {
+    name: 'Hotel Check-In',
+    description: 'Simulate guest identity verification and room access',
+    testScenarios: [
+      { input: { guestId: 'G-001', bookingRef: 'BK-123', idVerified: true }, expectedOutput: { checkInApproved: true, roomAccess: 'granted', keyIssued: true } },
+      { input: { guestId: 'G-002', bookingRef: 'BK-456', idVerified: false }, expectedOutput: { checkInApproved: false, roomAccess: 'denied', keyIssued: false } },
+    ],
+  },
+  {
+    name: 'Concert Royalty',
+    description: 'Simulate royalty enforcement on secondary ticket sale',
+    testScenarios: [
+      { input: { salePrice: 500, artistBps: 500, promoterBps: 300 }, expectedOutput: { artistAmount: 25, promoterAmount: 15, sellerProceeds: 460, capped: false } },
+      { input: { salePrice: 2000, artistBps: 500, promoterBps: 300, royaltyCap: 100 }, expectedOutput: { artistAmount: 62.5, promoterAmount: 37.5, sellerProceeds: 1900, capped: true } },
+    ],
+  },
+];
+
+// ============================================================================
 // CREATE SDK INSTANCE
 // ============================================================================
 
@@ -556,6 +894,9 @@ export const useSDKStore = create<SDKStoreState>()(
         serviceCredits: savedCredits ?? { userId: 'demo-user-1', balance: 0, purchasedAt: '', creditsUsed: [] },
         serviceRedemptions: savedRedemptions,
 
+        // Portfolio
+        portfolio: { holdings: [], totalPositions: 0, loading: false, error: null },
+
         // Showcase data
         wallets: new Map(),
         offerings: new Map(),
@@ -565,6 +906,19 @@ export const useSDKStore = create<SDKStoreState>()(
 
         // Whitelist
         whitelistedAddresses: new Set(),
+
+        // Cross-Cutting Features
+        ccidIdentities: new Map(),
+        decoSessions: new Map(),
+        creWorkflows: [...DEFAULT_CRE_WORKFLOWS],
+        creExecutions: [],
+        flightSearchResults: [],
+        monitoredFlights: new Map(),
+        royaltyConfigs: new Map(),
+        royaltySettlements: [],
+        x402PricingRules: [...DEFAULT_X402_PRICING],
+        simulationConfigs: [...DEFAULT_SIMULATION_CONFIGS],
+        simulationResults: new Map(),
 
         // ================================================================
         // ACTIONS
@@ -588,12 +942,13 @@ export const useSDKStore = create<SDKStoreState>()(
         },
 
         logSdkCall: (method, params) => {
-          const log = { id: uuidv4(), method, params, timestamp: new Date().toISOString() };
+          const cost = get().getOperationCost(method);
+          const log = { id: uuidv4(), method, params, timestamp: new Date().toISOString(), ...(cost ? { cost: cost.price, tokenSymbol: cost.tokenSymbol } : {}) };
           set(s => {
             const logs = [log, ...s.sdkLogs];
             return { sdkLogs: logs.length > 20 ? logs.slice(0, 20) : logs };
           });
-          notifyWithSnapshot('SDK_LOG', { method, params });
+          notifyWithSnapshot('SDK_LOG', { method, params, cost: cost?.price });
         },
 
         getSdkLogs: () => [...get().sdkLogs],
@@ -1104,6 +1459,33 @@ export const useSDKStore = create<SDKStoreState>()(
           notifyWithSnapshot('ORACLE_UPDATE', { assetId, ...data });
         },
 
+        // Portfolio
+        fetchPortfolio: async (investorId) => {
+          if (!config.useApiBackend) {
+            console.log('[SDK Store] Portfolio fetch skipped — API backend disabled');
+            return;
+          }
+          set(s => ({ portfolio: { ...s.portfolio, loading: true, error: null } }));
+          try {
+            const res = await fetch(`${config.apiUrl}/ledger/portfolio/${encodeURIComponent(investorId)}`);
+            if (!res.ok) throw new Error(`Portfolio fetch failed: ${res.status}`);
+            const data = await res.json();
+            set({
+              portfolio: {
+                holdings: data.holdings ?? [],
+                totalPositions: data.totalPositions ?? 0,
+                loading: false,
+                error: null,
+              },
+            });
+            notifyWithSnapshot('FETCH_PORTFOLIO', { investorId });
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            console.error('[SDK Store] Portfolio fetch error:', message);
+            set(s => ({ portfolio: { ...s.portfolio, loading: false, error: message } }));
+          }
+        },
+
         // Auth
         setAuthToken: (token) => {
           if (!config.useApiBackend) {
@@ -1168,6 +1550,351 @@ export const useSDKStore = create<SDKStoreState>()(
           await s.sdk.tokens.mint(realEstate.id, investor1.id, '500');
 
           notifyWithSnapshot('LOAD_DEMO_DATA');
+        },
+
+        // ================================================================
+        // CCID ACTIONS
+        // ================================================================
+
+        registerCCIDIdentity: (wallet) => {
+          const identity: CCIDIdentity = {
+            wallet,
+            registeredAt: new Date().toISOString(),
+            clearances: Object.values(CCIDVertical).map(v => ({
+              vertical: v, cleared: false, attestationIds: [],
+            })),
+            linkedWallets: [wallet],
+          };
+          const ids = new Map(get().ccidIdentities);
+          ids.set(wallet, identity);
+          set({ ccidIdentities: ids });
+          notifyWithSnapshot('CCID_REGISTER', { wallet });
+          return identity;
+        },
+
+        checkCCIDEligibility: (wallet, vertical) => {
+          const identity = get().ccidIdentities.get(wallet);
+          const required = DEFAULT_VERTICAL_REQUIREMENTS[vertical];
+          if (!identity) return { eligible: false, vertical, satisfied: [], missing: required };
+          const clearance = identity.clearances.find(c => c.vertical === vertical);
+          if (clearance?.cleared) return { eligible: true, vertical, satisfied: required, missing: [] };
+          // Simulate checking existing attestations
+          const existing = clearance?.attestationIds || [];
+          const satisfied = required.filter((_, i) => i < existing.length);
+          const missing = required.filter((_, i) => i >= existing.length);
+          notifyWithSnapshot('CCID_CHECK_ELIGIBILITY', { wallet, vertical });
+          return { eligible: missing.length === 0, vertical, satisfied, missing };
+        },
+
+        clearCCIDVertical: (wallet, vertical, attestationIds) => {
+          const ids = new Map(get().ccidIdentities);
+          const identity = ids.get(wallet);
+          if (!identity) return;
+          const updated = {
+            ...identity,
+            clearances: identity.clearances.map(c =>
+              c.vertical === vertical ? { ...c, cleared: true, attestationIds, clearedAt: new Date().toISOString() } : c
+            ),
+          };
+          ids.set(wallet, updated);
+          set({ ccidIdentities: ids });
+          notifyWithSnapshot('CCID_CLEAR_VERTICAL', { wallet, vertical });
+        },
+
+        getCCIDIdentity: (wallet) => get().ccidIdentities.get(wallet) || null,
+
+        getAllCCIDClearances: (wallet) => {
+          const identity = get().ccidIdentities.get(wallet);
+          return identity?.clearances || [];
+        },
+
+        // ================================================================
+        // DECO ACTIONS
+        // ================================================================
+
+        initiateDecoProof: (request) => {
+          const sessionId = `deco-${uuidv4().slice(0, 8)}`;
+          const session: DecoProofResult = {
+            sessionId,
+            proofType: request.proofType,
+            predicate: request.predicate,
+            threshold: request.threshold,
+            status: DecoSessionStatus.PENDING,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          const sessions = new Map(get().decoSessions);
+          sessions.set(sessionId, session);
+          set({ decoSessions: sessions });
+          notifyWithSnapshot('DECO_INITIATE', { sessionId, proofType: request.proofType });
+          return sessionId;
+        },
+
+        advanceDecoSession: (sessionId) => {
+          const sessions = new Map(get().decoSessions);
+          const session = sessions.get(sessionId);
+          if (!session) return { sessionId, proofType: DecoProofType.BALANCE_THRESHOLD, predicate: '', status: DecoSessionStatus.FAILED, createdAt: '', updatedAt: '' };
+          const statusFlow: Record<string, DecoSessionStatus> = {
+            [DecoSessionStatus.PENDING]: DecoSessionStatus.ATTESTING,
+            [DecoSessionStatus.ATTESTING]: DecoSessionStatus.PROVING,
+            [DecoSessionStatus.PROVING]: DecoSessionStatus.VERIFIED,
+          };
+          const nextStatus = statusFlow[session.status] || session.status;
+          const updated: DecoProofResult = {
+            ...session,
+            status: nextStatus,
+            updatedAt: new Date().toISOString(),
+            ...(nextStatus === DecoSessionStatus.VERIFIED ? {
+              proofHash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+              validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            } : {}),
+          };
+          sessions.set(sessionId, updated);
+          set({ decoSessions: sessions });
+          notifyWithSnapshot('DECO_ADVANCE', { sessionId, status: nextStatus });
+          return updated;
+        },
+
+        getDecoSession: (sessionId) => get().decoSessions.get(sessionId) || null,
+
+        getDecoHistory: () => Array.from(get().decoSessions.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+
+        // ================================================================
+        // CRE ACTIONS
+        // ================================================================
+
+        getWorkflows: () => [...get().creWorkflows],
+
+        executeWorkflow: (workflowName, input) => {
+          const execution: WorkflowExecution = {
+            id: `exec-${uuidv4().slice(0, 8)}`,
+            workflowName,
+            triggeredAt: new Date().toISOString(),
+            steps: [
+              { name: 'Trigger Received', status: 'done' },
+              { name: 'Data Fetch', status: 'done', detail: 'HTTP sources queried' },
+              { name: 'DON Consensus', status: 'done', detail: '3/5 nodes agreed' },
+              { name: 'On-Chain Action', status: 'done', detail: 'Transaction submitted' },
+              { name: 'Callback', status: 'done', detail: 'Consumer notified' },
+            ],
+            result: { success: true, input, consensus: '3/5', gasUsed: '142,500' },
+            completedAt: new Date().toISOString(),
+          };
+          const executions = [execution, ...get().creExecutions].slice(0, 50);
+          // Update last execution on workflow
+          const workflows = get().creWorkflows.map(w =>
+            w.name === workflowName ? { ...w, lastExecution: execution.completedAt } : w
+          );
+          set({ creExecutions: executions, creWorkflows: workflows });
+          notifyWithSnapshot('CRE_EXECUTE', { workflowName });
+          return execution;
+        },
+
+        getWorkflowExecutions: (workflowName) => {
+          const execs = get().creExecutions;
+          return workflowName ? execs.filter(e => e.workflowName === workflowName) : execs;
+        },
+
+        // ================================================================
+        // AMADEUS ACTIONS
+        // ================================================================
+
+        searchFlights: (params) => {
+          const airlines = ['AH', 'EK', 'QR', 'SQ', 'BA'];
+          const offers: FlightOffer[] = Array.from({ length: 5 }, (_, i) => ({
+            id: `offer-${uuidv4().slice(0, 8)}`,
+            airline: airlines[i],
+            flightNumber: `${airlines[i]}${100 + Math.floor(Math.random() * 900)}`,
+            origin: params.origin,
+            destination: params.dest,
+            departure: `${params.date}T${String(6 + i * 3).padStart(2, '0')}:00:00Z`,
+            arrival: `${params.date}T${String(12 + i * 3).padStart(2, '0')}:30:00Z`,
+            cabin: params.cabin || 'ECONOMY',
+            price: String(250 + i * 120 + Math.floor(Math.random() * 100)),
+            currency: 'USD',
+            seatsAvailable: Math.floor(Math.random() * 20) + 1,
+          }));
+          set({ flightSearchResults: offers });
+          notifyWithSnapshot('AMADEUS_SEARCH', params);
+          return offers;
+        },
+
+        getFlightStatus: (flightNumber) => {
+          const delay = Math.random() > 0.5 ? Math.floor(Math.random() * 300) : 0;
+          const result: FlightStatusResult = {
+            flightNumber,
+            status: delay >= 180 ? 'DELAYED' : delay > 0 ? 'DELAYED' : 'SCHEDULED',
+            departure: new Date(Date.now() + 3600000).toISOString(),
+            arrival: new Date(Date.now() + 3600000 * 7).toISOString(),
+            delayMinutes: delay,
+            gate: `${String.fromCharCode(65 + Math.floor(Math.random() * 6))}${Math.floor(Math.random() * 30) + 1}`,
+            terminal: String(Math.floor(Math.random() * 4) + 1),
+            donConsensus: { agreed: 3 + Math.floor(Math.random() * 3), total: 5 },
+            qualifiesForRefund: delay >= 180,
+          };
+          const monitored = new Map(get().monitoredFlights);
+          monitored.set(flightNumber, result);
+          set({ monitoredFlights: monitored });
+          notifyWithSnapshot('AMADEUS_FLIGHT_STATUS', { flightNumber, delay });
+          return result;
+        },
+
+        verifyDelayWithAI: (flightNumber, claimedDelay) => {
+          const monitored = get().monitoredFlights.get(flightNumber);
+          const actualDelay = monitored?.delayMinutes || 0;
+          const diff = Math.abs(actualDelay - claimedDelay);
+          const confidence = Math.max(0, 100 - diff * 2);
+          const confirmed = diff <= 30 && claimedDelay >= 180;
+          notifyWithSnapshot('AMADEUS_AI_VERIFY', { flightNumber, confirmed, confidence });
+          return { confirmed, confidence };
+        },
+
+        triggerParametricRefund: (flightNumber, ticketTokenId) => {
+          const result: RefundTriggerResult = {
+            flightNumber,
+            ticketTokenId,
+            refundAmount: '250.00',
+            currency: 'USDC',
+            status: 'settled',
+            txHash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+            confidence: 95,
+          };
+          notifyWithSnapshot('AMADEUS_REFUND', { flightNumber, ticketTokenId });
+          return result;
+        },
+
+        // ================================================================
+        // ROYALTY ACTIONS
+        // ================================================================
+
+        getRoyaltyConfig: (tokenAddress) => {
+          return get().royaltyConfigs.get(tokenAddress) || {
+            artistBps: 500, promoterBps: 300,
+            artistAddress: '0xArtist...', promoterAddress: '0xPromoter...',
+            minSalePrice: 0, primarySaleExempt: true,
+          };
+        },
+
+        setRoyaltyConfig: (tokenAddress, config) => {
+          const configs = new Map(get().royaltyConfigs);
+          configs.set(tokenAddress, config);
+          set({ royaltyConfigs: configs });
+          notifyWithSnapshot('ROYALTY_SET_CONFIG', { tokenAddress });
+        },
+
+        calculateRoyaltySplit: (salePrice, config) => {
+          let artistAmount = (salePrice * config.artistBps) / 10000;
+          let promoterAmount = (salePrice * config.promoterBps) / 10000;
+          let capped = false;
+          if (config.royaltyCap && (artistAmount + promoterAmount) > config.royaltyCap) {
+            const ratio = config.artistBps / (config.artistBps + config.promoterBps);
+            artistAmount = config.royaltyCap * ratio;
+            promoterAmount = config.royaltyCap * (1 - ratio);
+            capped = true;
+          }
+          const sellerProceeds = salePrice - artistAmount - promoterAmount;
+          return {
+            artistAmount: Math.round(artistAmount * 100) / 100,
+            promoterAmount: Math.round(promoterAmount * 100) / 100,
+            sellerProceeds: Math.round(sellerProceeds * 100) / 100,
+            capped,
+          };
+        },
+
+        simulateRoyaltySettlement: (tokenAddress, seller, buyer, price) => {
+          const config = get().getRoyaltyConfig(tokenAddress);
+          const split = get().calculateRoyaltySplit(price, config);
+          const result: RoyaltySettlementResult = {
+            id: `settle-${uuidv4().slice(0, 8)}`,
+            tokenAddress, seller, buyer,
+            salePrice: price,
+            ...split,
+            settledAt: new Date().toISOString(),
+            txHash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+          };
+          set({ royaltySettlements: [result, ...get().royaltySettlements].slice(0, 50) });
+          notifyWithSnapshot('ROYALTY_SETTLEMENT', { tokenAddress, price });
+          return result;
+        },
+
+        // ================================================================
+        // x402 ACTIONS
+        // ================================================================
+
+        getOperationCost: (operation) => {
+          const rule = get().x402PricingRules.find(r => r.operation === operation);
+          return rule ? { price: rule.price, tokenSymbol: rule.tokenSymbol } : null;
+        },
+
+        getX402Manifest: () => get().x402PricingRules.map(r => ({
+          endpoint: `/v1/${r.operation}`,
+          method: 'POST',
+          price: r.price,
+          tokenSymbol: r.tokenSymbol,
+          description: r.description,
+        })),
+
+        chargeForOperation: (operation) => {
+          const cost = get().getOperationCost(operation);
+          if (!cost) return true; // free operation
+          // Simulate deducting from AHOY balance
+          const ahoy = get().ahoyState;
+          const costInAhoy = Math.round(parseFloat(cost.price) * 100);
+          if (parseInt(ahoy.balance) < costInAhoy) return false;
+          const updated = { ...ahoy, balance: String(parseInt(ahoy.balance) - costInAhoy) };
+          set({ ahoyState: updated });
+          notifyWithSnapshot('X402_CHARGE', { operation, cost: cost.price });
+          return true;
+        },
+
+        // ================================================================
+        // SIMULATION ACTIONS
+        // ================================================================
+
+        getSimulationConfigs: () => [...get().simulationConfigs],
+
+        runSimulation: (configName) => {
+          const config = get().simulationConfigs.find(c => c.name === configName);
+          if (!config) {
+            return { configName, scenarios: [], allPassed: false, executedAt: new Date().toISOString() };
+          }
+          const scenarios = config.testScenarios.map(s => {
+            // Simulate execution with slight variations
+            const actual: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(s.expectedOutput)) {
+              if (typeof value === 'number') {
+                actual[key] = value + (Math.random() > 0.9 ? Math.random() * 10 : 0);
+              } else if (typeof value === 'boolean') {
+                actual[key] = Math.random() > 0.05 ? value : !value;
+              } else {
+                actual[key] = value;
+              }
+            }
+            const passed = Object.entries(s.expectedOutput).every(([key, val]) => {
+              if (typeof val === 'number') return Math.abs((actual[key] as number) - val) < 1;
+              return actual[key] === val;
+            });
+            return { input: s.input, expected: s.expectedOutput, actual, passed };
+          });
+          const result: SimulationResult = {
+            configName,
+            scenarios,
+            allPassed: scenarios.every(s => s.passed),
+            executedAt: new Date().toISOString(),
+          };
+          const results = new Map(get().simulationResults);
+          results.set(configName, result);
+          set({ simulationResults: results });
+          notifyWithSnapshot('SIMULATION_RUN', { configName, allPassed: result.allPassed });
+          return result;
+        },
+
+        runAllSimulations: () => {
+          const results = new Map<string, SimulationResult>();
+          for (const config of get().simulationConfigs) {
+            results.set(config.name, get().runSimulation(config.name));
+          }
+          return results;
         },
       };
     }),

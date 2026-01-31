@@ -7,6 +7,7 @@
  *  - Active listings grid with royalty breakdown and Buy button
  *  - Create listing form with real-time royalty/fee calculator
  *  - Purchase flow with compliance check and confirmation modal
+ *  - CRE-enforced royalty settlement flow animation
  *  - My Listings tab with cancel option
  *  - All actions logged via sdkStore.logSdkCall()
  */
@@ -23,6 +24,8 @@ import {
   Clock,
 } from 'lucide-react';
 import { sdkStore } from '../../store';
+import { RoyaltySplitVisualizer } from '../shared/RoyaltySplitVisualizer';
+import { useSDKStore } from '../../core/store';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +56,13 @@ interface SecondaryResaleMarketProps {
   onPurchase?: (listing: ResaleListing) => void;
   onList?: (listing: ResaleListing) => void;
 }
+
+// ---------------------------------------------------------------------------
+// Constants — CRE Royalty Config
+// ---------------------------------------------------------------------------
+
+const ARTIST_BPS = 500;   // 5%
+const PROMOTER_BPS = 300;  // 3%
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,6 +158,58 @@ function StatusBadge({ status }: { status: ResaleListing['status'] }) {
   };
   const { label, cls } = map[status];
   return <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// Settlement Flow Steps
+// ---------------------------------------------------------------------------
+
+const SETTLEMENT_STEPS = [
+  'Transfer event detected by CRE',
+  'RoyaltyRegistry.getRoyaltyConfig() called',
+  'DON consensus on split amounts',
+  'Atomic settlement complete',
+];
+
+function SettlementFlowAnimation() {
+  const [visibleSteps, setVisibleSteps] = useState(0);
+
+  useEffect(() => {
+    let step = 0;
+    const interval = setInterval(() => {
+      step += 1;
+      setVisibleSteps(step);
+      if (step >= SETTLEMENT_STEPS.length) clearInterval(interval);
+    }, 600);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="p-4 bg-[#F8B032]/5 border border-[#F8B032]/20 rounded-xl space-y-2">
+      <p className="text-[11px] uppercase tracking-widest text-[#F8B032] font-medium mb-2">
+        CRE Settlement Flow
+      </p>
+      {SETTLEMENT_STEPS.map((label, i) => (
+        <div
+          key={label}
+          className={`flex items-center gap-2 p-2 rounded-lg text-xs transition-all duration-300 ${
+            i < visibleSteps
+              ? 'bg-green-500/10 border border-green-500/20'
+              : 'bg-white/5 border border-white/5 opacity-40'
+          }`}
+        >
+          {i < visibleSteps ? (
+            <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+          ) : (
+            <div className="w-3.5 h-3.5 border border-gray-600 rounded-full shrink-0" />
+          )}
+          <span className={i < visibleSteps ? 'text-green-300' : 'text-gray-500'}>
+            {label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +331,16 @@ export function SecondaryResaleMarket({
 
   const confirmPurchase = useCallback(() => {
     if (!purchaseTarget) return;
+
+    // Trigger CRE royalty settlement via store
+    const zustand = useSDKStore.getState();
+    zustand.simulateRoyaltySettlement(
+      purchaseTarget.assetId,
+      purchaseTarget.sellerId,
+      'buyer-' + Date.now(),
+      purchaseTarget.askPrice,
+    );
+
     setListings(prev =>
       prev.map(l => (l.id === purchaseTarget.id ? { ...l, status: 'sold' as const } : l)),
     );
@@ -303,6 +375,7 @@ export function SecondaryResaleMarket({
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <ArrowLeftRight className="w-5 h-5 text-blue-400" />
             Secondary Resale Market
+            <span className="px-2 py-1 bg-[#F8B032]/10 text-[#F8B032] rounded text-[10px] font-medium border border-[#F8B032]/20">CRE Enforced</span>
           </h2>
           <p className="text-sm text-gray-400 mt-1">
             {assetName} &mdash; {royaltyPercent}% royalty &middot; {platformFeePercent}% platform fee
@@ -333,6 +406,35 @@ export function SecondaryResaleMarket({
         ))}
       </div>
 
+      {/* Royalty Configuration Panel */}
+      <div className="p-4 bg-white/5 rounded-xl border border-[#F8B032]/20 space-y-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-[#F8B032]" />
+          <span className="text-[11px] uppercase tracking-widest text-[#F8B032] font-medium">
+            Royalty Configuration
+          </span>
+          <span className="px-2 py-0.5 bg-[#F8B032]/10 text-[#F8B032] rounded text-[9px] font-medium border border-[#F8B032]/20 ml-auto">
+            ON-CHAIN ENFORCED
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Artist Royalty</p>
+            <p className="text-lg font-bold text-purple-400">
+              {ARTIST_BPS} <span className="text-xs font-normal text-gray-500">BPS</span>
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">{(ARTIST_BPS / 100).toFixed(1)}% of sale price</p>
+          </div>
+          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Promoter Royalty</p>
+            <p className="text-lg font-bold text-blue-400">
+              {PROMOTER_BPS} <span className="text-xs font-normal text-gray-500">BPS</span>
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">{(PROMOTER_BPS / 100).toFixed(1)}% of sale price</p>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2">
         <button className={tabClass('market')} onClick={() => setActiveTab('market')}>
@@ -355,47 +457,56 @@ export function SecondaryResaleMarket({
           {activeListings.map(listing => (
             <div
               key={listing.id}
-              className="p-4 bg-white/5 rounded-xl border border-white/10 flex flex-col sm:flex-row sm:items-center gap-4"
+              className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3"
             >
-              {/* Seller info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-white">{listing.sellerName}</span>
-                  <StatusBadge status={listing.status} />
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                {/* Seller info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-white">{listing.sellerName}</span>
+                    <StatusBadge status={listing.status} />
+                  </div>
+                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Listed {timeAgo(listing.listedAt)}
+                  </p>
                 </div>
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Listed {timeAgo(listing.listedAt)}
-                </p>
+
+                {/* Price breakdown */}
+                <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-400">
+                  <span>
+                    <span className="text-gray-500">Ask:</span>{' '}
+                    <span className="text-white font-bold">{formatCurrency(listing.askPrice, currency)}</span>
+                  </span>
+                  <span>
+                    <span className="text-gray-500">Royalty:</span>{' '}
+                    <span className="text-yellow-400">{formatCurrency(listing.royaltyAmount, currency)}</span>
+                  </span>
+                  <span>
+                    <span className="text-gray-500">Fee:</span>{' '}
+                    <span className="text-gray-300">{formatCurrency(listing.platformFee, currency)}</span>
+                  </span>
+                  <span>
+                    <span className="text-gray-500">Net:</span>{' '}
+                    <span className="text-green-400">{formatCurrency(listing.netToSeller, currency)}</span>
+                  </span>
+                </div>
+
+                {/* Buy */}
+                <button
+                  onClick={() => openPurchaseFlow(listing)}
+                  className="shrink-0 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Buy
+                </button>
               </div>
 
-              {/* Price breakdown */}
-              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-400">
-                <span>
-                  <span className="text-gray-500">Ask:</span>{' '}
-                  <span className="text-white font-bold">{formatCurrency(listing.askPrice, currency)}</span>
-                </span>
-                <span>
-                  <span className="text-gray-500">Royalty:</span>{' '}
-                  <span className="text-yellow-400">{formatCurrency(listing.royaltyAmount, currency)}</span>
-                </span>
-                <span>
-                  <span className="text-gray-500">Fee:</span>{' '}
-                  <span className="text-gray-300">{formatCurrency(listing.platformFee, currency)}</span>
-                </span>
-                <span>
-                  <span className="text-gray-500">Net:</span>{' '}
-                  <span className="text-green-400">{formatCurrency(listing.netToSeller, currency)}</span>
-                </span>
-              </div>
-
-              {/* Buy */}
-              <button
-                onClick={() => openPurchaseFlow(listing)}
-                className="shrink-0 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                Buy
-              </button>
+              {/* Royalty Split Visualizer */}
+              <RoyaltySplitVisualizer
+                salePrice={listing.askPrice}
+                artistBps={ARTIST_BPS}
+                promoterBps={PROMOTER_BPS}
+              />
             </div>
           ))}
         </div>
@@ -529,7 +640,7 @@ export function SecondaryResaleMarket({
               <p className="text-sm text-gray-400 mt-0.5">{assetName}</p>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
               {/* Price summary */}
               <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-2">
                 {[
@@ -598,10 +709,15 @@ export function SecondaryResaleMarket({
 
               {/* Purchase complete */}
               {purchaseComplete && (
-                <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-xs text-green-400 font-medium">
-                  <CheckCircle className="w-4 h-4 shrink-0" />
-                  Purchase completed! Ownership transferred on-chain.
-                </div>
+                <>
+                  <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-xs text-green-400 font-medium">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    Purchase completed! Ownership transferred on-chain.
+                  </div>
+
+                  {/* Settlement Flow Animation */}
+                  <SettlementFlowAnimation />
+                </>
               )}
             </div>
 

@@ -1,5 +1,6 @@
 import { Plane } from 'lucide-react';
 import { sdkStore } from '../../store';
+import { useSDKStore } from '../../core/store';
 import { RightType, PartyType, PartyRole, LifecycleState, isKycVerified } from '../../types';
 import type { ShowcaseConfig } from './types';
 
@@ -17,6 +18,7 @@ export const airlineShowcase: ShowcaseConfig = {
     { id: 'flight-status', label: 'D. Flight Status Updates' },
     { id: 'refund-disruption', label: 'E. Refund & Disruption' },
     { id: 'ticket-transfer', label: 'F. Ticket Transfer' },
+    { id: 'flight-oracle', label: 'G. Flight Oracle (Amadeus)' },
   ],
   steps: [
     // =========================================================================
@@ -913,6 +915,285 @@ await client.assets.setMetadata(flight.id,
               </div>
               <div className="p-3 bg-green-500/10 rounded-lg border border-green-500/20 text-center">
                 <span className="text-sm font-bold text-green-400">Transfer Complete — Asset state: {flight?.state || '—'}</span>
+              </div>
+            </div>
+          </div>
+        );
+      },
+      completed: false,
+    },
+
+    // =========================================================================
+    // G. Flight Oracle — Amadeus (steps 19–21)
+    // =========================================================================
+    {
+      id: 19,
+      sectionId: 'flight-oracle',
+      title: 'Search Flights (Amadeus)',
+      description: 'Search for flights using Amadeus integration with DON oracle',
+      code: `const results = await amadeusPlugin.searchFlights({
+  origin: 'LHR',
+  dest: 'DXB',
+  date: '2024-06-15',
+  class: 'BUSINESS',
+});
+console.log(\`Found \${results.length} flights\`);`,
+      action: async (addLog) => {
+        const store = useSDKStore.getState();
+        const results = store.searchFlights({ origin: 'LHR', dest: 'DXB', date: '2024-06-15', class: 'BUSINESS' });
+        addLog(`✓ Amadeus DON oracle query submitted`);
+        addLog(`  Origin: LHR (London Heathrow)`);
+        addLog(`  Destination: DXB (Dubai International)`);
+        addLog(`  Date: 2024-06-15`);
+        addLog(`  Class: BUSINESS`);
+        addLog(`  ---`);
+        addLog(`  Found ${results.length} flights:`);
+        results.slice(0, 3).forEach(f => {
+          addLog(`  ${f.flightNumber}  ${f.origin}→${f.destination}  $${f.price}  ${f.cabin}`);
+        });
+        addLog(`  Oracle consensus: 5/5 DON nodes confirmed pricing`);
+        sdkStore.logSdkCall('searchFlights', { origin: 'LHR', dest: 'DXB', date: '2024-06-15', class: 'BUSINESS' });
+      },
+      render: () => {
+        const mockFlights = [
+          { flight: 'AH702', dep: '14:30', arr: '22:45', price: 1240, seats: 12 },
+          { flight: 'AH718', dep: '08:15', arr: '16:30', price: 1180, seats: 4 },
+          { flight: 'AH734', dep: '21:00', arr: '05:15', price: 980, seats: 22 },
+        ];
+        return (
+          <div className="space-y-4">
+            <div className="glass-card p-6 rounded-xl border border-sky-500/20">
+              <h3 className="text-lg font-bold text-white mb-4">Amadeus Flight Search</h3>
+              {/* Search form */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                  <p className="text-xs text-gray-500 mb-1">Origin</p>
+                  <p className="text-sm font-bold text-white">LHR — London Heathrow</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                  <p className="text-xs text-gray-500 mb-1">Destination</p>
+                  <p className="text-sm font-bold text-white">DXB — Dubai International</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                  <p className="text-xs text-gray-500 mb-1">Date</p>
+                  <p className="text-sm font-bold text-white">2024-06-15</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                  <p className="text-xs text-gray-500 mb-1">Class</p>
+                  <p className="text-sm font-bold text-sky-400">BUSINESS</p>
+                </div>
+              </div>
+              {/* Results grid */}
+              <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest mb-2">Results</p>
+              <div className="space-y-2">
+                {mockFlights.map(f => (
+                  <div key={f.flight} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-white">{f.flight}</span>
+                      <span className="text-xs text-gray-400">LHR</span>
+                      <Plane className="w-3 h-3 text-sky-400" />
+                      <span className="text-xs text-gray-400">DXB</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-gray-500">{f.dep} — {f.arr}</span>
+                      <span className="text-xs text-gray-500">{f.seats} seats</span>
+                      <span className="text-sm font-bold text-sky-400">${f.price}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center gap-2 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-xs text-green-400 font-medium">DON Oracle — 5/5 nodes confirmed pricing data</span>
+              </div>
+            </div>
+          </div>
+        );
+      },
+      completed: false,
+    },
+    {
+      id: 20,
+      sectionId: 'flight-oracle',
+      title: 'Monitor Flight Status (DON Consensus)',
+      description: 'Monitor real-time flight status with DON oracle consensus verification',
+      code: `const status = await amadeusPlugin.getFlightStatus('AH702');
+const consensus = await donOracle.verify({
+  flightNumber: 'AH702',
+  requiredNodes: 5,
+});
+console.log(status, consensus);`,
+      action: async (addLog) => {
+        const store = useSDKStore.getState();
+        const status = store.getFlightStatus('AH702');
+        addLog(`✓ DON oracle flight status query`);
+        addLog(`  Flight: ${status.flightNumber}`);
+        addLog(`  Status: ${status.status}`);
+        addLog(`  Delay: ${status.delayMinutes} minutes`);
+        addLog(`  ---`);
+        addLog(`  DON consensus round:`);
+        addLog(`    ${status.donConsensus.agreed}/${status.donConsensus.total} nodes agreed`);
+        addLog(`  Qualifies for refund: ${status.qualifiesForRefund ? 'YES' : 'NO'} (threshold: 180 min)`);
+        sdkStore.logSdkCall('getFlightStatus', { flightNumber: 'AH702' });
+      },
+      render: () => {
+        const delayMinutes = 195;
+        const qualifiesForRefund = delayMinutes >= 180;
+        const nodes = [
+          { id: 'us-east', status: 'DELAYED', delay: 195, agreed: true },
+          { id: 'eu-west', status: 'DELAYED', delay: 195, agreed: true },
+          { id: 'ap-south', status: 'DELAYED', delay: 190, agreed: true },
+          { id: 'us-west', status: 'TIMEOUT', delay: 0, agreed: false },
+          { id: 'eu-central', status: 'DELAYED', delay: 195, agreed: false },
+        ];
+        const agreedCount = nodes.filter(n => n.agreed).length;
+        return (
+          <div className="space-y-4">
+            <div className="glass-card p-6 rounded-xl border border-sky-500/20">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white">AH702 — Live Status</h3>
+                <span className="px-3 py-1 rounded-full text-xs font-bold border bg-amber-500/20 text-amber-400 border-amber-500/30">DELAYED</span>
+              </div>
+              {/* Flight number input display */}
+              <div className="bg-white/5 p-3 rounded-lg border border-white/10 mb-4">
+                <p className="text-xs text-gray-500 mb-1">Flight Number</p>
+                <p className="text-sm font-bold text-white font-mono">AH702</p>
+              </div>
+              {/* Status display */}
+              <div className="p-4 bg-amber-500/10 rounded-xl border border-amber-500/20 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Delay</p>
+                    <p className="text-2xl font-bold text-amber-400">{delayMinutes} min</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">New Departure</p>
+                    <p className="text-lg font-bold text-white">17:45</p>
+                  </div>
+                </div>
+              </div>
+              {/* DON Consensus overlay */}
+              <div className="p-4 bg-white/5 rounded-xl border border-white/10 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest">DON Consensus</p>
+                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/30">{agreedCount}/5 nodes agreed</span>
+                </div>
+                <div className="space-y-2">
+                  {nodes.map(node => (
+                    <div key={node.id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
+                      <span className="text-xs font-mono text-gray-400">{node.id}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">{node.status === 'TIMEOUT' ? 'TIMEOUT' : `${node.delay}min`}</span>
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${node.agreed ? 'bg-green-500 text-white' : 'bg-red-500/30 text-red-400'}`}>
+                          {node.agreed ? '\u2713' : '\u2717'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Refund qualification badge */}
+              {qualifiesForRefund && (
+                <div className="p-3 bg-green-500/10 rounded-lg border border-green-500/20 flex items-center gap-3">
+                  <svg className="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                  <div>
+                    <p className="text-sm font-bold text-green-400">Qualifies for Parametric Refund</p>
+                    <p className="text-xs text-gray-500">Delay of {delayMinutes} min exceeds 180 min threshold</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      },
+      completed: false,
+    },
+    {
+      id: 21,
+      sectionId: 'flight-oracle',
+      title: 'Parametric Refund Trigger',
+      description: 'Trigger automatic parametric refund based on verified DON consensus delay data',
+      code: `const refund = await parametricRefund.trigger({
+  flightNumber: 'AH702',
+  delayThreshold: 180,
+  verifiedDelay: 195,
+  passengerId: passenger.id,
+  aiVerification: true,
+});
+console.log('Refund tx:', refund.txHash);`,
+      action: async (addLog) => {
+        const store = useSDKStore.getState();
+        const aiResult = store.verifyDelayWithAI('AH702', 195);
+        addLog(`✓ Parametric refund trigger initiated`);
+        addLog(`  Flight: AH702`);
+        addLog(`  Delay threshold: 180 min`);
+        addLog(`  Verified delay: 195 min (DON consensus)`);
+        addLog(`  ---`);
+        addLog(`  AI Verification: ${aiResult.confirmed ? 'PASSED' : 'FAILED'}`);
+        addLog(`    Confidence: ${aiResult.confidence.toFixed(1)}%`);
+        const refund = store.triggerParametricRefund('AH702', 'ticket-001');
+        addLog(`  ---`);
+        addLog(`  Refund triggered on-chain`);
+        addLog(`  Tx Hash: ${refund.txHash.slice(0, 10)}...${refund.txHash.slice(-4)}`);
+        addLog(`  Amount: $${refund.refundAmount} ${refund.currency}`);
+        addLog(`  Status: ${refund.status.toUpperCase()}`);
+        sdkStore.logSdkCall('triggerParametricRefund', { flightNumber: 'AH702', ticketTokenId: 'ticket-001' });
+      },
+      render: () => {
+        const txHash = '0x8a3f7b2e1d9c4a6f0e5b3d8c7a2f1e0d9b4c6a8f3e7d2c1b0a9f8e7d6c5b4a';
+        return (
+          <div className="space-y-4">
+            <div className="glass-card p-6 rounded-xl border border-sky-500/20">
+              <h3 className="text-lg font-bold text-white mb-4">Parametric Refund</h3>
+              {/* Delay threshold */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="p-3 bg-white/5 rounded-lg border border-white/10 text-center">
+                  <p className="text-xs text-gray-500 mb-1">Delay Threshold</p>
+                  <p className="text-xl font-bold text-white">180 min</p>
+                </div>
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 text-center">
+                  <p className="text-xs text-gray-500 mb-1">Verified Delay</p>
+                  <p className="text-xl font-bold text-amber-400">195 min</p>
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="p-3 bg-sky-500/10 rounded-xl border border-sky-500/20 text-center">
+                  <svg className="w-6 h-6 text-sky-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                  <p className="text-xs font-bold text-sky-400">Verify with AI</p>
+                  <p className="text-xs text-gray-500 mt-1">Confidence: 98.7%</p>
+                </div>
+                <div className="p-3 bg-green-500/10 rounded-xl border border-green-500/20 text-center">
+                  <svg className="w-6 h-6 text-green-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  <p className="text-xs font-bold text-green-400">Trigger Refund</p>
+                  <p className="text-xs text-gray-500 mt-1">On-chain execution</p>
+                </div>
+              </div>
+              {/* Refund result */}
+              <div className="p-4 bg-green-500/10 rounded-xl border border-green-500/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center border border-green-500/30">
+                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-green-400">Refund Confirmed</p>
+                    <p className="text-xs text-gray-500">2 block confirmations</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                    <p className="text-xs text-gray-500">Amount</p>
+                    <p className="text-sm font-bold text-green-400">$850</p>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                    <p className="text-xs text-gray-500">Recipient</p>
+                    <p className="text-xs font-bold text-white">Alice Johnson</p>
+                  </div>
+                </div>
+                <div className="mt-2 bg-white/5 p-2 rounded-lg border border-white/5">
+                  <p className="text-xs text-gray-500">Tx Hash</p>
+                  <p className="text-xs font-mono text-sky-400 truncate">{txHash}</p>
+                </div>
               </div>
             </div>
           </div>
