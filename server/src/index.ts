@@ -54,6 +54,12 @@ import { transitionRouter } from './routes/transition.routes.js';
 import { oauthRouter } from './routes/oauth.routes.js';
 import { ticketRouter } from './routes/ticket.routes.js';
 import { gasRouter } from './routes/gas.routes.js';
+// Vertical routes
+import { hotelRouter } from './routes/hotel.routes.js';
+import { carRentalRouter } from './routes/car-rental.routes.js';
+import { concertRouter } from './routes/concert.routes.js';
+import { metricsRouter } from './routes/metrics.routes.js';
+import { kycWebhookRouter } from './routes/kyc-webhook.routes.js';
 // Phase 1-5: New route imports
 import { schedulerRouter } from './routes/scheduler.routes.js';
 import { navRouter } from './routes/nav.routes.js';
@@ -63,6 +69,13 @@ import { boardingPassRouter } from './routes/boarding-pass.routes.js';
 import { accreditationRouter } from './routes/accreditation.routes.js';
 import { sseRouter } from './routes/sse.routes.js';
 import { themeRouter } from './routes/theme.routes.js';
+// Hackathon Apps
+import { predictionMarketRouter } from './routes/prediction-market.routes.js';
+import { travelShieldRouter } from './routes/travel-shield.routes.js';
+import { proofOfFundsRouter } from './routes/proof-of-funds.routes.js';
+import { depinRouter } from './routes/depin.routes.js';
+import { propertyManagementRouter } from './routes/property-management.routes.js';
+import { validateChainConfig } from './config/chains.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/apiGateway.js';
@@ -162,6 +175,7 @@ app.use('/api/v1', sdkCompatRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/chains', chainRouter); // Public chain config
 app.use('/oauth', oauthRouter); // OAuth2 Authorization Server
+app.use('/api/v1/kyc-webhooks', kycWebhookRouter); // Public KYC provider webhooks
 
 // ============================================================================
 // Protected API routes with tenant context enforcement
@@ -219,6 +233,14 @@ app.use('/api/v1/transitions', apiKeyMiddleware, tenantContextMiddleware, transi
 // Airline Tickets (NFT Utility Tokens)
 app.use('/api/v1/tickets', apiKeyMiddleware, tenantContextMiddleware, ticketRouter);
 
+// Vertical NFT Tokens
+app.use('/api/v1/hotels', apiKeyMiddleware, tenantContextMiddleware, hotelRouter);
+app.use('/api/v1/car-rentals', apiKeyMiddleware, tenantContextMiddleware, carRentalRouter);
+app.use('/api/v1/concerts', apiKeyMiddleware, tenantContextMiddleware, concertRouter);
+
+// Dashboard Metrics
+app.use('/api/v1/metrics', apiKeyMiddleware, tenantContextMiddleware, metricsRouter);
+
 // NAV & Valuation (Gap 4)
 app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, navRouter);
 
@@ -240,8 +262,17 @@ app.use('/api/v1/scheduler', apiKeyMiddleware, tenantContextMiddleware, schedule
 // White-Label Theming (Gap 6)
 app.use('/api/v1/themes', apiKeyMiddleware, tenantContextMiddleware, themeRouter);
 
+// Hackathon Apps
+app.use('/api/v1/markets', apiKeyMiddleware, tenantContextMiddleware, predictionMarketRouter);
+app.use('/api/v1/policies', apiKeyMiddleware, tenantContextMiddleware, travelShieldRouter);
+app.use('/api/v1/proofs', apiKeyMiddleware, tenantContextMiddleware, proofOfFundsRouter);
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, depinRouter);
+
 // External Integrations
 app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);
+
+// Property Management (Real Estate)
+app.use('/api/v1/properties', apiKeyMiddleware, tenantContextMiddleware, propertyManagementRouter);
 app.use('/api/v1/datasources', apiKeyMiddleware, tenantContextMiddleware, datasourcesRouter);
 
 // Events (using authMiddleware for JWT-based access)
@@ -297,6 +328,9 @@ async function start() {
   try {
     // Validate environment configuration first
     validateEnvironmentOrExit();
+
+    // Validate chain RPC configuration
+    validateChainConfig();
 
     // Bootstrap the RegistryService with adapters and asset pack configurations
     await bootstrapRegistry();

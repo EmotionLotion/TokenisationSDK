@@ -26,7 +26,48 @@ export { useEscrow, type UseEscrowReturn, type EscrowData } from './useEscrow.js
 export { useInvestor, type UseInvestorReturn, type InvestorData } from './useInvestor.js';
 export { useTickets, type UseTicketsReturn, type TicketData, type BoardingPassData } from './useTickets.js';
 export { useResale, type UseResaleReturn, type ResaleListing } from './useResale.js';
-export { useDLD, type UseDLDReturn, type TitleDeedData } from './useDLD.js';
+export {
+  useDLD,
+  type UseDLDReturn,
+  type TitleDeedData,
+  type TitleStatus,
+  type PropertyType,
+  type SyncJobType,
+  type SyncJobStatus,
+  type DLDEventType,
+  type RegisterTitleInput,
+  type UpdateTitleInput,
+  type DLDEvent,
+  type IngestEventInput,
+  type SyncJob,
+  type CreateSyncJobInput,
+  type TitleClearCheck,
+  type OnChainVerificationResult,
+  type TitleFilters,
+  type EventFilters,
+  type SyncJobFilters,
+} from './useDLD.js';
+export {
+  usePropertyManagement,
+  type UsePropertyManagementReturn,
+  type PropertyUnit,
+  type AddUnitInput,
+  type UpdateUnitInput,
+  type MaintenanceRequest,
+  type CreateMaintenanceInput,
+  type UpdateMaintenanceInput,
+  type PropertyExpense,
+  type RecordExpenseInput,
+  type MaintenanceFilters,
+  type ExpenseFilters,
+  type PropertySummary,
+  type OccupancyData,
+  type UnitType,
+  type UnitStatus,
+  type MaintenancePriority,
+  type MaintenanceStatus,
+  type ExpenseCategory,
+} from './usePropertyManagement.js';
 export { useLegal, type UseLegalReturn, type SanctionsResult, type KYCStatusResult } from './useLegal.js';
 export { useWebhooks, type UseWebhooksReturn, type WebhookData, type WebhookDeliveryData } from './useWebhooks.js';
 export { useProject, type UseProjectReturn, type ProjectData } from './useProject.js';

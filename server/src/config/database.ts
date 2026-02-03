@@ -130,11 +130,36 @@ export { db, pool };
  */
 export async function rawQuery<T = any>(query: string, params: any[] = []): Promise<T[]> {
   if (DB_MODE === 'sqlite' && sqliteDb) {
-    const stmt = sqliteDb.prepare(query);
+    // Convert PostgreSQL-style placeholders ($1, $2) to SQLite-style (?)
+    const sqliteQuery = query.replace(/\$\d+/g, '?');
+    const stmt = sqliteDb.prepare(sqliteQuery);
     return stmt.all(...params) as T[];
   } else if (pool) {
     const result = await pool.query(query, params);
     return result.rows as T[];
+  }
+  throw new Error('No database connection available');
+}
+
+/**
+ * Execute raw SQL statement that doesn't return data (DDL, INSERT, UPDATE, DELETE)
+ * For CREATE TABLE, CREATE INDEX, INSERT, UPDATE, DELETE operations
+ */
+export async function execStatement(query: string, params: any[] = []): Promise<void> {
+  if (DB_MODE === 'sqlite' && sqliteDb) {
+    if (params.length === 0) {
+      // For DDL statements without parameters, use exec
+      sqliteDb.exec(query);
+    } else {
+      // Convert PostgreSQL-style placeholders ($1, $2) to SQLite-style (?)
+      const sqliteQuery = query.replace(/\$\d+/g, '?');
+      const stmt = sqliteDb.prepare(sqliteQuery);
+      stmt.run(...params);
+    }
+    return;
+  } else if (pool) {
+    await pool.query(query, params);
+    return;
   }
   throw new Error('No database connection available');
 }
@@ -445,6 +470,8 @@ export function initializeSqliteSchema(): void {
       accredited_status TEXT DEFAULT 'unknown',
       accredited_verified_at TEXT,
       accredited_expires_at TEXT,
+      sanctions_status TEXT DEFAULT 'not_screened',
+      sanctions_screened_at TEXT,
       profile TEXT DEFAULT '{}',
       metadata TEXT DEFAULT '{}',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -1573,6 +1600,326 @@ export function initializeSqliteSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_ticket_webhooks_org ON ticket_webhooks(org_id);
     CREATE INDEX IF NOT EXISTS idx_ticket_webhooks_status ON ticket_webhooks(status);
+
+    -- ====================================================================
+    -- Hotel Reservations (vertical)
+    -- ====================================================================
+    CREATE TABLE IF NOT EXISTS hotel_reservations (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      token_id TEXT,
+      chain_token_id TEXT,
+      contract_address TEXT,
+      chain_id INTEGER,
+      hotel_code TEXT NOT NULL,
+      hotel_name TEXT NOT NULL,
+      guest_name TEXT NOT NULL,
+      guest_email TEXT,
+      room_type TEXT DEFAULT 'STANDARD',
+      room_number TEXT,
+      check_in_date TEXT NOT NULL,
+      check_out_date TEXT NOT NULL,
+      night_count INTEGER,
+      rate TEXT,
+      currency TEXT DEFAULT 'USD',
+      guest_id TEXT,
+      guest_wallet TEXT,
+      confirmation_number TEXT,
+      booking_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'CREATED',
+      confirmed_at TEXT,
+      checked_in_at TEXT,
+      checked_out_at TEXT,
+      closed_at TEXT,
+      cancelled_at TEXT,
+      transferable INTEGER DEFAULT 1,
+      max_transfers INTEGER DEFAULT 2,
+      transfer_count INTEGER DEFAULT 0,
+      price_paid TEXT DEFAULT '0',
+      metadata_version INTEGER DEFAULT 1,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservations_org ON hotel_reservations(org_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservations_hotel_checkin ON hotel_reservations(hotel_code, check_in_date);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservations_status ON hotel_reservations(status);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservations_guest ON hotel_reservations(guest_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservations_wallet ON hotel_reservations(guest_wallet);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_reservations_confirmation ON hotel_reservations(org_id, confirmation_number);
+
+    CREATE TABLE IF NOT EXISTS hotel_reservation_transfers (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      reservation_id TEXT NOT NULL REFERENCES hotel_reservations(id) ON DELETE CASCADE,
+      from_wallet TEXT NOT NULL,
+      to_wallet TEXT NOT NULL,
+      from_guest_id TEXT,
+      to_guest_id TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      approved_by TEXT,
+      approved_at TEXT,
+      rejection_reason TEXT,
+      kyc_required INTEGER DEFAULT 0,
+      kyc_completed INTEGER DEFAULT 0,
+      kyc_completed_at TEXT,
+      resale_fee TEXT,
+      resale_fee_currency TEXT,
+      resale_fee_paid INTEGER DEFAULT 0,
+      idempotency_key TEXT,
+      tx_hash TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_transfers_org ON hotel_reservation_transfers(org_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_transfers_reservation ON hotel_reservation_transfers(reservation_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_transfers_status ON hotel_reservation_transfers(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_reservation_transfers_idempotency ON hotel_reservation_transfers(org_id, idempotency_key);
+
+    CREATE TABLE IF NOT EXISTS hotel_reservation_events (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      reservation_id TEXT NOT NULL REFERENCES hotel_reservations(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      actor TEXT,
+      actor_role TEXT,
+      previous_state TEXT,
+      new_state TEXT,
+      details TEXT DEFAULT '{}',
+      correlation_id TEXT,
+      tx_hash TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_events_org ON hotel_reservation_events(org_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_events_reservation ON hotel_reservation_events(reservation_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_events_type ON hotel_reservation_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_events_correlation ON hotel_reservation_events(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_hotel_reservation_events_created ON hotel_reservation_events(created_at);
+
+    -- ====================================================================
+    -- Car Rentals (vertical)
+    -- ====================================================================
+    CREATE TABLE IF NOT EXISTS car_rentals (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      token_id TEXT,
+      chain_token_id TEXT,
+      contract_address TEXT,
+      chain_id INTEGER,
+      rental_company_code TEXT NOT NULL,
+      rental_company_name TEXT NOT NULL,
+      driver_name TEXT NOT NULL,
+      vehicle_category TEXT DEFAULT 'MIDSIZE',
+      vehicle_make TEXT,
+      vehicle_model TEXT,
+      vehicle_plate TEXT,
+      pickup_date TEXT NOT NULL,
+      return_date TEXT NOT NULL,
+      pickup_location TEXT,
+      return_location TEXT,
+      daily_rate TEXT,
+      currency TEXT DEFAULT 'USD',
+      deposit_amount TEXT,
+      deposit_resolution TEXT,
+      charge_amount TEXT,
+      insurance_type TEXT,
+      insurance_provider TEXT,
+      driver_id TEXT,
+      driver_wallet TEXT,
+      confirmation_number TEXT,
+      booking_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'CREATED',
+      confirmed_at TEXT,
+      picked_up_at TEXT,
+      returned_at TEXT,
+      inspected_at TEXT,
+      closed_at TEXT,
+      cancelled_at TEXT,
+      pickup_mileage INTEGER,
+      pickup_fuel_level TEXT,
+      return_mileage INTEGER,
+      return_fuel_level TEXT,
+      damage_report TEXT DEFAULT '{}',
+      vehicle_condition TEXT DEFAULT '{}',
+      transferable INTEGER DEFAULT 1,
+      max_transfers INTEGER DEFAULT 2,
+      transfer_count INTEGER DEFAULT 0,
+      metadata_version INTEGER DEFAULT 1,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_car_rentals_org ON car_rentals(org_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rentals_company_pickup ON car_rentals(rental_company_code, pickup_date);
+    CREATE INDEX IF NOT EXISTS idx_car_rentals_status ON car_rentals(status);
+    CREATE INDEX IF NOT EXISTS idx_car_rentals_driver ON car_rentals(driver_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rentals_wallet ON car_rentals(driver_wallet);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_car_rentals_confirmation ON car_rentals(org_id, confirmation_number);
+
+    CREATE TABLE IF NOT EXISTS car_rental_transfers (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      rental_id TEXT NOT NULL REFERENCES car_rentals(id) ON DELETE CASCADE,
+      from_wallet TEXT NOT NULL,
+      to_wallet TEXT NOT NULL,
+      from_driver_id TEXT,
+      to_driver_id TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      approved_by TEXT,
+      approved_at TEXT,
+      rejection_reason TEXT,
+      kyc_required INTEGER DEFAULT 0,
+      kyc_completed INTEGER DEFAULT 0,
+      kyc_completed_at TEXT,
+      resale_fee TEXT,
+      resale_fee_currency TEXT,
+      resale_fee_paid INTEGER DEFAULT 0,
+      idempotency_key TEXT,
+      tx_hash TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_car_rental_transfers_org ON car_rental_transfers(org_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rental_transfers_rental ON car_rental_transfers(rental_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rental_transfers_status ON car_rental_transfers(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_car_rental_transfers_idempotency ON car_rental_transfers(org_id, idempotency_key);
+
+    CREATE TABLE IF NOT EXISTS car_rental_events (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      rental_id TEXT NOT NULL REFERENCES car_rentals(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      actor TEXT,
+      actor_role TEXT,
+      previous_state TEXT,
+      new_state TEXT,
+      details TEXT DEFAULT '{}',
+      correlation_id TEXT,
+      tx_hash TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_car_rental_events_org ON car_rental_events(org_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rental_events_rental ON car_rental_events(rental_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rental_events_type ON car_rental_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_car_rental_events_correlation ON car_rental_events(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_car_rental_events_created ON car_rental_events(created_at);
+
+    -- ====================================================================
+    -- Concert Tickets (vertical)
+    -- ====================================================================
+    CREATE TABLE IF NOT EXISTS concert_tickets (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      token_id TEXT,
+      chain_token_id TEXT,
+      contract_address TEXT,
+      chain_id INTEGER,
+      venue_code TEXT NOT NULL,
+      venue_name TEXT NOT NULL,
+      event_name TEXT NOT NULL,
+      artist TEXT,
+      event_date TEXT NOT NULL,
+      doors_open TEXT,
+      section TEXT,
+      row TEXT,
+      seat_number TEXT,
+      seating_tier TEXT DEFAULT 'GA',
+      face_value TEXT,
+      resale_price_cap TEXT,
+      currency TEXT DEFAULT 'USD',
+      fan_name TEXT,
+      fan_id TEXT,
+      fan_wallet TEXT,
+      age_verified INTEGER DEFAULT 0,
+      admitted_at TEXT,
+      confirmation_code TEXT,
+      booking_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'CREATED',
+      issued_at TEXT,
+      used_at TEXT,
+      closed_at TEXT,
+      cancelled_at TEXT,
+      refunded_at TEXT,
+      transferable INTEGER DEFAULT 1,
+      max_transfers INTEGER DEFAULT 3,
+      transfer_count INTEGER DEFAULT 0,
+      metadata_version INTEGER DEFAULT 1,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concert_tickets_org ON concert_tickets(org_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_tickets_venue_date ON concert_tickets(venue_code, event_date);
+    CREATE INDEX IF NOT EXISTS idx_concert_tickets_status ON concert_tickets(status);
+    CREATE INDEX IF NOT EXISTS idx_concert_tickets_fan ON concert_tickets(fan_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_tickets_wallet ON concert_tickets(fan_wallet);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_concert_tickets_confirmation ON concert_tickets(org_id, confirmation_code);
+
+    CREATE TABLE IF NOT EXISTS concert_ticket_transfers (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      concert_ticket_id TEXT NOT NULL REFERENCES concert_tickets(id) ON DELETE CASCADE,
+      from_wallet TEXT NOT NULL,
+      to_wallet TEXT NOT NULL,
+      from_fan_id TEXT,
+      to_fan_id TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      approved_by TEXT,
+      approved_at TEXT,
+      rejection_reason TEXT,
+      kyc_required INTEGER DEFAULT 0,
+      kyc_completed INTEGER DEFAULT 0,
+      kyc_completed_at TEXT,
+      resale_price TEXT,
+      resale_fee TEXT,
+      resale_fee_currency TEXT,
+      resale_fee_paid INTEGER DEFAULT 0,
+      idempotency_key TEXT,
+      tx_hash TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_transfers_org ON concert_ticket_transfers(org_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_transfers_ticket ON concert_ticket_transfers(concert_ticket_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_transfers_status ON concert_ticket_transfers(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_concert_ticket_transfers_idempotency ON concert_ticket_transfers(org_id, idempotency_key);
+
+    CREATE TABLE IF NOT EXISTS concert_ticket_events (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      concert_ticket_id TEXT NOT NULL REFERENCES concert_tickets(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      actor TEXT,
+      actor_role TEXT,
+      previous_state TEXT,
+      new_state TEXT,
+      details TEXT DEFAULT '{}',
+      correlation_id TEXT,
+      tx_hash TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_events_org ON concert_ticket_events(org_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_events_ticket ON concert_ticket_events(concert_ticket_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_events_type ON concert_ticket_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_events_correlation ON concert_ticket_events(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_concert_ticket_events_created ON concert_ticket_events(created_at);
+
+    -- ====================================================================
+    -- Dashboard Metrics
+    -- ====================================================================
+    CREATE TABLE IF NOT EXISTS dashboard_metrics (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      metric_name TEXT NOT NULL,
+      metric_value TEXT NOT NULL,
+      metric_date TEXT NOT NULL,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_dashboard_metrics_unique ON dashboard_metrics(org_id, metric_name, metric_date);
   `);
 
   // ========================================================================
