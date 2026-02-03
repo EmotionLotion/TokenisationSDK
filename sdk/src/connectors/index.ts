@@ -9,3 +9,6 @@ export * from './walletpass/index.js';
 
 // Document Signing (DocuSign, etc.)
 export * from './signing/index.js';
+
+// PSS/NDC/DCS (Airline Distribution Systems)
+export * from './pss/index.js';
