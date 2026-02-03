@@ -1,91 +1,45 @@
 import { useState } from 'react';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { AssetDetail } from './components/AssetDetail';
-import { PartyManager } from './components/PartyManager';
-import { DemoWizard } from './components/DemoWizard';
-import { InstitutionalDemo } from './components/InstitutionalDemo';
-import { AhoyDashboard } from './components/AhoyDashboard';
-import { PolicyStudio } from './components/PolicyStudio';
-import { IdentitiesPage } from './components/IdentitiesPage';
-import { TransactionsPage } from './components/TransactionsPage';
-import { OraclesPage } from './components/OraclesPage';
-import { PayoutsPage } from './components/PayoutsPage';
-import { DevelopersPage } from './components/DevelopersPage';
-import { UIKitDemo } from './pages/UIKitDemo';
-import { sdkStore } from './store';
-import type { Asset } from './types';
+import { SDKLayout } from './components/SDKLayout';
+import { SDKUseCasesHome } from './components/SDKUseCasesHome';
+import { ShowcaseRunner } from './components/ShowcaseRunner';
+import { realEstateShowcase } from './components/showcases/real-estate';
+import { airlineShowcase } from './components/showcases/airline';
+import { carRentalShowcase } from './components/showcases/car-rental';
+import { hotelShowcase } from './components/showcases/hotel';
+import { concertShowcase } from './components/showcases/concert';
+import type { ShowcaseConfig } from './components/showcases/types';
 
-// Tab type definition - matches Layout.tsx navigation
-type Tab = 'dashboard' | 'ahoy' | 'parties' | 'demo' | 'institutional' | 'policies' | 'settings' | 'identities' | 'transactions' | 'oracles' | 'payouts' | 'developers' | 'uikit';
+// SDK Use Case tabs
+type SDKTab = 'home' | 'real-estate' | 'airline' | 'car-rental' | 'hotel' | 'concert';
+
+const showcaseMap: Record<string, ShowcaseConfig> = {
+  'real-estate': realEstateShowcase,
+  'airline': airlineShowcase,
+  'car-rental': carRentalShowcase,
+  'hotel': hotelShowcase,
+  'concert': concertShowcase,
+};
 
 function App() {
-  const [activeTab, setActiveTab] = useState<string>('ahoy');
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [activeTab, setActiveTab] = useState<SDKTab>('home');
 
-  // Determine what to render based on activeTab
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        if (selectedAsset) {
-          return (
-            <AssetDetail
-              asset={selectedAsset}
-              onBack={() => setSelectedAsset(null)}
-            />
-          );
-        }
-        return <Dashboard onSelectAsset={setSelectedAsset} />;
-
-      case 'ahoy':
-        return <AhoyDashboard />;
-
-      case 'parties':
-        return <PartyManager />;
-
-      case 'policies':
-        return <PolicyStudio />;
-
-      case 'identities':
-        return <IdentitiesPage />;
-
-      case 'transactions':
-        return <TransactionsPage />;
-
-      case 'oracles':
-        return <OraclesPage />;
-
-      case 'payouts':
-        return <PayoutsPage />;
-
-      case 'developers':
-        return <DevelopersPage />;
-
-      case 'uikit':
-        return <UIKitDemo />;
-
-      case 'demo':
-        return <DemoWizard />;
-
-      case 'institutional':
-        return <InstitutionalDemo />;
-
-      case 'settings':
-        return (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            <p>Settings coming soon...</p>
-          </div>
-        );
-
-      default:
-        return <Dashboard onSelectAsset={setSelectedAsset} />;
+    if (activeTab === 'home') {
+      return <SDKUseCasesHome onSelectUseCase={(id) => setActiveTab(id as SDKTab)} />;
     }
+
+    const showcase = showcaseMap[activeTab];
+    if (showcase) {
+      return <ShowcaseRunner showcase={showcase} onBack={() => setActiveTab('home')} />;
+    }
+
+    return <SDKUseCasesHome onSelectUseCase={(id) => setActiveTab(id as SDKTab)} />;
   };
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+    <SDKLayout activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab as SDKTab)}>
       {renderContent()}
-    </Layout>
+    </SDKLayout>
   );
 }
 

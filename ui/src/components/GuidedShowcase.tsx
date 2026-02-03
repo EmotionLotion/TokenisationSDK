@@ -8,7 +8,6 @@ import {
 import { CodePanel } from './CodePanel';
 import { ProgressStepper } from './blueprints/ProgressStepper';
 import { realEstateShowcase } from './showcases/real-estate';
-import { realEstateLifecycleShowcase } from './showcases/real-estate-lifecycle';
 import { airlineShowcase } from './showcases/airline';
 import { carRentalShowcase } from './showcases/car-rental';
 import { hotelShowcase } from './showcases/hotel';
@@ -19,7 +18,6 @@ type SpeedSetting = 'slow' | 'normal' | 'fast';
 type ShowcaseState = 'intro' | 'running' | 'paused' | 'completed';
 
 const SHOWCASES: ShowcaseConfig[] = [
-  realEstateLifecycleShowcase,  // Full lifecycle demo (primary)
   realEstateShowcase,
   airlineShowcase,
   carRentalShowcase,
