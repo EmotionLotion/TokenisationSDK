@@ -2,61 +2,48 @@ import { Link } from 'react-router-dom';
 import {
     BarChart3, Zap, CheckCircle, Clock, Webhook,
     Key, Terminal, Shield, ArrowRight, ToggleLeft, ToggleRight,
-    DollarSign, Globe, Play, Loader2
+    DollarSign, Globe, Play, Loader2, RefreshCw, AlertTriangle
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Breadcrumb } from '../../components/shared/Breadcrumb';
 import { StatsRow, type StatCard } from '../../components/shared/StatsRow';
 import { useSDKStore } from '../../core/store';
 
-const STATS: StatCard[] = [
-    {
-        label: 'API Requests (24h)',
-        value: '124.5K',
-        change: '+12% from yesterday',
-        changeColor: 'text-green-400',
-        icon: Zap,
-        iconColor: 'text-[#F8B032]',
-    },
-    {
-        label: 'Success Rate',
-        value: '99.7%',
-        change: 'Last 7 days',
-        changeColor: 'text-gray-500',
-        icon: CheckCircle,
-        iconColor: 'text-green-400',
-    },
-    {
-        label: 'Avg Latency',
-        value: '142ms',
-        change: 'P95: 312ms',
-        changeColor: 'text-gray-500',
-        icon: Clock,
-        iconColor: 'text-blue-400',
-    },
-    {
-        label: 'Active Webhooks',
-        value: '3',
-        change: '1 failing',
-        changeColor: 'text-yellow-400',
-        icon: Webhook,
-        iconColor: 'text-purple-400',
-    },
-];
+// Storage keys (same as integration pages)
+const LOGS_STORAGE_KEY = 'tokenisation_api_logs';
+const WEBHOOKS_STORAGE_KEY = 'tokenisation_webhooks';
+const API_KEYS_STORAGE_KEY = 'tokenisation_api_keys';
+
+interface ApiLog {
+    id: string;
+    timestamp: string;
+    method: string;
+    endpoint: string;
+    statusCode: number;
+    duration: string;
+    requestId: string;
+}
+
+interface WebhookConfig {
+    id: string;
+    url: string;
+    events: string[];
+    enabled: boolean;
+    status: 'active' | 'failing';
+}
+
+interface ApiKey {
+    id: string;
+    name: string;
+    type: 'secret' | 'publishable' | 'restricted';
+    lastUsed: string | null;
+}
 
 const QUICK_ACTIONS = [
     { label: 'API Keys', description: 'Manage authentication keys', icon: Key, path: '/integrate/keys', color: 'text-[#F8B032]' },
     { label: 'Webhooks', description: 'Configure event endpoints', icon: Webhook, path: '/integrate/webhooks', color: 'text-purple-400' },
     { label: 'Logs & Monitoring', description: 'View API request logs', icon: Terminal, path: '/integrate/logs', color: 'text-blue-400' },
     { label: 'Partner Admin', description: 'Manage partner approvals', icon: Shield, path: '/integrate/partner', color: 'text-emerald-400' },
-];
-
-const RECENT_ACTIVITY = [
-    { method: 'POST', endpoint: '/v1/assets', status: 201, time: '2 min ago' },
-    { method: 'GET', endpoint: '/v1/identities/id_789', status: 200, time: '4 min ago' },
-    { method: 'POST', endpoint: '/v1/transfers', status: 400, time: '5 min ago' },
-    { method: 'POST', endpoint: '/v1/policies/validate', status: 200, time: '6 min ago' },
-    { method: 'GET', endpoint: '/v1/assets', status: 200, time: '7 min ago' },
 ];
 
 const PAYMENT_FLOW_STEPS = [
@@ -72,8 +59,117 @@ export function IntegrationOverviewPage() {
     const [environment, setEnvironment] = useState<'sandbox' | 'production'>('sandbox');
     const [simulatingAgent, setSimulatingAgent] = useState(false);
     const [agentStep, setAgentStep] = useState(-1);
+    const [logs, setLogs] = useState<ApiLog[]>([]);
+    const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+    const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
     const store = useSDKStore();
     const manifest = store.getX402Manifest();
+
+    // Load data from localStorage
+    const loadData = () => {
+        try {
+            const storedLogs = localStorage.getItem(LOGS_STORAGE_KEY);
+            if (storedLogs) setLogs(JSON.parse(storedLogs));
+
+            const storedWebhooks = localStorage.getItem(WEBHOOKS_STORAGE_KEY);
+            if (storedWebhooks) setWebhooks(JSON.parse(storedWebhooks));
+
+            const storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY);
+            if (storedKeys) setApiKeys(JSON.parse(storedKeys));
+        } catch (e) {
+            console.error('Failed to load integration data:', e);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+        // Set up interval to refresh data
+        const interval = setInterval(loadData, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleRefresh = () => {
+        setIsRefreshing(true);
+        loadData();
+        setTimeout(() => setIsRefreshing(false), 500);
+    };
+
+    // Calculate dynamic stats
+    const stats = useMemo((): StatCard[] => {
+        // Filter logs from last 24 hours
+        const now = Date.now();
+        const dayAgo = now - 24 * 60 * 60 * 1000;
+        const recentLogs = logs.filter(log => new Date(log.timestamp).getTime() > dayAgo);
+
+        const totalRequests = recentLogs.length;
+        const successfulRequests = recentLogs.filter(l => l.statusCode >= 200 && l.statusCode < 300).length;
+        const successRate = totalRequests > 0 ? ((successfulRequests / totalRequests) * 100).toFixed(1) : '100.0';
+
+        const avgLatency = recentLogs.length > 0
+            ? Math.round(recentLogs.reduce((sum, l) => sum + parseInt(l.duration || '0'), 0) / recentLogs.length)
+            : 0;
+
+        const activeWebhooks = webhooks.filter(w => w.enabled).length;
+        const failingWebhooks = webhooks.filter(w => w.status === 'failing').length;
+
+        return [
+            {
+                label: 'API Requests (24h)',
+                value: totalRequests > 1000 ? `${(totalRequests / 1000).toFixed(1)}K` : String(totalRequests),
+                change: totalRequests > 0 ? `${successfulRequests} successful` : 'No requests yet',
+                changeColor: totalRequests > 0 ? 'text-green-400' : 'text-gray-500',
+                icon: Zap,
+                iconColor: 'text-[#F8B032]',
+            },
+            {
+                label: 'Success Rate',
+                value: `${successRate}%`,
+                change: 'Last 24 hours',
+                changeColor: 'text-gray-500',
+                icon: CheckCircle,
+                iconColor: parseFloat(successRate) >= 99 ? 'text-green-400' : parseFloat(successRate) >= 95 ? 'text-yellow-400' : 'text-red-400',
+            },
+            {
+                label: 'Avg Latency',
+                value: `${avgLatency}ms`,
+                change: recentLogs.length > 0 ? `${recentLogs.length} requests` : 'No data',
+                changeColor: 'text-gray-500',
+                icon: Clock,
+                iconColor: avgLatency < 200 ? 'text-green-400' : avgLatency < 500 ? 'text-yellow-400' : 'text-red-400',
+            },
+            {
+                label: 'Active Webhooks',
+                value: String(activeWebhooks),
+                change: failingWebhooks > 0 ? `${failingWebhooks} failing` : 'All healthy',
+                changeColor: failingWebhooks > 0 ? 'text-yellow-400' : 'text-green-400',
+                icon: Webhook,
+                iconColor: 'text-purple-400',
+            },
+        ];
+    }, [logs, webhooks]);
+
+    // Get recent activity from logs
+    const recentActivity = useMemo(() => {
+        return logs.slice(0, 5).map(log => {
+            const time = new Date(log.timestamp);
+            const now = new Date();
+            const diffMs = now.getTime() - time.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            const timeAgo = diffMins < 1 ? 'just now'
+                : diffMins < 60 ? `${diffMins} min ago`
+                : diffMins < 1440 ? `${Math.floor(diffMins / 60)} hr ago`
+                : `${Math.floor(diffMins / 1440)} days ago`;
+
+            return {
+                method: log.method,
+                endpoint: log.endpoint,
+                status: log.statusCode,
+                time: timeAgo,
+            };
+        });
+    }, [logs]);
 
     const simulateAgentCall = () => {
         setSimulatingAgent(true);
@@ -106,10 +202,18 @@ export function IntegrationOverviewPage() {
                     </h1>
                     <p className="text-gray-400 mt-1">Monitor your integration health and manage configuration.</p>
                 </div>
+                <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-300 hover:bg-white/10 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                </button>
             </div>
 
             {/* Stats Row */}
-            <StatsRow stats={STATS} />
+            <StatsRow stats={stats} />
 
             {/* Environment Switcher */}
             <div className="glass-card p-4 flex items-center justify-between">
@@ -137,6 +241,40 @@ export function IntegrationOverviewPage() {
                         </>
                     )}
                 </button>
+            </div>
+
+            {/* Quick Stats Cards */}
+            <div className="grid grid-cols-3 gap-4">
+                <div className="glass-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">API Keys</span>
+                        <Key className="w-4 h-4 text-[#F8B032]" />
+                    </div>
+                    <div className="text-2xl font-bold text-white">{apiKeys.length}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                        {apiKeys.filter(k => k.type === 'secret').length} secret, {apiKeys.filter(k => k.type === 'publishable').length} publishable
+                    </div>
+                </div>
+                <div className="glass-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Webhooks</span>
+                        <Webhook className="w-4 h-4 text-purple-400" />
+                    </div>
+                    <div className="text-2xl font-bold text-white">{webhooks.length}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                        {webhooks.filter(w => w.enabled).length} enabled, {webhooks.filter(w => !w.enabled).length} disabled
+                    </div>
+                </div>
+                <div className="glass-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Total Logs</span>
+                        <Terminal className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="text-2xl font-bold text-white">{logs.length}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                        {logs.filter(l => l.statusCode >= 400).length} errors recorded
+                    </div>
+                </div>
             </div>
 
             {/* x402 Agent Payments Section */}
@@ -243,35 +381,69 @@ export function IntegrationOverviewPage() {
                         View all <ArrowRight className="w-3 h-3" />
                     </Link>
                 </div>
-                <table className="w-full">
-                    <tbody className="divide-y divide-white/5">
-                        {RECENT_ACTIVITY.map((item, index) => (
-                            <tr key={index} className="hover:bg-white/5 transition-colors">
-                                <td className="p-3 pl-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-mono font-medium ${
-                                        item.method === 'GET'
-                                            ? 'bg-blue-400/10 text-blue-400'
-                                            : 'bg-green-400/10 text-green-400'
-                                    }`}>
-                                        {item.method}
-                                    </span>
-                                </td>
-                                <td className="p-3 text-sm font-mono text-white">{item.endpoint}</td>
-                                <td className="p-3">
-                                    <span className={`px-2 py-1 rounded text-xs font-mono ${
-                                        item.status >= 200 && item.status < 300
-                                            ? 'bg-green-400/10 text-green-400'
-                                            : 'bg-yellow-400/10 text-yellow-400'
-                                    }`}>
-                                        {item.status}
-                                    </span>
-                                </td>
-                                <td className="p-3 pr-4 text-sm text-gray-500 text-right">{item.time}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                {recentActivity.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500">
+                        <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No recent activity</p>
+                        <p className="text-xs mt-1">API requests will appear here</p>
+                    </div>
+                ) : (
+                    <table className="w-full">
+                        <tbody className="divide-y divide-white/5">
+                            {recentActivity.map((item, index) => (
+                                <tr key={index} className="hover:bg-white/5 transition-colors">
+                                    <td className="p-3 pl-4">
+                                        <span className={`px-2 py-1 rounded text-xs font-mono font-medium ${
+                                            item.method === 'GET'
+                                                ? 'bg-blue-400/10 text-blue-400'
+                                                : item.method === 'POST'
+                                                ? 'bg-green-400/10 text-green-400'
+                                                : item.method === 'PUT'
+                                                ? 'bg-yellow-400/10 text-yellow-400'
+                                                : item.method === 'DELETE'
+                                                ? 'bg-red-400/10 text-red-400'
+                                                : 'bg-gray-400/10 text-gray-400'
+                                        }`}>
+                                            {item.method}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-sm font-mono text-white">{item.endpoint}</td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 rounded text-xs font-mono ${
+                                            item.status >= 200 && item.status < 300
+                                                ? 'bg-green-400/10 text-green-400'
+                                                : item.status >= 400 && item.status < 500
+                                                ? 'bg-yellow-400/10 text-yellow-400'
+                                                : 'bg-red-400/10 text-red-400'
+                                        }`}>
+                                            {item.status}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 pr-4 text-sm text-gray-500 text-right">{item.time}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </div>
+
+            {/* Health Alerts */}
+            {webhooks.some(w => w.status === 'failing') && (
+                <div className="glass-card p-4 border border-yellow-500/20 bg-yellow-500/5">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                        <div>
+                            <h4 className="font-medium text-yellow-400">Webhook Health Alert</h4>
+                            <p className="text-sm text-gray-400">
+                                {webhooks.filter(w => w.status === 'failing').length} webhook(s) are failing.
+                                <Link to="/integrate/webhooks" className="text-yellow-400 ml-1 hover:underline">
+                                    Check webhook settings
+                                </Link>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
