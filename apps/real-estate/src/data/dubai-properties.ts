@@ -43,8 +43,12 @@ export interface DubaiProperty {
   tokenPriceUSD: number;
   minInvestmentAED: number;
 
+  // Funding
+  tokensSold?: number;
+  fundingGoalAED?: number;
+
   // Status
-  status: 'sourcing' | 'due-diligence' | 'legal-structuring' | 'regulatory-approval' | 'token-issuance' | 'live' | 'distributing';
+  status: 'sourcing' | 'due-diligence' | 'legal-structuring' | 'regulatory-approval' | 'token-issuance' | 'live' | 'distributing' | 'secondary-trading' | 'frozen';
 
   // Images (placeholder URLs)
   imageUrl: string;
@@ -112,6 +116,9 @@ export const DUBAI_PROPERTIES: DubaiProperty[] = [
     tokenPriceUSD: 10.48,
     minInvestmentAED: 50000,
 
+    tokensSold: 8500000,
+    fundingGoalAED: 385000000,
+
     status: 'live',
     imageUrl: '/assets/marina-gate.jpg',
 
@@ -155,6 +162,9 @@ export const DUBAI_PROPERTIES: DubaiProperty[] = [
     tokenPriceAED: 34.67,
     tokenPriceUSD: 9.44,
     minInvestmentAED: 50000,
+
+    tokensSold: 15000000,
+    fundingGoalAED: 520000000,
 
     status: 'distributing',
     imageUrl: '/assets/downtown-views.jpg',
@@ -200,6 +210,9 @@ export const DUBAI_PROPERTIES: DubaiProperty[] = [
     tokenPriceUSD: 9.53,
     minInvestmentAED: 100000,
 
+    tokensSold: 6400000,
+    fundingGoalAED: 280000000,
+
     status: 'live',
     imageUrl: '/assets/palm-villas.jpg',
 
@@ -243,6 +256,9 @@ export const DUBAI_PROPERTIES: DubaiProperty[] = [
     tokenPriceAED: 37.08,
     tokenPriceUSD: 10.10,
     minInvestmentAED: 50000,
+
+    tokensSold: 1200000,
+    fundingGoalAED: 445000000,
 
     status: 'token-issuance',
     imageUrl: '/assets/business-bay.jpg',
@@ -288,6 +304,9 @@ export const DUBAI_PROPERTIES: DubaiProperty[] = [
     tokenPriceUSD: 8.44,
     minInvestmentAED: 100000,
 
+    tokensSold: 0,
+    fundingGoalAED: 620000000,
+
     status: 'regulatory-approval',
     imageUrl: '/assets/jbr-hotel.jpg',
 
@@ -297,6 +316,100 @@ export const DUBAI_PROPERTIES: DubaiProperty[] = [
       'International hotel operator (15-year contract)',
       '82.5% average occupancy',
       'RevPAR: AED 485 (above market average)',
+    ],
+  },
+  {
+    id: 'prop-006',
+    name: 'City Walk Retail Complex',
+    location: 'City Walk, Phase 2',
+    district: 'Al Wasl',
+    developer: 'Meraas Holding',
+    propertyType: 'commercial',
+
+    totalArea: 195000,
+    units: 120,
+    floors: 4,
+    yearBuilt: 2017,
+
+    reraPermitNo: 'RERA-2023-056789',
+    titleDeedNo: 'TD-CW-2017-00456',
+    makaniNo: '78901 67890',
+
+    valuationAED: 310000000,
+    valuationUSD: 84400000,
+    valuationDate: '2024-01-30',
+    valuedBy: 'Savills Middle East',
+
+    annualRentalIncomeAED: 26350000,
+    grossYield: 8.50,
+    netYield: 7.00,
+    occupancyRate: 91.8,
+
+    tokenSymbol: 'CWALK',
+    totalTokens: 9000000,
+    tokenPriceAED: 34.44,
+    tokenPriceUSD: 9.38,
+    minInvestmentAED: 50000,
+
+    tokensSold: 9000000,
+    fundingGoalAED: 310000000,
+
+    status: 'secondary-trading',
+    imageUrl: '/assets/city-walk.jpg',
+
+    description: 'Premium open-air retail complex in City Walk featuring luxury brands and F&B outlets. Lockup period has expired; tokens are now trading on the secondary market.',
+    highlights: [
+      'Lockup expired — secondary trading active',
+      '91.8% occupancy with premium tenants',
+      'Open-air lifestyle destination',
+      'Strong foot traffic from City Walk residents',
+    ],
+  },
+  {
+    id: 'prop-007',
+    name: 'DIFC Office Tower',
+    location: 'Dubai International Financial Centre, Gate Precinct',
+    district: 'DIFC',
+    developer: 'DIFC Authority',
+    propertyType: 'commercial',
+
+    totalArea: 275000,
+    units: 200,
+    floors: 40,
+    yearBuilt: 2012,
+
+    reraPermitNo: 'RERA-2023-078901',
+    titleDeedNo: 'TD-DIFC-2012-00789',
+    makaniNo: '89012 78901',
+
+    valuationAED: 480000000,
+    valuationUSD: 130700000,
+    valuationDate: '2024-02-05',
+    valuedBy: 'Colliers International',
+
+    annualRentalIncomeAED: 40800000,
+    grossYield: 8.50,
+    netYield: 7.15,
+    occupancyRate: 96.0,
+
+    tokenSymbol: 'DIFCT',
+    totalTokens: 14000000,
+    tokenPriceAED: 34.29,
+    tokenPriceUSD: 9.34,
+    minInvestmentAED: 100000,
+
+    tokensSold: 14000000,
+    fundingGoalAED: 480000000,
+
+    status: 'frozen',
+    imageUrl: '/assets/difc-tower.jpg',
+
+    description: 'Grade A+ office tower in DIFC Gate Precinct. Currently frozen pending compliance review by VARA due to regulatory audit. Distributions paused.',
+    highlights: [
+      'COMPLIANCE FREEZE — distributions paused',
+      '96% occupancy with financial institution tenants',
+      'DIFC Gate Precinct premium location',
+      'Expected resolution within 60 days',
     ],
   },
 ];
@@ -692,6 +805,8 @@ export function getPropertyStatusColor(status: DubaiProperty['status']): string 
     'token-issuance': 'purple',
     'live': 'green',
     'distributing': 'emerald',
+    'secondary-trading': 'teal',
+    'frozen': 'red',
   };
   return colors[status];
 }

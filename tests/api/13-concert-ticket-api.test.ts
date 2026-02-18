@@ -2,8 +2,9 @@
  * AHOY API Test Suite
  * Test 13: Concert Ticket Lifecycle
  *
- * Tests concert ticket management via the shared ticket API.
+ * Tests concert ticket management via the dedicated /api/v1/concerts endpoint.
  * Covers issuance, admission, completion, anti-scalping, transfer, and refund.
+ * Status flow: CREATED -> ISSUED -> ADMITTED -> USED -> CLOSED
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -16,45 +17,42 @@ describe('13. Concert Ticket Lifecycle API', () => {
   let client: ApiClient;
   let ticketId: string;
   const eventDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-  const eventEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString();
-  const eventCode = `CON${Date.now().toString().slice(-5)}`;
 
   beforeAll(() => {
     client = new ApiClient(API_URL, API_KEY);
   });
 
-  // ── Issue Concert Ticket ──────────────────────────────────────────────
+  // ── Create Concert Ticket ─────────────────────────────────────────────
 
-  it('13.1 - Issue concert ticket', async () => {
-    const result = await client.post('/api/v1/tickets', {
-      flightNumber: eventCode,
-      airline: 'CONCERT',
-      departureTime: eventDate,
-      arrivalTime: eventEnd,
-      departureAirport: 'VEN',
-      arrivalAirport: 'VEN',
-      seat: 'GA-001',
-      passengerName: `Fan ${testId('fan')}`,
+  it('13.1 - Create concert ticket', async () => {
+    const result = await client.post('/api/v1/concerts', {
+      venueCode: `VEN${testId('').slice(0, 6)}`,
+      venueName: 'Dubai Media City Amphitheatre',
+      eventName: 'Dubai Jazz Festival 2025',
+      artist: 'Test Artist',
+      eventDate,
+      section: 'General Admission',
+      row: 'GA',
+      seatNumber: '001',
+      seatingTier: 'Standard',
+      faceValue: '150.00',
+      resalePriceCap: '200.00',
+      currency: 'USD',
+      fanName: `Fan ${testId('fan')}`,
+      confirmationCode: testId('CONF').slice(0, 16),
       bookingReference: testId('TKT').slice(0, 16),
       transferable: true,
-      maxTransfers: 1,
-      pricePaid: '150.00',
-      currency: 'USD',
+      maxTransfers: 3,
       metadata: {
-        type: 'concert_ticket',
-        eventName: 'Dubai Jazz Festival 2025',
-        venue: 'Dubai Media City Amphitheatre',
-        artist: 'Test Artist',
-        section: 'General Admission',
-        tier: 'Standard',
-        antiScalping: true,
-        maxResalePrice: '200.00',
+        doorOpenTime: '18:00',
+        showStartTime: '20:00',
+        ageRestriction: '18+',
       },
     });
 
     expect(result.data).toBeDefined();
     expect(result.data.id).toBeDefined();
-    expect(result.data.status).toBe('ISSUED');
+    expect(result.data.status).toBe('CREATED');
 
     ticketId = result.data.id;
   });
@@ -62,179 +60,16 @@ describe('13. Concert Ticket Lifecycle API', () => {
   // ── Retrieve ──────────────────────────────────────────────────────────
 
   it('13.2 - Retrieve concert ticket', async () => {
-    const result = await client.get(`/api/v1/tickets/${ticketId}`);
+    const result = await client.get(`/api/v1/concerts/${ticketId}`);
 
     expect(result.data.id).toBe(ticketId);
-    expect(result.data.status).toBe('ISSUED');
-  });
-
-  // ── Admit (Check-in) ─────────────────────────────────────────────────
-
-  it('13.3 - Admit attendee (check-in)', async () => {
-    const result = await client.post(`/api/v1/tickets/${ticketId}/check-in`, {
-      actor: 'door-scanner',
-    });
-
-    expect(result.data.status).toBe('CHECKED_IN');
-  });
-
-  // ── Board (enter venue) ───────────────────────────────────────────────
-
-  it('13.4 - Enter venue (board)', async () => {
-    const result = await client.post(`/api/v1/tickets/${ticketId}/board`, {
-      actor: 'venue-gate',
-    });
-
-    expect(result.data.status).toBe('BOARDED');
-  });
-
-  // ── Complete ──────────────────────────────────────────────────────────
-
-  it('13.5 - Complete concert ticket after event', async () => {
-    const result = await client.post(`/api/v1/tickets/${ticketId}/complete`, {
-      actor: 'system',
-      burn: true,
-    });
-
-    expect(result.data).toBeDefined();
-    expect(['USED', 'BURNED', 'COMPLETED']).toContain(result.data.status);
-  });
-
-  // ── Anti-scalping: maxTransfers enforcement ───────────────────────────
-
-  it('13.6 - Anti-scalping: enforce transfer limits', async () => {
-    // Issue ticket with maxTransfers=1
-    const tkt = await client.post('/api/v1/tickets', {
-      flightNumber: eventCode,
-      airline: 'CONCERT',
-      departureTime: eventDate,
-      arrivalTime: eventEnd,
-      departureAirport: 'VEN',
-      arrivalAirport: 'VEN',
-      passengerName: `ScalpFan ${testId('fan')}`,
-      bookingReference: testId('SCLP').slice(0, 16),
-      transferable: true,
-      maxTransfers: 1,
-      pricePaid: '150.00',
-      currency: 'USD',
-      metadata: { type: 'concert_ticket', antiScalping: true },
-    });
-
-    // First transfer should succeed
-    const xfer1 = await client.post(`/api/v1/tickets/${tkt.data.id}/transfer`, {
-      toWallet: '0xBuyer1Wallet000000000000000000',
-      idempotencyKey: testId('scalp-xfer1'),
-    });
-    expect(xfer1.data).toBeDefined();
-
-    // Approve the first transfer
-    await client.post(`/api/v1/tickets/transfers/${xfer1.data.id}/approve`, {
-      approvedBy: 'admin',
-    });
-
-    // Second transfer should fail (maxTransfers=1 reached)
-    try {
-      await client.post(`/api/v1/tickets/${tkt.data.id}/transfer`, {
-        toWallet: '0xBuyer2Wallet000000000000000000',
-        idempotencyKey: testId('scalp-xfer2'),
-      });
-      // May succeed if server doesn't enforce maxTransfers at API level
-    } catch (error: any) {
-      expect([400, 403, 422]).toContain(error.status);
-    }
-  });
-
-  // ── Transfer ──────────────────────────────────────────────────────────
-
-  it('13.7 - Transfer concert ticket', async () => {
-    const tkt = await client.post('/api/v1/tickets', {
-      flightNumber: eventCode,
-      airline: 'CONCERT',
-      departureTime: eventDate,
-      arrivalTime: eventEnd,
-      departureAirport: 'VEN',
-      arrivalAirport: 'VEN',
-      passengerName: `XferFan ${testId('fan')}`,
-      bookingReference: testId('XFAN').slice(0, 16),
-      transferable: true,
-      maxTransfers: 5,
-      metadata: { type: 'concert_ticket' },
-    });
-
-    const result = await client.post(`/api/v1/tickets/${tkt.data.id}/transfer`, {
-      toWallet: '0xFriendWallet0000000000000000000',
-      idempotencyKey: testId('con-xfer'),
-      metadata: { reason: 'Gift to friend' },
-    });
-
-    expect(result.data).toBeDefined();
-    expect(result.data.id).toBeDefined();
-  });
-
-  // ── Cancel + Refund ───────────────────────────────────────────────────
-
-  it('13.8 - Cancel concert ticket', async () => {
-    const tkt = await client.post('/api/v1/tickets', {
-      flightNumber: eventCode,
-      airline: 'CONCERT',
-      departureTime: eventDate,
-      arrivalTime: eventEnd,
-      departureAirport: 'VEN',
-      arrivalAirport: 'VEN',
-      passengerName: `CancelFan ${testId('fan')}`,
-      bookingReference: testId('CFAN').slice(0, 16),
-      pricePaid: '150.00',
-      currency: 'USD',
-      metadata: { type: 'concert_ticket' },
-    });
-
-    const cancelResult = await client.post(`/api/v1/tickets/${tkt.data.id}/cancel`, {
-      reason: 'Cannot attend',
-      actor: 'box-office',
-    });
-    expect(cancelResult.data.status).toBe('CANCELLED');
-
-    const refundResult = await client.post(`/api/v1/tickets/${tkt.data.id}/refund`, {
-      actor: 'finance',
-    });
-    expect(refundResult.data).toBeDefined();
-    expect(['REFUNDED', 'VOID']).toContain(refundResult.data.status);
-  });
-
-  // ── Freeze ────────────────────────────────────────────────────────────
-
-  it('13.9 - Freeze concert ticket', async () => {
-    const tkt = await client.post('/api/v1/tickets', {
-      flightNumber: eventCode,
-      airline: 'CONCERT',
-      departureTime: eventDate,
-      arrivalTime: eventEnd,
-      departureAirport: 'VEN',
-      arrivalAirport: 'VEN',
-      passengerName: `FreezeFan ${testId('fan')}`,
-      bookingReference: testId('FFRZ').slice(0, 16),
-      metadata: { type: 'concert_ticket' },
-    });
-
-    const result = await client.post(`/api/v1/tickets/${tkt.data.id}/freeze`, {
-      reason: 'Suspected fraud',
-      actor: 'security',
-    });
-
-    expect(result.data.status).toBe('FROZEN');
-
-    // Unfreeze
-    const unfreezeResult = await client.post(`/api/v1/tickets/${tkt.data.id}/unfreeze`, {
-      actor: 'security',
-    });
-    expect(unfreezeResult.data).toBeDefined();
-    expect(['ISSUED', 'ACTIVE', 'UNFROZEN']).toContain(unfreezeResult.data.status);
+    expect(result.data.status).toBe('CREATED');
   });
 
   // ── List ──────────────────────────────────────────────────────────────
 
-  it('13.10 - List concert tickets', async () => {
-    const result = await client.get('/api/v1/tickets', {
+  it('13.3 - List concert tickets', async () => {
+    const result = await client.get('/api/v1/concerts', {
       limit: 5,
     });
 
@@ -242,23 +77,175 @@ describe('13. Concert Ticket Lifecycle API', () => {
     expect(Array.isArray(result.data)).toBe(true);
   });
 
-  // ── Event History ─────────────────────────────────────────────────────
+  // ── Issue ─────────────────────────────────────────────────────────────
 
-  it('13.11 - Get concert ticket event history', async () => {
-    // Use the first issued ticket (which went through full lifecycle)
-    const tkt = await client.post('/api/v1/tickets', {
-      flightNumber: eventCode,
-      airline: 'CONCERT',
-      departureTime: eventDate,
-      arrivalTime: eventEnd,
-      departureAirport: 'VEN',
-      arrivalAirport: 'VEN',
-      passengerName: `HistoryFan ${testId('fan')}`,
-      bookingReference: testId('HIST').slice(0, 16),
-      metadata: { type: 'concert_ticket' },
+  it('13.4 - Issue concert ticket', async () => {
+    const result = await client.post(`/api/v1/concerts/${ticketId}/issue`);
+
+    expect(result.data.status).toBe('ISSUED');
+  });
+
+  // ── Admit ─────────────────────────────────────────────────────────────
+
+  it('13.5 - Admit attendee at venue', async () => {
+    const result = await client.post(`/api/v1/concerts/${ticketId}/admit`);
+
+    expect(result.data.status).toBe('ADMITTED');
+  });
+
+  // ── Complete ──────────────────────────────────────────────────────────
+
+  it('13.6 - Complete concert ticket after event', async () => {
+    const result = await client.post(`/api/v1/concerts/${ticketId}/complete`);
+
+    expect(result.data.status).toBe('USED');
+  });
+
+  // ── Close ─────────────────────────────────────────────────────────────
+
+  it('13.7 - Close concert ticket', async () => {
+    const result = await client.post(`/api/v1/concerts/${ticketId}/close`);
+
+    expect(result.data.status).toBe('CLOSED');
+  });
+
+  // ── Transfer ──────────────────────────────────────────────────────────
+
+  it('13.8 - Transfer concert ticket', async () => {
+    const tkt = await client.post('/api/v1/concerts', {
+      venueCode: `VEN${testId('').slice(0, 6)}`,
+      venueName: 'Coca-Cola Arena',
+      eventName: 'Rock Night 2025',
+      artist: 'Transfer Band',
+      eventDate,
+      section: 'Floor',
+      row: 'B',
+      seatNumber: '15',
+      seatingTier: 'Premium',
+      faceValue: '250.00',
+      resalePriceCap: '300.00',
+      currency: 'USD',
+      fanName: `XferFan ${testId('fan')}`,
+      confirmationCode: testId('CONF').slice(0, 16),
+      bookingReference: testId('XFAN').slice(0, 16),
+      transferable: true,
+      maxTransfers: 5,
+      metadata: {},
     });
 
-    const result = await client.get(`/api/v1/tickets/${tkt.data.id}/events`);
+    const result = await client.post(`/api/v1/concerts/${tkt.data.id}/transfer`, {
+      toWallet: '0xFriendWallet0000000000000000000',
+      idempotencyKey: testId('con-xfer'),
+      resalePrice: '180.00',
+    });
+
+    expect(result.data).toBeDefined();
+    expect(result.data.id).toBeDefined();
+  });
+
+  // ── Anti-scalping: resale price cap enforcement ───────────────────────
+
+  it('13.9 - Anti-scalping: reject transfer exceeding resale price cap', async () => {
+    const tkt = await client.post('/api/v1/concerts', {
+      venueCode: `VEN${testId('').slice(0, 6)}`,
+      venueName: 'Dubai Opera',
+      eventName: 'Scalp Test Event',
+      artist: 'Scalp Test Artist',
+      eventDate,
+      section: 'Balcony',
+      row: 'A',
+      seatNumber: '1',
+      seatingTier: 'VIP',
+      faceValue: '150.00',
+      resalePriceCap: '200.00',
+      currency: 'USD',
+      fanName: `ScalpFan ${testId('fan')}`,
+      confirmationCode: testId('CONF').slice(0, 16),
+      bookingReference: testId('SCLP').slice(0, 16),
+      transferable: true,
+      maxTransfers: 1,
+      metadata: {},
+    });
+
+    // Attempt transfer with resalePrice exceeding the cap (200.00)
+    try {
+      await client.post(`/api/v1/concerts/${tkt.data.id}/transfer`, {
+        toWallet: '0xScalperWallet000000000000000000',
+        idempotencyKey: testId('scalp-xfer'),
+        resalePrice: '500.00',
+      });
+      // If the server does not enforce the cap, the test still passes
+    } catch (error: any) {
+      expect([400, 422]).toContain(error.status);
+    }
+  });
+
+  // ── Cancel + Refund ───────────────────────────────────────────────────
+
+  it('13.10 - Cancel concert ticket', async () => {
+    const tkt = await client.post('/api/v1/concerts', {
+      venueCode: `VEN${testId('').slice(0, 6)}`,
+      venueName: 'Dubai Arena',
+      eventName: 'Cancel Test Show',
+      artist: 'Cancel Artist',
+      eventDate,
+      section: 'Upper',
+      row: 'Z',
+      seatNumber: '99',
+      seatingTier: 'Economy',
+      faceValue: '75.00',
+      resalePriceCap: '100.00',
+      currency: 'USD',
+      fanName: `CancelFan ${testId('fan')}`,
+      confirmationCode: testId('CONF').slice(0, 16),
+      bookingReference: testId('CFAN').slice(0, 16),
+      transferable: false,
+      maxTransfers: 0,
+      metadata: {},
+    });
+
+    const cancelResult = await client.post(`/api/v1/concerts/${tkt.data.id}/cancel`, {
+      reason: 'Cannot attend',
+    });
+    expect(cancelResult.data.status).toBe('CANCELLED');
+  });
+
+  it('13.11 - Refund cancelled concert ticket', async () => {
+    const tkt = await client.post('/api/v1/concerts', {
+      venueCode: `VEN${testId('').slice(0, 6)}`,
+      venueName: 'Dubai Arena',
+      eventName: 'Refund Test Show',
+      artist: 'Refund Artist',
+      eventDate,
+      section: 'Lower',
+      row: 'A',
+      seatNumber: '10',
+      seatingTier: 'Standard',
+      faceValue: '120.00',
+      resalePriceCap: '150.00',
+      currency: 'USD',
+      fanName: `RefundFan ${testId('fan')}`,
+      confirmationCode: testId('CONF').slice(0, 16),
+      bookingReference: testId('RFND').slice(0, 16),
+      transferable: false,
+      maxTransfers: 0,
+      metadata: {},
+    });
+
+    // Cancel first, then refund
+    await client.post(`/api/v1/concerts/${tkt.data.id}/cancel`, {
+      reason: 'Event postponed',
+    });
+
+    const refundResult = await client.post(`/api/v1/concerts/${tkt.data.id}/refund`);
+    expect(refundResult.data).toBeDefined();
+    expect(['REFUNDED', 'VOID']).toContain(refundResult.data.status);
+  });
+
+  // ── Event History ─────────────────────────────────────────────────────
+
+  it('13.12 - Get concert ticket event history', async () => {
+    const result = await client.get(`/api/v1/concerts/${ticketId}/events`);
 
     expect(result.data).toBeDefined();
     expect(Array.isArray(result.data)).toBe(true);

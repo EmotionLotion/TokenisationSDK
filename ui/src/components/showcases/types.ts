@@ -1,30 +1,33 @@
-import type { ReactNode } from 'react';
+/**
+ * Showcase types — kept for Playground and developer tool infrastructure.
+ * Vertical-specific showcase data has been moved to reference apps.
+ */
+
+export type VerticalId = string;
+
+export interface ShowcaseStep {
+  id: string;
+  title: string;
+  description: string;
+  code: string;
+  sdkMethod?: string;
+  sectionId?: string;
+  completed?: boolean;
+  result?: string;
+}
 
 export interface ShowcaseSection {
   id: string;
   label: string;
 }
 
-export interface ShowcaseStep {
-  id: number;
-  title: string;
-  description: string;
-  code: string;
-  sectionId: string;
-  action: (addLog: (msg: string) => void, setData: (fn: (prev: Record<string, string>) => Record<string, string>) => void, data: Record<string, string>) => Promise<void>;
-  render?: (data: Record<string, string>) => ReactNode;
-  completed: boolean;
-}
-
-export type VerticalId = 'real-estate' | 'airline' | 'car-rental' | 'hotel' | 'concert';
-
 export interface ShowcaseConfig {
-  id: VerticalId;
+  id: string;
   name: string;
-  shortName: string;
+  shortName?: string;
   description: string;
   color: string;
-  icon: ReactNode;
-  sections?: ShowcaseSection[];
+  icon: React.ReactNode;
   steps: ShowcaseStep[];
+  sections?: ShowcaseSection[];
 }

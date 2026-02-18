@@ -1,338 +1,269 @@
-# First Project: Tokenize a Real Estate Asset
+---
+sidebar_position: 3
+title: First Project Tutorial
+---
 
-This tutorial walks you through tokenizing your first asset using the TokenisationSDK.
+# Building a Real Estate Tokenisation Project
 
-## What You'll Build
-
-A tokenized real estate investment that:
-- Has verified identity for all participants
-- Enforces compliance rules on transfers
-- Tracks ownership through the full lifecycle
+This tutorial walks you through a complete real estate tokenisation workflow: creating an organisation and project, uploading legal documents, creating an asset, deploying an ERC-3643 security token, onboarding investors with KYC verification, issuing tokens, and distributing dividends.
 
 ## Prerequisites
 
-- Node.js 18+
-- Basic TypeScript knowledge
-- 15 minutes
+- AHOY platform running locally (see [Installation](./INSTALLATION.md))
+- An API key (`sk_test_xxxxx` for sandbox mode)
+- Node.js 18+ with TypeScript
 
-## Step 1: Setup
-
-Create a new project:
-
-```bash
-mkdir my-first-token
-cd my-first-token
-npm init -y
-npm install @tokenisation/sdk typescript ts-node
-```
-
-Create `tsconfig.json`:
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "esModuleInterop": true,
-    "strict": true
-  }
-}
-```
-
-## Step 2: Initialize the SDK
-
-Create `index.ts`:
+## 1. Initialise the SDK Client
 
 ```typescript
-import {
-  TokenisationSDK,
-  RightType,
-  TransferMode,
-  LifecycleState,
-  PartyType,
-  PartyRole,
-} from '@tokenisation/sdk';
+import { ApiClient } from '@tokenisation/sdk';
 
-async function main() {
-  // Initialize SDK with mock plugins (no blockchain needed)
-  const sdk = new TokenisationSDK({ useMockPlugins: true });
-
-  console.log('SDK initialized successfully!');
-}
-
-main().catch(console.error);
+const client = new ApiClient({
+  apiKey: process.env.AHOY_API_KEY!,
+  baseUrl: process.env.AHOY_API_URL ?? 'http://localhost:3001',
+});
 ```
 
-Run it:
-```bash
-npx ts-node index.ts
-# Output: SDK initialized successfully!
-```
+## 2. Create the Project
 
-## Step 3: Create Participants
-
-Add the following to `main()`:
+A project groups related assets under a single jurisdiction and regulatory framework.
 
 ```typescript
-// Create the property management company (issuer)
-const issuer = sdk.parties_.create({
-  name: 'Prime Properties LLC',
-  type: PartyType.ORGANIZATION,
-  roles: [PartyRole.ISSUER, PartyRole.VERIFIER],
-  jurisdiction: 'US',
+const project = await client.projects.create({
+  name: 'Palm Jumeirah Residences',
+  jurisdiction: 'DUBAI',
+  assetType: 'REAL_ESTATE',
   metadata: {
-    licenseNumber: 'RE-12345',
-    website: 'https://primeproperties.example',
+    developer: 'Nakheel',
+    targetRaise: 50_000_000,
+    currency: 'AED',
+    regulatoryFramework: 'VARA',
   },
 });
-sdk.parties_.setKyc(issuer.id, true);
-console.log('Created issuer:', issuer.name);
-
-// Create investors
-const alice = sdk.parties_.create({
-  name: 'Alice Johnson',
-  type: PartyType.INDIVIDUAL,
-  roles: [PartyRole.INVESTOR],
-  jurisdiction: 'US',
-});
-sdk.parties_.setKyc(alice.id, true);
-console.log('Created investor:', alice.name);
-
-const bob = sdk.parties_.create({
-  name: 'Bob Smith',
-  type: PartyType.INDIVIDUAL,
-  roles: [PartyRole.INVESTOR],
-  jurisdiction: 'US',
-});
-sdk.parties_.setKyc(bob.id, true);
-console.log('Created investor:', bob.name);
 ```
 
-## Step 4: Create the Asset
+## 3. Upload Legal Documents
 
-Add asset creation:
+Every tokenised real estate project requires legal documentation: title deeds, offering memoranda, SPV formation documents, and valuation reports.
 
 ```typescript
-// Create the tokenized property
-const property = await sdk.assets.create({
-  name: 'Oceanview Apartments',
-  rightType: RightType.OWNERSHIP,
-  issuerId: issuer.id,
-  jurisdiction: { countryCode: 'US' },
-  transferMode: TransferMode.COMPLIANCE_GATED,
-  metadata: {
-    address: '100 Ocean Drive, Miami, FL',
-    units: 24,
-    yearBuilt: 2020,
-    totalValue: 5000000,  // $5M valuation
-    tokenSupply: 10000,   // 10,000 tokens
-    pricePerToken: 500,   // $500 per token
-  },
+// Upload the offering memorandum
+const offeringDoc = await client.projects.uploadDocument(project.id, {
+  file: fs.readFileSync('./docs/offering-memorandum.pdf'),
+  fileName: 'offering-memorandum.pdf',
+  documentType: 'OFFERING_MEMORANDUM',
+  description: 'Private placement memorandum for Palm Jumeirah Residences',
 });
-console.log('Created asset:', property.name);
-console.log('Initial state:', property.state); // 'DRAFT'
+
+// Upload the title deed
+const titleDeed = await client.projects.uploadDocument(project.id, {
+  file: fs.readFileSync('./docs/title-deed.pdf'),
+  fileName: 'title-deed.pdf',
+  documentType: 'TITLE_DEED',
+  description: 'DLD-registered title deed',
+});
+
+// Upload a third-party valuation
+const valuation = await client.projects.uploadDocument(project.id, {
+  file: fs.readFileSync('./docs/valuation-report.pdf'),
+  fileName: 'valuation-report.pdf',
+  documentType: 'VALUATION_REPORT',
+  description: 'Independent valuation by Knight Frank',
+});
 ```
 
-## Step 5: Lifecycle Transitions
+## 4. Create the Asset
 
-Progress the asset through verification:
+The asset represents the underlying real-world property. It begins in `DRAFT` state and moves through the lifecycle as verification and compliance steps are completed.
+
+```typescript
+const asset = await client.assets.create({
+  name: 'Palm Jumeirah Villa 17',
+  rightType: 'OWNERSHIP',
+  jurisdiction: {
+    countryCode: 'AE',
+    regulatoryFramework: 'VARA',
+    accreditedOnly: false,
+    blockedJurisdictions: ['US', 'KP', 'IR'],
+  },
+  validityPeriod: {
+    isPerpetual: true,
+  },
+  transferabilityRules: {
+    mode: 'COMPLIANCE_GATED',
+    requireKyc: true,
+    lockupPeriodSeconds: 365 * 24 * 60 * 60, // 1-year lockup
+    maxHolders: 200,
+    minimumHoldingAmount: '100',
+  },
+  metadata: {
+    propertyType: 'villa',
+    bedrooms: 5,
+    area: 8500,
+    areaUnit: 'sqft',
+    plotNumber: 'PJ-17-0042',
+    valuationAed: 25_000_000,
+  },
+});
+
+console.log('Asset:', asset.id, 'State:', asset.state); // DRAFT
+```
+
+## 5. Progress Through the Asset Lifecycle
+
+Move the asset through verification stages before it can accept investors.
 
 ```typescript
 // Submit for verification
-await sdk.assets.transition(
-  property.id,
-  LifecycleState.PENDING_VERIFICATION,
-  issuer.id
-);
-console.log('Submitted for verification');
+await client.assets.transition(asset.id, {
+  toState: 'PENDING_VERIFICATION',
+  reason: 'Documents uploaded, ready for review',
+});
 
-// Verify the asset (normally done by external verifier)
-await sdk.assets.verify(property.id, issuer.id);
-console.log('Asset verified');
+// After admin review, mark as verified
+await client.assets.transition(asset.id, {
+  toState: 'VERIFIED',
+  reason: 'All documents verified by compliance team',
+});
 
-// Activate for trading
-await sdk.assets.activate(property.id, issuer.id);
-console.log('Asset activated!');
-
-// Check final state
-const updatedAsset = await sdk.assets.get(property.id);
-console.log('Current state:', updatedAsset?.state); // 'ACTIVE'
-```
-
-## Step 6: Mint Tokens
-
-Distribute ownership tokens:
-
-```typescript
-// Initial token distribution
-// Alice gets 60% ($3M worth)
-await sdk.tokens.mint(property.id, alice.id, '6000');
-console.log('Minted 6,000 tokens to Alice');
-
-// Bob gets 40% ($2M worth)
-await sdk.tokens.mint(property.id, bob.id, '4000');
-console.log('Minted 4,000 tokens to Bob');
-
-// Check balances
-const aliceBalance = await sdk.tokens.getBalance(property.id, alice.id);
-const bobBalance = await sdk.tokens.getBalance(property.id, bob.id);
-console.log(`Alice owns: ${aliceBalance} tokens (${Number(aliceBalance)/100}%)`);
-console.log(`Bob owns: ${bobBalance} tokens (${Number(bobBalance)/100}%)`);
-```
-
-## Step 7: Transfer Tokens
-
-Execute a compliant transfer:
-
-```typescript
-// Alice sells 1,000 tokens to Bob
-const transfer = await sdk.tokens.transfer(
-  property.id,
-  alice.id,
-  bob.id,
-  '1000'
-);
-
-if (transfer.success) {
-  console.log('Transfer successful!');
-} else {
-  console.log('Transfer failed:', transfer.error);
-}
-
-// Check updated balances
-const newAliceBalance = await sdk.tokens.getBalance(property.id, alice.id);
-const newBobBalance = await sdk.tokens.getBalance(property.id, bob.id);
-console.log(`Alice now owns: ${newAliceBalance} tokens`); // 5,000
-console.log(`Bob now owns: ${newBobBalance} tokens`);     // 5,000
-```
-
-## Step 8: View Audit Trail
-
-Check all events:
-
-```typescript
-// Get all events for this asset
-const events = sdk.events.getByAsset(property.id);
-console.log('\nAudit Trail:');
-events.forEach((event, i) => {
-  console.log(`${i + 1}. ${event.type} at ${event.timestamp.toISOString()}`);
+// Activate the asset (ready for token issuance)
+await client.assets.transition(asset.id, {
+  toState: 'ACTIVE',
+  reason: 'Token deployment complete, open for investment',
 });
 ```
 
-## Complete Code
+## 6. Deploy an ERC-3643 Security Token
 
-Here's the full `index.ts`:
+ERC-3643 (T-REX) tokens have built-in identity and compliance checks at the smart contract level. Every transfer is validated on-chain.
 
 ```typescript
-import {
-  TokenisationSDK,
-  RightType,
-  TransferMode,
-  LifecycleState,
-  PartyType,
-  PartyRole,
-} from '@tokenisation/sdk';
+const token = await client.tokens.create({
+  name: 'Palm Villa 17 Token',
+  symbol: 'PV17',
+  chainId: 137,            // Polygon mainnet
+  projectId: project.id,
+  standard: 'ERC3643',
+  maxSupply: '250000',     // 250,000 tokens
+  decimals: 0,             // Whole tokens only
+});
 
-async function main() {
-  const sdk = new TokenisationSDK({ useMockPlugins: true });
-  console.log('=== TokenisationSDK Demo ===\n');
+const deployed = await client.tokens.deploy(token.id);
+console.log('Contract:', deployed.contractAddress);
+console.log('Identity Registry:', deployed.identityRegistryAddress);
+console.log('Compliance Module:', deployed.complianceModuleAddress);
+```
 
-  // 1. Create parties
-  const issuer = sdk.parties_.create({
-    name: 'Prime Properties LLC',
-    type: PartyType.ORGANIZATION,
-    roles: [PartyRole.ISSUER, PartyRole.VERIFIER],
-    jurisdiction: 'US',
-  });
-  sdk.parties_.setKyc(issuer.id, true);
+## 7. Onboard Investors with KYC
 
-  const alice = sdk.parties_.create({
-    name: 'Alice Johnson',
-    type: PartyType.INDIVIDUAL,
-    roles: [PartyRole.INVESTOR],
-    jurisdiction: 'US',
-  });
-  sdk.parties_.setKyc(alice.id, true);
+Each investor must complete KYC/AML verification before they can hold tokens. The platform supports multiple KYC providers and automatically registers verified investors in the on-chain Identity Registry.
 
-  const bob = sdk.parties_.create({
-    name: 'Bob Smith',
-    type: PartyType.INDIVIDUAL,
-    roles: [PartyRole.INVESTOR],
-    jurisdiction: 'US',
-  });
-  sdk.parties_.setKyc(bob.id, true);
+```typescript
+// Onboard an individual investor
+const investor1 = await client.investors.create({
+  email: 'sarah@example.com',
+  firstName: 'Sarah',
+  lastName: 'Al Maktoum',
+  jurisdiction: 'AE',
+  type: 'INDIVIDUAL',
+});
 
-  console.log('Parties created:', sdk.parties_.list().length);
+// Onboard an institutional investor
+const investor2 = await client.investors.create({
+  email: 'fund@acmecapital.com',
+  entityName: 'Acme Capital Partners',
+  jurisdiction: 'GB',
+  type: 'INSTITUTIONAL',
+});
 
-  // 2. Create asset
-  const property = await sdk.assets.create({
-    name: 'Oceanview Apartments',
-    rightType: RightType.OWNERSHIP,
-    issuerId: issuer.id,
-    jurisdiction: { countryCode: 'US' },
-    transferMode: TransferMode.COMPLIANCE_GATED,
-    metadata: {
-      address: '100 Ocean Drive, Miami, FL',
-      totalValue: 5000000,
-    },
-  });
-  console.log('Asset created:', property.name);
+// In production, investors complete KYC via the hosted flow.
+// In sandbox with ENABLE_MOCK_KYC=true, status is auto-approved.
 
-  // 3. Progress lifecycle
-  await sdk.assets.transition(property.id, LifecycleState.PENDING_VERIFICATION, issuer.id);
-  await sdk.assets.verify(property.id, issuer.id);
-  await sdk.assets.activate(property.id, issuer.id);
-  console.log('Asset activated');
+// Check KYC status
+const kyc1 = await client.investors.getKycStatus(investor1.id);
+console.log('KYC Status:', kyc1.status); // APPROVED
+```
 
-  // 4. Mint tokens
-  await sdk.tokens.mint(property.id, alice.id, '6000');
-  await sdk.tokens.mint(property.id, bob.id, '4000');
-  console.log('Tokens minted');
+## 8. Issue Tokens
 
-  // 5. Transfer
-  await sdk.tokens.transfer(property.id, alice.id, bob.id, '1000');
-  console.log('Transfer complete');
+With the token deployed and investors verified, issue tokens from the treasury.
 
-  // 6. Final state
-  console.log('\n=== Final State ===');
-  console.log(`Alice: ${await sdk.tokens.getBalance(property.id, alice.id)} tokens`);
-  console.log(`Bob: ${await sdk.tokens.getBalance(property.id, bob.id)} tokens`);
-  console.log(`Events: ${sdk.events.getByAsset(property.id).length}`);
+```typescript
+// Issue 100,000 tokens to Sarah
+await client.transfers.create({
+  tokenId: token.id,
+  from: 'TREASURY',
+  to: investor1.id,
+  amount: '100000',
+  type: 'ISSUANCE',
+});
+
+// Issue 50,000 tokens to Acme Capital
+await client.transfers.create({
+  tokenId: token.id,
+  from: 'TREASURY',
+  to: investor2.id,
+  amount: '50000',
+  type: 'ISSUANCE',
+});
+```
+
+## 9. Distribute Dividends
+
+The platform supports automated dividend distributions based on token holdings (cap table snapshots).
+
+```typescript
+// Create a distribution for Q4 rental income
+const distribution = await client.cashflow.createDistribution({
+  tokenId: token.id,
+  type: 'DIVIDEND',
+  totalAmount: '500000',     // 500,000 AED total
+  currency: 'AED',
+  snapshotDate: '2025-12-31T23:59:59Z',
+  description: 'Q4 2025 rental income distribution',
+  paymentMethod: 'BANK_TRANSFER',
+});
+
+console.log('Distribution:', distribution.id);
+console.log('Recipients:', distribution.recipientCount);
+// Dividends are calculated pro-rata based on each investor's holding
+// at the snapshot date.
+
+// Sarah holds 100k / 150k = 66.67% -> receives 333,333 AED
+// Acme holds 50k / 150k = 33.33% -> receives 166,667 AED
+```
+
+## 10. Monitor with Audit Trail
+
+Every operation is recorded in an immutable audit log.
+
+```typescript
+const logs = await client.audit.list({
+  entityId: asset.id,
+  limit: 50,
+});
+
+for (const entry of logs.data) {
+  console.log(`[${entry.timestamp}] ${entry.action} by ${entry.actorId}`);
 }
-
-main().catch(console.error);
 ```
 
-Run:
-```bash
-npx ts-node index.ts
-```
+## Summary
 
-Expected output:
-```
-=== TokenisationSDK Demo ===
+In this tutorial you have:
 
-Parties created: 3
-Asset created: Oceanview Apartments
-Asset activated
-Tokens minted
-Transfer complete
-
-=== Final State ===
-Alice: 5000 tokens
-Bob: 5000 tokens
-Events: 7
-```
+1. Created a project under the VARA regulatory framework
+2. Uploaded legal documents (offering memo, title deed, valuation)
+3. Created an asset with compliance-gated transferability rules
+4. Progressed the asset through the DRAFT to ACTIVE lifecycle
+5. Deployed an ERC-3643 security token on Polygon
+6. Onboarded individual and institutional investors with KYC
+7. Issued tokens from the treasury
+8. Distributed dividends pro-rata based on holdings
+9. Reviewed the audit trail
 
 ## Next Steps
 
-- [SDK Usage Guide](../guides/SDK_USAGE.md) - Complete API reference
-- [UI Kit Guide](../guides/UI_KIT.md) - Build a React interface
-- [Server Setup](../guides/SERVER_SETUP.md) - Add persistence
-- [Architecture](../architecture/OVERVIEW.md) - System design
-
-## Challenge: Try These Extensions
-
-1. **Add a third investor** - Create Charlie and transfer tokens from both Alice and Bob
-2. **Test compliance** - Try transferring without KYC and see what happens
-3. **Track events** - Print detailed event data for each operation
-4. **Suspend trading** - Suspend the asset and verify transfers are blocked
+- [Core Concepts](../CONCEPTS.md) -- Deep dive into the asset lifecycle and compliance engine
+- [Architecture Overview](../architecture/OVERVIEW.md) -- Understand the platform internals
+- [Glossary](../GLOSSARY.md) -- Reference for all platform terminology

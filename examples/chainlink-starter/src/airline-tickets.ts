@@ -16,6 +16,9 @@ import {
   ChainlinkAutomationPlugin,
   AutomationTaskType,
   TriggerType,
+  AmadeusFlightPlugin,
+  DecoPlugin,
+  DecoProofType,
 } from '@tokenisation/sdk';
 
 import {
@@ -164,6 +167,68 @@ export async function airlineTicketsDemo() {
   ═══════════════════════════════════════════════════════════
   `);
 
+  // --- Amadeus: Flight Status Check ---
+  logStep(3, 'Check flight status via AmadeusFlightPlugin');
+
+  const amadeus = new AmadeusFlightPlugin({
+    apiKey: process.env.AMADEUS_API_KEY || 'test-key',
+    apiSecret: process.env.AMADEUS_API_SECRET || 'test-secret',
+    testMode: true,
+  });
+
+  const flightStatus = await amadeus.getFlightStatus({
+    flightNumber: 'SKT-1234',
+    departureDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  });
+
+  if (flightStatus.success) {
+    logSuccess(`Flight status: ${flightStatus.data.status}`);
+    logInfo('Departure', flightStatus.data.departure);
+    logInfo('Arrival', flightStatus.data.arrival);
+  } else {
+    logWarning(`Flight status simulated (test mode): ${flightStatus.error}`);
+    logInfo('Amadeus purpose', 'Real-time flight data for automated refund triggers');
+  }
+
+  // --- DECO: Privacy-Preserving Age Proof ---
+  logStep(4, 'DECO proof — passenger is over 18 without revealing DOB');
+
+  const deco = new DecoPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    verifierAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const ageProof = await deco.createProof({
+    proofType: DecoProofType.AGE_VERIFICATION,
+    dataSource: {
+      url: 'https://identity.provider/api/v1/verify',
+      method: 'GET',
+      jsonPath: '$.dateOfBirth',
+    },
+    claim: {
+      field: 'age',
+      operator: 'gte',
+      threshold: 18,
+    },
+    metadata: {
+      purpose: 'Airline age verification',
+      passengerId: passenger.id,
+      flightNumber: 'SKT-1234',
+    },
+  });
+
+  if (ageProof.success) {
+    logSuccess(`DECO proof created: ${ageProof.data.proofId}`);
+    logInfo('Proof type', 'AGE_VERIFICATION');
+    logInfo('Claim', 'age >= 18 (DOB not revealed)');
+  } else {
+    logWarning(`DECO proof simulated (no attestation node): ${ageProof.error}`);
+    logInfo('DECO purpose', 'Prove passenger age without revealing date of birth');
+  }
+
+  amadeus.destroy();
+  deco.destroy();
   automation.destroy();
-  logSuccess('Demo 2 complete — Airline Tickets with Chainlink Automation\n');
+  logSuccess('Demo 2 complete — Airline Tickets with Automation + Amadeus + DECO\n');
 }

@@ -18,7 +18,7 @@ export function RentalCalendar({
     theme = defaultTheme
 }: RentalCalendarProps) {
     const styles = createStyles(theme);
-    const [currentDate] = useState(new Date());
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [endDate, setEndDate] = useState<Date | null>(null);
 
@@ -54,11 +54,11 @@ export function RentalCalendar({
     return (
         <div style={{ ...styles.card, width: '300px', padding: theme.spacing.md }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: theme.spacing.md }}>
-                <button style={{ background: 'none', border: 'none', color: theme.colors.text, cursor: 'pointer' }}>&lt;</button>
+                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} style={{ background: 'none', border: 'none', color: theme.colors.text, cursor: 'pointer' }}>&lt;</button>
                 <div style={{ fontWeight: 600 }}>
                     {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                 </div>
-                <button style={{ background: 'none', border: 'none', color: theme.colors.text, cursor: 'pointer' }}>&gt;</button>
+                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} style={{ background: 'none', border: 'none', color: theme.colors.text, cursor: 'pointer' }}>&gt;</button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>

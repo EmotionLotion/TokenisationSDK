@@ -15,6 +15,9 @@ import {
   OracleService,
   OracleFailSafeMode,
   createChainlinkWiredSDK,
+  ChainlinkAcePlugin,
+  CCIDPlugin,
+  CCIDVertical,
 } from '@tokenisation/sdk';
 
 import {
@@ -151,6 +154,59 @@ export async function realEstateDemo() {
     logSuccess(`Minted 600 tokens to ${investor.name} — balance: ${balance}`);
   }
 
+  // --- ACE: Automated Compliance Evaluation ---
+  logStep(4, 'Check investor eligibility via ChainlinkAcePlugin');
+
+  const ace = new ChainlinkAcePlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    routerAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const eligibility = await ace.checkEligibility({
+    investorId: investor.id,
+    assetId: property.id,
+    jurisdiction: 'AE',
+    investorType: 'INDIVIDUAL',
+    kycVerified: true,
+    accredited: false,
+  });
+
+  if (eligibility.success) {
+    logSuccess(`ACE eligibility: ${eligibility.data.eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}`);
+    logInfo('Policies evaluated', String(eligibility.data.policiesEvaluated));
+    logInfo('Reason', eligibility.data.reason);
+  } else {
+    logWarning(`ACE simulated (no contract): ${eligibility.error}`);
+    logInfo('ACE purpose', 'Automated on-chain compliance attestation');
+  }
+
+  // --- CCID: Cross-Vertical Identity Passport ---
+  logStep(5, 'CCID identity passport for cross-vertical clearance');
+
+  const ccid = new CCIDPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    registryAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const identityCheck = await ccid.checkIdentity({
+    partyId: investor.id,
+    verticals: [CCIDVertical.REAL_ESTATE, CCIDVertical.FINANCE],
+    requiredClearances: ['KYC_VERIFIED', 'JURISDICTION_APPROVED'],
+  });
+
+  if (identityCheck.success) {
+    logSuccess(`CCID identity verified across ${identityCheck.data.verticalsCleared.length} verticals`);
+    logInfo('Verticals', identityCheck.data.verticalsCleared.join(', '));
+    logInfo('Passport ID', identityCheck.data.passportId);
+  } else {
+    logWarning(`CCID simulated (no attestation): ${identityCheck.error}`);
+    logInfo('CCID purpose', 'Cross-vertical identity portability (real estate + finance)');
+  }
+
+  ace.destroy();
+  ccid.destroy();
   chainlink.stop();
-  logSuccess('Demo 1 complete — Real Estate with Chainlink Price Feeds\n');
+  logSuccess('Demo 1 complete — Real Estate with Price Feeds + ACE + CCID\n');
 }

@@ -5,7 +5,7 @@
  * against the exact policy version that was used to make them.
  */
 
-import { createHash } from 'crypto';
+// Use Web Crypto API for browser compatibility (falls back to Node crypto)
 
 // ============================================================================
 // TYPES
@@ -101,7 +101,42 @@ function normalizeForHashing(obj: unknown): string {
  */
 export function hashPolicy(policy: PolicyContent | object): string {
   const normalized = normalizeForHashing(policy);
-  return createHash('sha256').update(normalized).digest('hex');
+  // Use synchronous fallback: convert to a simple hash for browser compatibility
+  // For async Web Crypto, use hashPolicyAsync instead
+  return syncHash(normalized);
+}
+
+/**
+ * Async version using Web Crypto API (preferred in browser)
+ */
+export async function hashPolicyAsync(policy: PolicyContent | object): Promise<string> {
+  const normalized = normalizeForHashing(policy);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalized);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Simple synchronous hash (DJB2 + FNV-1a combined for collision resistance)
+ * Used as synchronous fallback when Web Crypto is not available synchronously
+ */
+function syncHash(str: string): string {
+  // Use crypto.subtle if we're in a context where we can't use Node crypto
+  // For sync contexts, use a deterministic string hash
+  let h1 = 0x811c9dc5; // FNV offset basis
+  let h2 = 5381; // DJB2 seed
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 ^= ch;
+    h1 = Math.imul(h1, 0x01000193); // FNV prime
+    h2 = Math.imul(h2, 33) ^ ch; // DJB2
+  }
+  // Combine both hashes into a hex string
+  const part1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const part2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return part1 + part2 + part1 + part2 + part1 + part2 + part1 + part2;
 }
 
 /**

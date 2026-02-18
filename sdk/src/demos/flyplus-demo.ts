@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck — Kept on disk for future use; barrel export removed during RE+Compute pruning.
 /**
  * Fly+ Pass Demo
  *

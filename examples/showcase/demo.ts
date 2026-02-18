@@ -8,6 +8,7 @@
  * 4. Custody & Recovery
  * 5. Indexing & Reporting
  * 6. Asset Packs with Lifecycle Rules
+ * 7. Chainlink Integration (DECO, CCID, ACE, Amadeus, OracleAggregator)
  *
  * Run: npx ts-node demo.ts
  */
@@ -39,6 +40,16 @@ import {
 
   // Asset Packs
   AssetPackRegistry,
+
+  // Chainlink Plugins
+  DecoPlugin,
+  DecoProofType,
+  CCIDPlugin,
+  CCIDVertical,
+  ChainlinkAcePlugin,
+  AmadeusFlightPlugin,
+  OracleAggregator,
+  AggregationStrategy,
 } from '@tokenisation/sdk';
 
 // ============================================================================
@@ -454,6 +465,256 @@ async function demo5_AssetPacks() {
 }
 
 // ============================================================================
+// DEMO 6: CHAINLINK INTEGRATION SHOWCASE
+// ============================================================================
+
+async function demo6_ChainlinkShowcase() {
+  divider('DEMO 6: Chainlink Integration Showcase');
+
+  const BASE_SEPOLIA_CHAIN_ID = 84532;
+  const BASE_SEPOLIA_RPC_URL = 'https://sepolia.base.org';
+
+  // --- DECO: Privacy-preserving proof ---
+  log('--- DECO: Privacy-Preserving Proof ---');
+
+  const deco = new DecoPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    verifierAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const balanceProof = await deco.createProof({
+    proofType: DecoProofType.BALANCE_THRESHOLD,
+    dataSource: {
+      url: 'https://api.bank.com/v1/balance',
+      method: 'GET',
+      jsonPath: '$.balance',
+    },
+    claim: {
+      field: 'balance',
+      operator: 'gte',
+      threshold: 100000,
+    },
+    metadata: { purpose: 'Accredited investor verification' },
+  });
+
+  if (balanceProof.success) {
+    log('DECO Proof Created:', {
+      proofId: balanceProof.data.proofId,
+      type: 'BALANCE_THRESHOLD',
+      claim: 'balance >= $100,000 (exact amount hidden)',
+    });
+  } else {
+    log('DECO Proof (simulated):', {
+      purpose: 'Prove balance >= $100K without revealing exact amount',
+      proofType: 'BALANCE_THRESHOLD',
+      status: 'Would create verifiable proof via attestation node',
+    });
+  }
+
+  const accreditedProof = await deco.createProof({
+    proofType: DecoProofType.ACCREDITED_INVESTOR,
+    dataSource: {
+      url: 'https://api.broker.com/v1/accreditation',
+      method: 'GET',
+      jsonPath: '$.status',
+    },
+    claim: {
+      field: 'status',
+      operator: 'eq',
+      threshold: 'ACCREDITED',
+    },
+    metadata: { purpose: 'SEC accredited investor proof' },
+  });
+
+  if (accreditedProof.success) {
+    log('DECO Accredited Proof:', { proofId: accreditedProof.data.proofId });
+  } else {
+    log('DECO Accredited Proof (simulated):', {
+      purpose: 'Prove accreditation status without revealing income/net worth',
+    });
+  }
+
+  // --- CCID: Cross-vertical identity passport ---
+  log('\n--- CCID: Cross-Vertical Identity Passport ---');
+
+  const ccid = new CCIDPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    registryAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const identityCheck = await ccid.checkIdentity({
+    partyId: 'investor-showcase-001',
+    verticals: [
+      CCIDVertical.REAL_ESTATE,
+      CCIDVertical.FINANCE,
+      CCIDVertical.AIRLINE,
+      CCIDVertical.HOTEL,
+    ],
+    requiredClearances: ['KYC_VERIFIED', 'ACCREDITED', 'JURISDICTION_APPROVED'],
+  });
+
+  if (identityCheck.success) {
+    log('CCID Identity Verified:', {
+      passportId: identityCheck.data.passportId,
+      verticalsCleared: identityCheck.data.verticalsCleared,
+      clearances: identityCheck.data.clearances,
+    });
+  } else {
+    log('CCID Identity (simulated):', {
+      purpose: 'Portable identity across real estate, finance, airline, hotel verticals',
+      benefit: 'KYC once, use everywhere — no repeated verification',
+    });
+  }
+
+  // --- ACE: Automated compliance attestation ---
+  log('\n--- ACE: Automated Compliance Attestation ---');
+
+  const ace = new ChainlinkAcePlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    routerAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const eligibility = await ace.checkEligibility({
+    investorId: 'investor-showcase-001',
+    assetId: 'asset-showcase-001',
+    jurisdiction: 'US',
+    investorType: 'INDIVIDUAL',
+    kycVerified: true,
+    accredited: true,
+  });
+
+  if (eligibility.success) {
+    log('ACE Eligibility:', {
+      eligible: eligibility.data.eligible,
+      policiesEvaluated: eligibility.data.policiesEvaluated,
+      reason: eligibility.data.reason,
+    });
+  } else {
+    log('ACE Eligibility (simulated):', {
+      purpose: 'On-chain automated compliance check before any token operation',
+      checks: ['KYC status', 'Jurisdiction rules', 'Accreditation level', 'Sanctions screening'],
+    });
+  }
+
+  const attestation = await ace.createAttestation({
+    assetId: 'asset-showcase-001',
+    actorId: 'issuer-showcase-001',
+    action: 'MINT_APPROVAL',
+    context: {
+      investorId: 'investor-showcase-001',
+      amount: '50000',
+      complianceResult: 'ALLOW',
+    },
+  });
+
+  if (attestation.success) {
+    log('ACE Attestation:', {
+      attestationId: attestation.data.attestationId,
+      status: attestation.data.status,
+    });
+  } else {
+    log('ACE Attestation (simulated):', {
+      purpose: 'Immutable on-chain record of compliance decision',
+      auditTrail: 'Regulators can verify compliance at any time',
+    });
+  }
+
+  // --- Amadeus: Flight status check ---
+  log('\n--- Amadeus: Flight Status Check ---');
+
+  const amadeus = new AmadeusFlightPlugin({
+    apiKey: process.env.AMADEUS_API_KEY || 'test-key',
+    apiSecret: process.env.AMADEUS_API_SECRET || 'test-secret',
+    testMode: true,
+  });
+
+  const flightStatus = await amadeus.getFlightStatus({
+    flightNumber: 'EK-201',
+    departureDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  });
+
+  if (flightStatus.success) {
+    log('Flight Status:', {
+      flight: 'EK-201',
+      status: flightStatus.data.status,
+      departure: flightStatus.data.departure,
+      arrival: flightStatus.data.arrival,
+    });
+  } else {
+    log('Flight Status (simulated):', {
+      purpose: 'Real-time flight data for tokenized ticket automation',
+      triggers: ['Auto-refund on cancellation', 'Loyalty points on landing', 'Insurance claim on delay'],
+    });
+  }
+
+  const searchResult = await amadeus.searchFlights({
+    origin: 'DXB',
+    destination: 'LHR',
+    departureDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    adults: 1,
+  });
+
+  if (searchResult.success) {
+    log('Flight Search:', {
+      route: 'DXB → LHR',
+      offers: searchResult.data.length,
+    });
+  } else {
+    log('Flight Search (simulated):', {
+      purpose: 'Tokenize flight offers directly from Amadeus GDS',
+    });
+  }
+
+  // --- OracleAggregator: Multi-source price aggregation ---
+  log('\n--- OracleAggregator: Multi-Source Price Aggregation ---');
+
+  const aggregator = new OracleAggregator({
+    strategy: AggregationStrategy.MEDIAN,
+    sources: [
+      { name: 'Chainlink ETH/USD', type: 'chainlink', pair: 'ETH/USD', weight: 1 },
+      { name: 'Chainlink BTC/USD', type: 'chainlink', pair: 'BTC/USD', weight: 1 },
+      { name: 'CoinGecko', type: 'custom', endpoint: 'https://api.coingecko.com/v3/price', weight: 1 },
+      { name: 'CoinMarketCap', type: 'custom', endpoint: 'https://api.cmc.com/v1/price', weight: 1 },
+    ],
+    minSources: 2,
+    maxStalenessMs: 300_000,
+  });
+
+  const ethAgg = await aggregator.aggregatePrice('ETH/USD');
+
+  if (ethAgg.success) {
+    log('ETH/USD Aggregated:', {
+      value: ethAgg.data.aggregatedValue,
+      strategy: 'MEDIAN',
+      sourcesUsed: ethAgg.data.sourcesUsed,
+      confidence: ethAgg.data.confidence,
+    });
+  } else {
+    log('ETH/USD Aggregation (simulated):', {
+      purpose: 'Combine multiple oracle sources for tamper-resistant pricing',
+      strategies: ['MEDIAN — resistant to single-source manipulation', 'MEAN — weighted average', 'PRIMARY_FALLBACK — cascading trust'],
+    });
+  }
+
+  // Cleanup
+  deco.destroy();
+  ccid.destroy();
+  ace.destroy();
+  amadeus.destroy();
+  aggregator.destroy();
+
+  log('\nChainlink Integration Summary:');
+  log('  • DECO — Privacy-preserving proofs (balance, accreditation, age)');
+  log('  • CCID — Cross-vertical identity portability');
+  log('  • ACE — Automated compliance attestation on-chain');
+  log('  • Amadeus — Real-time flight data for ticket tokenization');
+  log('  • OracleAggregator — Multi-source tamper-resistant pricing');
+}
+
+// ============================================================================
 // RUN ALL DEMOS
 // ============================================================================
 
@@ -469,6 +730,7 @@ async function runAllDemos() {
     await demo3_CustodyRecovery();
     await demo4_IndexingReporting();
     await demo5_AssetPacks();
+    await demo6_ChainlinkShowcase();
 
     divider('SHOWCASE COMPLETE');
     log('All demos completed successfully!');
@@ -479,6 +741,7 @@ async function runAllDemos() {
     log('  3. Full custody & recovery workflows');
     log('  4. Real-time indexing & regulatory reports');
     log('  5. Pre-built asset packs for common use cases');
+    log('  6. Chainlink plugins: DECO, CCID, ACE, Amadeus, OracleAggregator');
     log('');
   } catch (error) {
     console.error('Demo failed:', error);

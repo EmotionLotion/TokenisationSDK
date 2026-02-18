@@ -110,7 +110,7 @@ async function hashWeb(
   };
 
   const algorithm = algorithmMap[options.algorithm];
-  const dataBytes = typeof data === 'string' ? encoder.encode(data) : data;
+  const dataBytes: BufferSource = typeof data === 'string' ? encoder.encode(data) : new Uint8Array(data);
   const hashBuffer = await crypto.subtle.digest(algorithm, dataBytes);
 
   return bufferToString(new Uint8Array(hashBuffer), options.encoding ?? 'hex');

@@ -824,6 +824,259 @@ export async function unfreezeTicket(orgId: string, ticketId: string, actor: str
 }
 
 // ============================================================================
+// Passenger Name Verification
+// ============================================================================
+
+/**
+ * Normalize a name string for comparison:
+ * lowercase, trim, remove diacritics, collapse whitespace,
+ * strip common prefixes (Mr, Mrs, Ms, Dr, Prof), remove punctuation.
+ */
+export function normalizeNameForComparison(name: string): string {
+  let normalized = name
+    .trim()
+    .toLowerCase()
+    // Remove diacritics (e.g. é → e, ü → u)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // Remove punctuation (keep letters, digits, spaces)
+    .replace(/[^a-z0-9\s]/g, '')
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Strip common title prefixes
+  const prefixes = ['mr', 'mrs', 'ms', 'dr', 'prof', 'miss', 'mx', 'sir', 'dame', 'lady', 'lord'];
+  for (const prefix of prefixes) {
+    const pattern = new RegExp(`^${prefix}\\s+`, 'i');
+    normalized = normalized.replace(pattern, '');
+  }
+
+  return normalized.trim();
+}
+
+/**
+ * Calculate the similarity between two names on a 0–1 scale.
+ * Uses normalized Levenshtein distance combined with token matching.
+ */
+export function calculateNameSimilarity(name1: string, name2: string): number {
+  const a = normalizeNameForComparison(name1);
+  const b = normalizeNameForComparison(name2);
+
+  if (a === b) return 1.0;
+  if (a.length === 0 || b.length === 0) return 0.0;
+
+  // --- Levenshtein distance (Wagner–Fischer) ---
+  const lenA = a.length;
+  const lenB = b.length;
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= lenA; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= lenB; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= lenA; i++) {
+    for (let j = 1; j <= lenB; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,       // deletion
+        matrix[i][j - 1] + 1,       // insertion
+        matrix[i - 1][j - 1] + cost, // substitution
+      );
+    }
+  }
+  const maxLen = Math.max(lenA, lenB);
+  const levenshteinScore = 1 - matrix[lenA][lenB] / maxLen;
+
+  // --- Token matching ---
+  const tokensA = a.split(' ').filter(Boolean);
+  const tokensB = b.split(' ').filter(Boolean);
+
+  // Check if all tokens from the shorter set appear in the longer set
+  const [shorter, longer] = tokensA.length <= tokensB.length
+    ? [tokensA, tokensB]
+    : [tokensB, tokensA];
+
+  let matchedTokens = 0;
+  for (const token of shorter) {
+    if (longer.includes(token)) {
+      matchedTokens++;
+    }
+  }
+
+  const tokenScore = shorter.length > 0 ? matchedTokens / shorter.length : 0;
+
+  // Return the higher of the two scores
+  return Math.max(levenshteinScore, tokenScore);
+}
+
+/**
+ * Verify a ticket's passengerName against KYC-provided name fields.
+ * Returns a verification result with confidence score and match details.
+ */
+export async function verifyPassengerIdentity(
+  orgId: string,
+  ticketId: string,
+  kycData: {
+    firstName: string;
+    lastName: string;
+    fullName?: string;
+    documentName?: string;
+  },
+): Promise<{
+  verified: boolean;
+  confidence: number;
+  matchDetails: { method: string; score: number }[];
+  warnings: string[];
+}> {
+  const ticket = await getTicket(orgId, ticketId);
+  const passengerName = ticket.passengerName;
+
+  if (!passengerName) {
+    return {
+      verified: false,
+      confidence: 0,
+      matchDetails: [],
+      warnings: ['Ticket has no passenger name on record'],
+    };
+  }
+
+  const normalizedPassenger = normalizeNameForComparison(passengerName);
+  const matchDetails: { method: string; score: number }[] = [];
+  const warnings: string[] = [];
+
+  // Build candidate name variants from the KYC data
+  const candidates: { label: string; value: string }[] = [];
+
+  if (kycData.fullName) {
+    candidates.push({ label: 'fullName', value: kycData.fullName });
+  }
+
+  // firstName + lastName combined
+  const combinedName = `${kycData.firstName} ${kycData.lastName}`.trim();
+  if (combinedName.length > 0) {
+    candidates.push({ label: 'firstName+lastName', value: combinedName });
+  }
+
+  if (kycData.documentName) {
+    candidates.push({ label: 'documentName', value: kycData.documentName });
+  }
+
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeNameForComparison(candidate.value);
+
+    // Exact normalized match
+    if (normalizedPassenger === normalizedCandidate) {
+      matchDetails.push({ method: `exact:${candidate.label}`, score: 1.0 });
+      bestScore = 1.0;
+      continue;
+    }
+
+    // Fuzzy match
+    const fuzzyScore = calculateNameSimilarity(passengerName, candidate.value);
+    matchDetails.push({ method: `fuzzy:${candidate.label}`, score: fuzzyScore });
+
+    if (fuzzyScore > bestScore) {
+      bestScore = fuzzyScore;
+    }
+
+    // Warn on partial matches
+    if (fuzzyScore >= 0.6 && fuzzyScore < 0.85) {
+      warnings.push(
+        `Partial match (${(fuzzyScore * 100).toFixed(1)}%) against ${candidate.label}: "${candidate.value}"`,
+      );
+    }
+  }
+
+  const verified = bestScore >= 0.85;
+
+  if (!verified && bestScore < 0.6) {
+    warnings.push('No KYC name variant matched the passenger name on the ticket');
+  }
+
+  logger.info('Passenger identity verification completed', {
+    ticketId,
+    orgId,
+    verified,
+    confidence: bestScore,
+    matchCount: matchDetails.length,
+  });
+
+  return {
+    verified,
+    confidence: bestScore,
+    matchDetails,
+    warnings,
+  };
+}
+
+/**
+ * End-to-end passenger verification: look up investor KYC data and verify
+ * that the investor's name matches the ticket's passengerName.
+ */
+export async function enforcePassengerVerification(
+  orgId: string,
+  ticketId: string,
+  investorId: string,
+): Promise<{ allowed: boolean; reason?: string }> {
+  // Look up the investor record
+  const investor = await db.query.investors.findFirst({
+    where: and(
+      eq(schema.investors.id, investorId),
+      eq(schema.investors.orgId, orgId),
+    ),
+  });
+
+  if (!investor) {
+    logger.warn('Investor not found for passenger verification', { orgId, investorId, ticketId });
+    return { allowed: false, reason: 'Investor record not found' };
+  }
+
+  // KYC must be in a passed state
+  if (investor.kycStatus !== 'passed') {
+    return { allowed: false, reason: `Investor KYC status is "${investor.kycStatus}", must be "passed"` };
+  }
+
+  // Extract name fields from investor metadata
+  const meta = (typeof investor.metadata === 'string'
+    ? JSON.parse(investor.metadata as string)
+    : (investor.metadata as Record<string, unknown> ?? {})) as Record<string, unknown>;
+
+  const firstName = (meta.firstName as string) ?? (meta.first_name as string) ?? '';
+  const lastName = (meta.lastName as string) ?? (meta.last_name as string) ?? '';
+  const fullName = (meta.fullName as string) ?? (meta.full_name as string) ?? undefined;
+  const documentName = (meta.documentName as string) ?? (meta.document_name as string) ?? undefined;
+
+  if (!firstName && !lastName && !fullName && !documentName) {
+    logger.warn('No name data in investor metadata for verification', { orgId, investorId });
+    return { allowed: false, reason: 'Investor record has no name data for verification' };
+  }
+
+  const result = await verifyPassengerIdentity(orgId, ticketId, {
+    firstName,
+    lastName,
+    fullName,
+    documentName,
+  });
+
+  if (!result.verified) {
+    const reason = result.warnings.length > 0
+      ? `Name verification failed: ${result.warnings.join('; ')}`
+      : `Name verification failed (best confidence: ${(result.confidence * 100).toFixed(1)}%)`;
+
+    logger.warn('Passenger verification denied', { orgId, ticketId, investorId, confidence: result.confidence });
+    return { allowed: false, reason };
+  }
+
+  logger.info('Passenger verification approved', { orgId, ticketId, investorId, confidence: result.confidence });
+  return { allowed: true };
+}
+
+// ============================================================================
 // Internal Helpers
 // ============================================================================
 

@@ -24,8 +24,6 @@ export { useGovernance, type UseGovernanceReturn, type ProposalData, type Voting
 export { useCashFlow, type UseCashFlowReturn, type DistributionData, type DistributionScheduleData } from './useCashFlow.js';
 export { useEscrow, type UseEscrowReturn, type EscrowData } from './useEscrow.js';
 export { useInvestor, type UseInvestorReturn, type InvestorData } from './useInvestor.js';
-export { useTickets, type UseTicketsReturn, type TicketData, type BoardingPassData } from './useTickets.js';
-export { useResale, type UseResaleReturn, type ResaleListing } from './useResale.js';
 export {
   useDLD,
   type UseDLDReturn,
@@ -71,3 +69,11 @@ export {
 export { useLegal, type UseLegalReturn, type SanctionsResult, type KYCStatusResult } from './useLegal.js';
 export { useWebhooks, type UseWebhooksReturn, type WebhookData, type WebhookDeliveryData } from './useWebhooks.js';
 export { useProject, type UseProjectReturn, type ProjectData } from './useProject.js';
+
+// Phase 2: Real Estate Hardening hooks
+export { useInvestorTier, type UseInvestorTierReturn, type InvestorPlan, type TierEligibilityResult, type InvestorTier } from './useInvestorTier.js';
+export { useExitWindow, type UseExitWindowReturn, type ExitWindow, type ExitWindowSchedule } from './useExitWindow.js';
+export { useSecondaryMarket, type UseSecondaryMarketReturn, type SecondaryListing } from './useSecondaryMarket.js';
+
+/** @deprecated Use useSecondaryMarket instead */
+export { useResale, type UseResaleReturn, type ResaleListing } from './useResale.js';

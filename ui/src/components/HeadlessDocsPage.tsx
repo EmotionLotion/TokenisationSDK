@@ -169,6 +169,76 @@ function AssetCreator() {
 // > Asset ID: asset_abc123
 // > State: DRAFT → ACTIVE`,
   },
+  {
+    name: 'useTokenBalance',
+    description: 'Auto-polling token balance with human-readable decimal conversion and staleness detection.',
+    hook: '@tokenisation/sdk-react/hooks',
+    code: `import { useTokenBalance } from '@tokenisation/sdk-react/hooks';
+
+function WalletBalance({ assetId }: { assetId: string }) {
+  const { balance, rawBalance, loading, isStale, refresh } = useTokenBalance(assetId, {
+    pollInterval: 15000,
+    decimals: 18,
+  });
+
+  return (
+    <div>
+      <h3>Token Balance (Headless)</h3>
+      <p>Balance: <strong>{balance ?? '0.00'}</strong></p>
+      <p>Raw: {rawBalance ?? '0'}</p>
+      {isStale && <p style={{ color: 'orange' }}>Balance may be outdated</p>}
+      <button onClick={refresh} disabled={loading}>
+        {loading ? 'Refreshing...' : 'Refresh Balance'}
+      </button>
+    </div>
+  );
+}`,
+    output: `// Output:
+// Token Balance (Headless)
+// Balance: 1500.00
+// Raw: 1500000000000000000000
+// [Refresh Balance]
+// > Balance updated: 1500.00`,
+  },
+  {
+    name: 'useAuthExpiring',
+    description: 'Session expiry monitoring with silent refresh, warning buffers, and expiry callbacks.',
+    hook: '@tokenisation/sdk-react/hooks',
+    code: `import { useAuthExpiring } from '@tokenisation/sdk-react/hooks';
+
+function SessionGuard({ children }: { children: React.ReactNode }) {
+  const { isExpiring, isExpired, timeRemaining, refresh } = useAuthExpiring({
+    warningBufferMs: 300000, // 5 min
+    checkIntervalMs: 30000,
+    onExpiring: () => console.log('Session expiring soon!'),
+    onExpired: () => window.location.href = '/login',
+    onRefreshed: () => console.log('Session refreshed'),
+  });
+
+  if (isExpired) {
+    return <p>Session expired. Redirecting...</p>;
+  }
+
+  return (
+    <div>
+      {isExpiring && (
+        <div style={{ background: '#fef3c7', padding: 8 }}>
+          Session expires in {Math.round((timeRemaining ?? 0) / 1000)}s
+          <button onClick={refresh}>Extend</button>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}`,
+    output: `// Output:
+// [Session active - no warnings]
+// ...after 25 minutes...
+// Session expires in 293s
+// [Extend]
+// > Session refreshed
+// [Session active - no warnings]`,
+  },
 ];
 
 // ============================================================================

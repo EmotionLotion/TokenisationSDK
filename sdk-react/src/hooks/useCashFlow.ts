@@ -86,7 +86,7 @@ export function useCashFlow(): UseCashFlowReturn {
     (distributionId: string) =>
       wrapAsync(async () => {
         const result = await modules.cashflow.getDistribution(distributionId);
-        return (result as any).data ?? null;
+        return (result as any) ?? null;
       }),
     [modules.cashflow, wrapAsync],
   );
@@ -104,7 +104,7 @@ export function useCashFlow(): UseCashFlowReturn {
     (tokenId: string) =>
       wrapAsync(async () => {
         const result = await modules.cashflow.getSchedule(tokenId);
-        return (result as any).data ?? null;
+        return (result as any) ?? null;
       }),
     [modules.cashflow, wrapAsync],
   );

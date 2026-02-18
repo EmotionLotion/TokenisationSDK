@@ -13,6 +13,8 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "postman:generate": "tsx scripts/generate-postman.ts"
   },
@@ -62,8 +64,11 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^9.0.7",
+    "@types/supertest": "^6.0.2",
     "drizzle-kit": "^0.20.13",
+    "supertest": "^7.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^3.0.0"
   }
 }

@@ -69,12 +69,6 @@ export {
   getActionDescription,
   // Individual templates
   realEstateTemplate,
-  carbonCreditTemplate,
-  ticketTemplate,
-  royaltyTemplate,
-  loyaltyTemplate,
-  commodityTemplate,
-  equityTemplate,
   customTemplate,
 } from './templates/registry';
 

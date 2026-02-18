@@ -132,6 +132,7 @@ export function useWallet(): UseWalletReturn {
   const {
     config,
     wallet,
+    client,
     connectWallet,
     disconnectWallet,
     switchChain: switchChainBase,
@@ -161,17 +162,30 @@ export function useWallet(): UseWalletReturn {
       throw new Error('Wallet not connected');
     }
 
-    // In a real implementation, this would:
-    // 1. Query the RPC for native balance
-    // 2. Query token contracts for ERC20 balances
-    // For now, return mock data
+    // Try fetching real balances from API
+    if (client) {
+      try {
+        const response = await client.get(`/wallets/${wallet.address}/balances?chainId=${wallet.chainId}`);
+        if (response && typeof response === 'object' && 'native' in response) {
+          const data = response as { native: string; tokens?: TokenBalance[] };
+          return {
+            native: data.native,
+            nativeSymbol: NATIVE_SYMBOLS[wallet.chainId] || 'ETH',
+            tokens: data.tokens || [],
+          };
+        }
+      } catch {
+        // Fall through to mock data
+      }
+    }
 
+    // Mock fallback
     return {
       native: '0',
       nativeSymbol: NATIVE_SYMBOLS[wallet.chainId] || 'ETH',
       tokens: [],
     };
-  }, [wallet.isConnected, wallet.address, wallet.chainId]);
+  }, [wallet.isConnected, wallet.address, wallet.chainId, client]);
 
   // Connect wrapper
   const connect = useCallback(async () => {

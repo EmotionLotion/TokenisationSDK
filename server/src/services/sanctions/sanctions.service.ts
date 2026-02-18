@@ -72,6 +72,16 @@ export class SanctionsService {
       return { ...cached.result, cacheHit: true };
     }
 
+    // If both lists are empty, attempt a refresh before screening
+    if (this.ofacEntries.size === 0 && this.unEntries.size === 0) {
+      logger.info('Sanctions lists empty, attempting refresh before screening');
+      try {
+        await this.refreshLists();
+      } catch (err) {
+        logger.warn('On-demand sanctions list refresh failed', { error: err });
+      }
+    }
+
     // Perform screening
     const matches: SanctionsMatch[] = [];
 
@@ -476,6 +486,9 @@ let sanctionsService: SanctionsService | null = null;
 export function getSanctionsService(): SanctionsService {
   if (!sanctionsService) {
     sanctionsService = new SanctionsService();
+    sanctionsService.refreshLists().catch(err =>
+      logger.warn('Sanctions list refresh failed at startup', { error: err })
+    );
   }
   return sanctionsService;
 }

@@ -5,7 +5,7 @@
  * Supports Base, Polygon, and Ethereum networks.
  */
 
-import { createConfig, http } from 'wagmi';
+import { createConfig, http, type Config } from 'wagmi';
 import { base, polygon, mainnet, baseSepolia, polygonAmoy, sepolia } from 'wagmi/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 
@@ -26,7 +26,7 @@ export const supportedChains = [
 ] as const;
 
 // Wagmi config
-export const wagmiConfig = createConfig({
+export const wagmiConfig: Config = createConfig({
   chains: supportedChains,
   connectors: [
     injected({

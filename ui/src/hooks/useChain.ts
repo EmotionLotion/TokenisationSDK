@@ -7,17 +7,40 @@
 import { useSwitchChain, useChainId } from 'wagmi';
 import { supportedChains, chainMetadata, type SupportedChainId } from '../config/wagmi';
 
-export function useChain() {
+interface ChainMeta {
+  name: string;
+  icon: string;
+  isDefault: boolean;
+  isTestnet: boolean;
+}
+
+interface UseChainReturn {
+  currentChainId: number;
+  currentChain: (typeof supportedChains)[number] | null;
+  currentChainMeta: ChainMeta | null;
+  isSwitching: boolean;
+  switchError: Error | null;
+  supportedChains: typeof supportedChains;
+  mainnets: (typeof supportedChains)[number][];
+  testnets: (typeof supportedChains)[number][];
+  chainMetadata: typeof chainMetadata;
+  switchTo: (chainId: number) => void;
+  switchToDefault: () => void;
+  switchChain: ReturnType<typeof useSwitchChain>['switchChain'];
+}
+
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+export function useChain(): UseChainReturn {
   const currentChainId = useChainId();
   const { switchChain, isPending, error } = useSwitchChain();
 
   // Get current chain info
   const currentChain = currentChainId
-    ? supportedChains.find(c => c.id === currentChainId)
+    ? supportedChains.find(c => c.id === currentChainId) ?? null
     : null;
 
   const currentChainMeta = currentChainId
-    ? chainMetadata[currentChainId as SupportedChainId]
+    ? chainMetadata[currentChainId as SupportedChainId] ?? null
     : null;
 
   // Get mainnets only

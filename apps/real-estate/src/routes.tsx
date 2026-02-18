@@ -12,6 +12,7 @@ import { Onboarding } from './pages/investor/Onboarding';
 import { InvestFlow } from './pages/investor/InvestFlow';
 import { Portfolio } from './pages/investor/Portfolio';
 import { Statements } from './pages/investor/Statements';
+import { CartCheckout } from './pages/investor/CartCheckout';
 
 // Admin pages
 import { Dashboard } from './pages/admin/Dashboard';
@@ -20,6 +21,9 @@ import { CompliancePanel } from './pages/admin/CompliancePanel';
 import { DividendManager } from './pages/admin/DividendManager';
 import { ListingManager } from './pages/admin/ListingManager';
 import { Approvals } from './pages/admin/Approvals';
+import { ExitWindowManager } from './pages/admin/ExitWindowManager';
+import { InvestorTierManager } from './pages/admin/InvestorTierManager';
+import { SecondaryMarketOverview } from './pages/admin/SecondaryMarketOverview';
 
 export const router = createBrowserRouter([
   // Public marketplace
@@ -40,8 +44,8 @@ export const router = createBrowserRouter([
       { path: 'onboarding', element: <Onboarding /> },
       { path: 'invest/:propertyId', element: <InvestFlow /> },
       { index: true, element: <Portfolio /> },
-      { path: 'portfolio', element: <Portfolio /> },
       { path: 'statements', element: <Statements /> },
+      { path: 'cart', element: <CartCheckout /> },
     ],
   },
 
@@ -56,6 +60,9 @@ export const router = createBrowserRouter([
       { path: 'dividends', element: <DividendManager /> },
       { path: 'listings', element: <ListingManager /> },
       { path: 'approvals', element: <Approvals /> },
+      { path: 'exit-windows', element: <ExitWindowManager /> },
+      { path: 'investor-tiers', element: <InvestorTierManager /> },
+      { path: 'secondary-market', element: <SecondaryMarketOverview /> },
     ],
   },
 ]);

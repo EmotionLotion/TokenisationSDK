@@ -1,8 +1,9 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   Building2, LayoutDashboard, Plus, Shield, DollarSign,
-  List, CheckSquare, ArrowLeft,
+  List, CheckSquare, ArrowLeft, Clock, Users, BarChart3,
 } from 'lucide-react';
+import { AuthGate } from '../components/AuthGate';
 
 const NAV_ITEMS = [
   { path: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -11,6 +12,9 @@ const NAV_ITEMS = [
   { path: '/admin/compliance', icon: Shield, label: 'Compliance' },
   { path: '/admin/dividends', icon: DollarSign, label: 'Dividends' },
   { path: '/admin/approvals', icon: CheckSquare, label: 'Approvals' },
+  { path: '/admin/exit-windows', icon: Clock, label: 'Exit Windows' },
+  { path: '/admin/investor-tiers', icon: Users, label: 'Investor Tiers' },
+  { path: '/admin/secondary-market', icon: BarChart3, label: 'Secondary Market' },
 ];
 
 export function AdminLayout() {
@@ -71,7 +75,7 @@ export function AdminLayout() {
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto p-8">
-        <Outlet />
+        <AuthGate />
       </main>
     </div>
   );

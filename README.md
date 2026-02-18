@@ -10,12 +10,6 @@
 
 **The Stripe of Real-World Asset Tokenization**
 
-[5-Minute Quick Start](#5-minute-quick-start) |
-[SDK Reference](docs/ONE_PAGE_SDK_REFERENCE.md) |
-[API Docs](docs/API_REFERENCE.md) |
-[Examples](#demo-applications) |
-[FAQ](docs/FAQ.md)
-
 </div>
 
 ---
@@ -37,15 +31,13 @@ await client.tokens.deploy(token.id);
 await client.tokens.issue(token.id, { investorId: investor.id, amount: '1000', idempotencyKey: 'issue-001' });
 ```
 
-**Time to first token: Hours, not months.**
-
 ---
 
-## 5-Minute Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ and npm 9+
+- Node.js 18+ and pnpm 9+
 - Foundry (optional, for smart contracts only)
 
 ### Setup
@@ -54,14 +46,14 @@ await client.tokens.issue(token.id, { investorId: investor.id, amount: '1000', i
 # Clone and install
 git clone https://github.com/EmotionLotion/TokenisationSDK.git
 cd TokenisationSDK
-npm install
+pnpm install
 
 # Build the SDK
-npm run build --workspace=sdk
+pnpm --filter @tokenisation/sdk build
 
 # Start the API server (SQLite — zero config)
 cp server/.env.example server/.env
-cd server && npm run dev
+cd server && pnpm dev
 # Server runs at http://localhost:3001
 ```
 
@@ -71,7 +63,7 @@ cd server && npm run dev
 npx create-tokenised-asset
 ```
 
-Interactive prompts will walk you through choosing asset type, blockchain, compliance preset, and token standard.
+Interactive prompts walk you through choosing asset type, blockchain, compliance preset, and token standard.
 
 ### Verify it works
 
@@ -85,8 +77,6 @@ curl -X POST http://localhost:3001/api/v1/assets \
   -H "X-Dev-Org-Id: dev-org-1" \
   -d '{"name": "Test Asset", "rightType": "OWNERSHIP", "jurisdiction": {"countryCode": "US"}}'
 ```
-
-> **Want the full walkthrough?** See [Quick Start Guide](docs/getting-started/QUICKSTART.md) or [First Project Tutorial](docs/getting-started/FIRST_PROJECT.md).
 
 ---
 
@@ -107,9 +97,9 @@ client.escrow      — Multi-party escrow with milestones and disputes
 client.cashFlow    — Distribution scheduling and yield management
 client.audit       — Tamper-evident audit trail with evidence packs
 client.events      — Event bus with dead letter queue
+client.tickets     — Airline/concert/event ticket operations
+client.dld         — Dubai Land Department integration
 ```
-
-> **Full API surface:** See the [One-Page SDK Reference](docs/ONE_PAGE_SDK_REFERENCE.md) — every method, parameter, and return type.
 
 ### Token Standards
 
@@ -121,7 +111,7 @@ client.events      — Event bus with dead letter queue
 | **ERC-1155** | Multi-tokens, mixed assets | Per-tokenId rules |
 | **ERC-1410** | Partitioned securities | Share class restrictions |
 | **ERC-4626** | Tokenized vaults | Yield + compliance |
-| **Soulbound** | Credentials, badges | Non-transferable |
+| **ERC-5192** | Soulbound tokens | Non-transferable credentials |
 
 ### Multi-Chain Support
 
@@ -131,9 +121,25 @@ client.events      — Event bus with dead letter queue
 | Polygon | 137 | Supported |
 | Base | 8453 | Primary L2 |
 | Arbitrum | 42161 | Supported |
+| Optimism | 10 | Supported |
 | Sepolia | 11155111 | Testnet |
 | Base Sepolia | 84532 | Testnet |
 | Arbitrum Sepolia | 421614 | Testnet |
+
+### Industry Verticals
+
+Pre-built asset packs with lifecycle state machines, compliance rules, and UI components:
+
+| Vertical | Asset Pack | Smart Contract |
+|----------|-----------|----------------|
+| Real Estate | `UAERealEstate`, `dubai-real-estate` | `RealToken.sol` |
+| Airlines | `AirlineTicket` | `AirlineTicketNFT.sol` |
+| Hotels | `HotelReservation` | `HotelReservationNFT.sol` |
+| Car Rental | `CarRental` | `CarRentalNFT.sol` |
+| Concerts | `ConcertTicket` | `ConcertTicketNFT.sol` |
+| Securities | `us-securities` | `ComplianceToken.sol` |
+| Loyalty | `LoyaltyPoints` | — |
+| Carbon Credits | `VerificationCredential` | — |
 
 ---
 
@@ -142,7 +148,7 @@ client.events      — Event bus with dead letter queue
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Applications                              │
-│   UI (React)  │  CLI  │  Server (Express)  │  Examples      │
+│   UI Dashboard  │  CLI  │  Server (Express)  │  Examples     │
 └───────────────┼───────┼────────────────────┼────────────────┘
                 │       │                    │
 ┌───────────────▼───────▼────────────────────▼────────────────┐
@@ -150,18 +156,22 @@ client.events      — Event bus with dead letter queue
 │                                                              │
 │  ApiClient ─── Projects │ Assets │ Investors │ Tokens        │
 │                Transfers │ Compliance │ Webhooks │ Governance │
-│                Escrow │ CashFlow │ Audit │ Events            │
+│                Escrow │ CashFlow │ Audit │ Events │ Tickets  │
 │                                                              │
 │  Token Adapters ── ERC-3643 │ ERC-20 │ ERC-721 │ ERC-1155   │
 │                                                              │
 │  Plugins ── MetaMask │ WalletConnect │ Chainlink │ SIWE      │
 │             S3/IPFS │ Oracle Aggregator │ CCIP Bridge        │
+│                                                              │
+│  Asset Packs ── 13 vertical templates with state machines    │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
-│                    Smart Contracts                            │
+│                    Smart Contracts (Foundry)                  │
 │  ComplianceToken (UUPS) │ IdentityRegistry │ TokenGovernor   │
 │  ModularCompliance │ TokenFactory (CREATE2) │ ERC1967Proxy    │
+│  Vertical NFTs │ Chainlink Automation │ CCIP Bridge          │
+│  DividendDistributor │ OracleRegistry │ ProofOfReserve       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -174,46 +184,42 @@ client.events      — Event bus with dead letter queue
 | **Multi-sig + Timelock** | 2-of-N approval + 2-day delay prevents malicious upgrades |
 | **Idempotency** | Network retries won't cause duplicate operations |
 | **Zod Validation** | Invalid data rejected at SDK level before hitting the server |
+| **Signed DecisionReceipts** | Cryptographic proof of every compliance decision |
 | **Database Transactions** | Multi-step operations are atomic |
-
-> **Deep dive:** [Architecture Overview](docs/ARCHITECTURE.md) | [Plugin System](docs/architecture/PLUGINS.md) | [Lifecycle Engine](docs/architecture/LIFECYCLE.md)
 
 ---
 
 ## Demo Applications
 
-Three production-quality demo applications showcase the SDK's capabilities:
-
 ### Real Estate Demo
 Tokenize a property and issue tokens to investors with full compliance.
 ```bash
-cd examples/real-estate-demo && npm run dev
+cd examples/real-estate-demo && pnpm dev
 ```
 
 ### Chainlink Starter Kit
 Five use-case demos wiring Chainlink Data Feeds, Automation, CCIP, and Proof of Reserve through the full SDK pipeline.
 ```bash
-cd examples/chainlink-starter && npm run demo:real-estate
+cd examples/chainlink-starter && pnpm demo:real-estate
 ```
 Available demos: `real-estate` (Price Feeds), `airline` (Automation), `car-rental` (CCIP), `hotel` (Compliance Mint), `concert` (Proof of Reserve)
 
 ### Feature Showcase
 Single runnable script demonstrating all major SDK capabilities.
 ```bash
-cd examples/showcase && npm run demo
+cd examples/showcase && pnpm demo
 ```
-
-> **Use case recipes:** [Real Estate](docs/recipes/01-real-estate.md) | [Airline Tickets](docs/recipes/02-airline-tickets.md) | [Car Rental](docs/recipes/03-car-rental.md) | [Hotel](docs/recipes/04-hotel-tickets.md) | [Concert](docs/recipes/05-concert-tickets.md)
 
 ---
 
 ## Authentication
 
-The API supports multiple auth methods. See the [Authentication Guide](docs/AUTHENTICATION.md) for multi-language examples (TypeScript, Python, Go, Ruby, Java, cURL).
-
 ```bash
 # API Key (production)
 curl -H "Authorization: Bearer sk_live_xxx" https://api.your-platform.com/api/v1/assets
+
+# SIWE (Sign-In with Ethereum)
+# POST /api/v1/auth/siwe/nonce → sign → POST /api/v1/auth/siwe/verify → JWT
 
 # Dev mode (local only)
 curl -H "X-Dev-Org-Id: dev-org-1" http://localhost:3001/api/v1/assets
@@ -223,25 +229,26 @@ curl -H "X-Dev-Org-Id: dev-org-1" http://localhost:3001/api/v1/assets
 
 ## API Server
 
-The server provides a REST API with 200+ endpoints. Browse the interactive API docs at `http://localhost:3001/api/docs` (Swagger UI).
+The server provides a REST API with 50+ route modules. Browse interactive API docs at `http://localhost:3001/api/docs` (Swagger UI).
 
 ### Key Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/v1/assets` | Create asset |
-| `POST /api/v1/investors` | Create investor |
-| `POST /api/v1/tokens` | Create token |
-| `POST /api/v1/tokens/:id/deploy` | Deploy to chain |
-| `POST /api/v1/tokens/:id/issue` | Issue tokens (requires idempotencyKey) |
-| `POST /api/v1/transfers` | Create transfer (requires idempotencyKey) |
-| `GET /api/v1/tokens/:id/cap-table` | Get cap table |
-| `POST /api/v1/compliance/policies` | Create compliance policy |
-| `GET /api/v1/health` | Health check |
-| `GET /api/docs` | Swagger UI |
-| `GET /api/openapi.json` | OpenAPI spec |
+| Category | Endpoints |
+|----------|-----------|
+| **Assets** | CRUD, transitions, lifecycle management |
+| **Tokens** | Create, deploy, mint, burn, pause, freeze |
+| **Investors** | Onboarding, KYC status, wallet management |
+| **Transfers** | Compliant transfers with idempotency |
+| **Compliance** | Policy engine, sanctions screening, receipts |
+| **Governance** | Proposals, voting, execution |
+| **Distributions** | Dividend scheduling, payment execution |
+| **Verticals** | Airline, hotel, car rental, concert APIs |
+| **Payments** | Stripe + Circle USDC payment rails |
+| **Custody** | BitGo + Fireblocks integration |
+| **DLD** | Dubai Land Department integration |
+| **Oracles** | Chainlink feeds, flight data, NAV |
 
-> **Full endpoint catalog:** [REST API Reference](docs/api/REST_API.md) | [Error Reference](docs/ERROR_REFERENCE.md)
+See [`server/README.md`](server/README.md) for the full endpoint catalog.
 
 ---
 
@@ -252,52 +259,33 @@ TokenisationSDK/
 ├── sdk/                          # TypeScript SDK (@tokenisation/sdk)
 │   ├── src/
 │   │   ├── ApiClient.ts          # Stripe-like API client
-│   │   ├── modules/              # API modules (assets, tokens, investors, ...)
+│   │   ├── modules/              # 27 API modules
 │   │   ├── plugins/              # Wallet, oracle, storage, Chainlink plugins
 │   │   ├── contracts/adapters/   # Token standard adapters
-│   │   ├── packs/                # Pre-built asset templates (10 packs)
+│   │   ├── packs/                # 13 pre-built asset templates
+│   │   ├── components/           # Pre-built React components + verticals
 │   │   └── core/                 # Lifecycle engine, event store
 │   └── tests/
+├── sdk-react/                   # React SDK (@tokenisation/sdk-react)
+├── sdk-react-native/            # React Native SDK (@tokenisation/sdk-react-native)
 ├── server/                       # Express API Server
-│   ├── src/routes/               # 37 route files, 200+ endpoints
+│   ├── src/routes/               # 50 route files
+│   ├── src/services/             # 30+ service modules
 │   ├── src/middleware/           # Auth, rate limiting, idempotency
-│   └── src/db/                   # Drizzle ORM schemas
+│   └── src/db/                   # Drizzle ORM (PostgreSQL + SQLite)
 ├── contracts/                    # Solidity Smart Contracts (Foundry)
-│   └── src/                     # ERC-3643, governance, identity, compliance
-├── ui/                           # React Dashboard (Vite + Tailwind)
-├── website/                      # Docusaurus documentation site
+│   └── src/                     # 46 contracts: tokens, compliance, governance, oracles
+├── ui/                           # Admin Dashboard (Vite + React + Tailwind)
+├── ui-kit/                       # Shared UI component library (50+ components)
 ├── packages/
 │   ├── create-tokenised-asset/   # Project scaffolding CLI
 │   └── conformance-suite/        # Integration tests
 ├── examples/                     # Demo applications
-├── docs/                         # 50+ documentation files
+│   ├── real-estate-demo/
+│   ├── chainlink-starter/
+│   └── showcase/
 └── deploy/                       # Kubernetes, Terraform, Helm
 ```
-
----
-
-## Documentation
-
-### I want to...
-
-| Goal | Start Here |
-|------|------------|
-| **Get started fast** | [Quick Start](docs/getting-started/QUICKSTART.md) |
-| **See every SDK method** | [One-Page SDK Reference](docs/ONE_PAGE_SDK_REFERENCE.md) |
-| **Browse API endpoints** | [REST API Reference](docs/api/REST_API.md) or `http://localhost:3001/api/docs` |
-| **Understand authentication** | [Authentication Guide](docs/AUTHENTICATION.md) |
-| **Handle errors** | [Error Reference](docs/ERROR_REFERENCE.md) |
-| **Understand the architecture** | [Architecture](docs/ARCHITECTURE.md) |
-| **Set up compliance** | [Compliance Setup](docs/guides/COMPLIANCE_SETUP.md) |
-| **Integrate Chainlink** | [Chainlink Guide](docs/guides/CHAINLINK_INTEGRATION.md) |
-| **Deploy to production** | [Deployment Runbook](docs/deployment/DEPLOYMENT_RUNBOOK.md) |
-| **Look up a term** | [Glossary](docs/GLOSSARY.md) (80+ definitions) |
-| **Troubleshoot an issue** | [FAQ & Troubleshooting](docs/FAQ.md) |
-| **Understand tokenization** | [Core Concepts](docs/CONCEPTS.md) |
-
-### Full Documentation Site
-
-Browse all docs at the [documentation site](https://emotionlotion.github.io/TokenisationSDK/) or explore the [docs/](docs/) directory. Machine-readable index available at [llms.txt](llms.txt).
 
 ---
 
@@ -305,16 +293,19 @@ Browse all docs at the [documentation site](https://emotionlotion.github.io/Toke
 
 ```bash
 # SDK unit tests
-npm test --workspace=sdk
+pnpm --filter @tokenisation/sdk test
 
-# Smart contract tests
+# Smart contract tests (108 tests across 5 suites)
 cd contracts && forge test
 
 # Conformance tests (requires running server + local blockchain)
-npm test --workspace=@tokenisation/conformance-suite
+pnpm --filter @tokenisation/conformance-suite test
 
 # Server tests
-cd server && npm test
+cd server && pnpm test
+
+# UI tests
+cd ui && pnpm test
 ```
 
 ---
@@ -336,7 +327,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Run tests (`npm test`)
+3. Run tests (`pnpm test`)
 4. Commit your changes
 5. Open a Pull Request
 
@@ -345,7 +336,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ## Community & Support
 
 - **Issues:** [GitHub Issues](https://github.com/EmotionLotion/TokenisationSDK/issues)
-- **Documentation:** [docs/](docs/) or [online docs](https://emotionlotion.github.io/TokenisationSDK/)
 - **Security:** Report vulnerabilities per [SECURITY.md](SECURITY.md)
 - **License:** MIT — see [LICENSE](LICENSE)
 

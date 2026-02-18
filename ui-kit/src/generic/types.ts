@@ -38,12 +38,6 @@ export type TokenProfile =
 
 export type TemplateType =
   | 'real_estate'
-  | 'carbon_credit'
-  | 'ticket'
-  | 'royalty'
-  | 'loyalty'
-  | 'commodity'
-  | 'equity'
   | 'custom';
 
 // ============================================

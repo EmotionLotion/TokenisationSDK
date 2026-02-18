@@ -1,16 +1,20 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
-  Building2, PieChart, FileText, UserCheck, ArrowLeft,
+  Building2, PieChart, FileText, UserCheck, ArrowLeft, ShoppingCart,
 } from 'lucide-react';
+import { AuthGate } from '../components/AuthGate';
+import { useCartStore } from '../hooks/useInvestmentCart';
 
 const NAV_ITEMS = [
   { path: '/investor', icon: PieChart, label: 'Portfolio', end: true },
-  { path: '/investor/portfolio', icon: PieChart, label: 'Holdings' },
   { path: '/investor/statements', icon: FileText, label: 'Statements' },
   { path: '/investor/onboarding', icon: UserCheck, label: 'KYC / Accreditation' },
+  { path: '/investor/cart', icon: ShoppingCart, label: 'Cart', badge: true },
 ];
 
 export function InvestorLayout() {
+  const cartCount = useCartStore((s) => s.items.length);
+
   return (
     <div className="flex h-screen bg-background text-white overflow-hidden">
       {/* Sidebar */}
@@ -48,6 +52,11 @@ export function InvestorLayout() {
                 >
                   <Icon className="w-5 h-5" />
                   <span className="font-medium">{item.label}</span>
+                  {'badge' in item && item.badge && cartCount > 0 && (
+                    <span className="ml-auto px-1.5 py-0.5 bg-primary text-black text-[10px] font-bold rounded-full min-w-[18px] text-center">
+                      {cartCount}
+                    </span>
+                  )}
                 </NavLink>
               );
             })}
@@ -68,7 +77,7 @@ export function InvestorLayout() {
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto p-8">
-        <Outlet />
+        <AuthGate />
       </main>
     </div>
   );

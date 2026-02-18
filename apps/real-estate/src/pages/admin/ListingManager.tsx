@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   List,
   Plus,
@@ -24,6 +25,7 @@ import type { DubaiProperty } from '../../data/dubai-properties';
 /* ------------------------------------------------------------------ */
 
 export function ListingManager() {
+  const navigate = useNavigate();
   const { listAssets, transitionAsset } = useAsset();
 
   // Fetch properties from SDK, fall back to static mock data
@@ -94,7 +96,10 @@ export function ListingManager() {
           </div>
         </div>
 
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-colors">
+        <button
+          onClick={() => navigate('/admin/onboard')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-colors"
+        >
           <Plus className="w-4 h-4" />
           Add New Listing
         </button>
@@ -179,6 +184,7 @@ export function ListingManager() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        onClick={() => navigate(`/admin/onboard?edit=${prop.id}`)}
                         className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all"
                         title="Edit"
                       >

@@ -1,8 +1,10 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Settings, Bell, Search, Box, Shield,
-    ArrowLeftRight, Radio, Wallet, Code, Code2, UserCheck, Sparkles, ChevronDown, Palette, Landmark,
-    Banknote, Vote, Lock, Award, Coins, Presentation, Bug
+    ArrowLeftRight, Radio, Wallet, Code2, UserCheck, ChevronDown,
+    Bug,
+    Rocket, FileText, BookOpen, BarChart3, Key, Webhook, Terminal,
+    Layers, ExternalLink,
 } from 'lucide-react';
 import { AhoyLogo } from '../components/AhoyLogo';
 import { SdkInsightPanel } from '../components/SdkInsightPanel';
@@ -21,24 +23,24 @@ const MAIN_NAV = [
     { path: '/payouts', icon: Wallet, label: 'Payouts' },
 ];
 
-const SDK_NAV = [
-    { path: '/staking', icon: Coins, label: 'Staking' },
-    { path: '/cashflow', icon: Banknote, label: 'CashFlow' },
-    { path: '/governance', icon: Vote, label: 'Governance' },
-    { path: '/escrow', icon: Lock, label: 'Escrow' },
-    { path: '/soulbound', icon: Award, label: 'Soulbound' },
+const DEVELOP_NAV = [
+    { path: '/dev/getting-started', icon: Rocket, label: 'Getting Started' },
+    { path: '/dev/architecture', icon: Layers, label: 'Architecture' },
+    { path: '/dev/chainlink', icon: Radio, label: 'Chainlink Guide' },
+    { path: '/dev/api', icon: FileText, label: 'API Reference' },
+    { path: '/dev/playground', icon: Code2, label: 'Playground' },
+    { path: '/dev/debugger', icon: Bug, label: 'Debugger' },
+    { path: '/dev/guides', icon: BookOpen, label: 'SDK Guides' },
 ];
 
-const DEV_NAV = [
-    { path: '/demo/institutional', icon: Landmark, label: 'Dubai RE Demo' },
-    { path: '/developers', icon: Code, label: 'Developers' },
-    { path: '/uikit', icon: Palette, label: 'UI Kit Demo' },
-    { path: '/demo', icon: Sparkles, label: 'SDK Demos', end: true },
-    { path: '/showcase', icon: Presentation, label: 'Showcase' },
-    { path: '/playground', icon: Code2, label: 'Playground' },
-    { path: '/debugger', icon: Bug, label: 'Debugger' },
-    { path: '/settings', icon: Settings, label: 'Settings' },
+const INTEGRATE_NAV = [
+    { path: '/integrate', icon: BarChart3, label: 'Overview', end: true },
+    { path: '/integrate/keys', icon: Key, label: 'API Keys' },
+    { path: '/integrate/webhooks', icon: Webhook, label: 'Webhooks' },
+    { path: '/integrate/logs', icon: Terminal, label: 'Logs & Monitoring' },
+    { path: '/integrate/partner', icon: Shield, label: 'Partner Admin' },
 ];
+
 
 export function PlatformLayout() {
     const navigate = useNavigate();
@@ -99,18 +101,38 @@ export function PlatformLayout() {
                         {MAIN_NAV.map(renderNavLink)}
                     </div>
 
-                    {/* SDK Modules Navigation */}
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 font-medium mb-3 px-3">SDK Modules</p>
+                    {/* Reference Apps */}
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 font-medium mb-3 px-3">Reference Apps</p>
                     <div className="space-y-1 mb-6">
-                        {SDK_NAV.map(renderNavLink)}
+                        <a
+                            href="http://localhost:5174"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 group text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                        >
+                            <ExternalLink className="w-5 h-5 group-hover:text-[#F8B032]/70" />
+                            <span className="font-medium tracking-wide text-sm">Real Estate Platform</span>
+                        </a>
                     </div>
 
-                    {/* Developer Navigation */}
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 font-medium mb-3 px-3">Developer</p>
-                    <div className="space-y-1">
-                        {DEV_NAV.map(renderNavLink)}
+                    {/* Develop Navigation */}
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 font-medium mb-3 px-3">Develop</p>
+                    <div className="space-y-1 mb-6">
+                        {DEVELOP_NAV.map(renderNavLink)}
                     </div>
+
+                    {/* Integrate Navigation */}
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 font-medium mb-3 px-3">Integrate</p>
+                    <div className="space-y-1 mb-6">
+                        {INTEGRATE_NAV.map(renderNavLink)}
+                    </div>
+
                 </nav>
+
+                {/* Settings - Pinned at bottom */}
+                <div className="px-3 py-2 border-t border-white/5">
+                    {renderNavLink({ path: '/settings', icon: Settings, label: 'Settings' })}
+                </div>
 
                 {/* Environment Selector */}
                 <div className="px-4 py-3 border-t border-white/5">

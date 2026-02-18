@@ -14,7 +14,7 @@
 import { AssetType, InvestorClass, LiquidityProfile, FractionalizationType } from '../core/AssetAbstraction.js';
 import { LifecycleState } from '../core/types.js';
 import type { AssetPack, LifecycleRule, ComplianceRule, RequiredVerification, DistributionSchedule, GovernanceSettings } from './AssetPackRegistry.js';
-import type { AssetPackConfig } from './dubai-real-estate.pack.js';
+import type { AssetPackConfig } from './real-estate.pack.js';
 
 /**
  * US Securities Pack Lifecycle Rules

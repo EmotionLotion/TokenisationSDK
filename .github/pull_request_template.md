@@ -12,10 +12,14 @@ Brief description of changes and motivation.
 
 ## Component(s) Affected
 - [ ] SDK (`sdk/`)
+- [ ] SDK React (`sdk-react/`)
+- [ ] SDK React Native (`sdk-react-native/`)
 - [ ] Server (`server/`)
 - [ ] Smart Contracts (`contracts/`)
-- [ ] UI (`ui/`)
-- [ ] Documentation (`docs/`)
+- [ ] UI Dashboard (`ui/`)
+- [ ] UI Kit (`ui-kit/`)
+- [ ] Examples (`examples/`)
+- [ ] Deploy (`deploy/`)
 - [ ] CI/CD (`.github/`)
 
 ## Related Issues
@@ -31,7 +35,8 @@ Describe tests added or how changes were tested.
 
 ```bash
 # Commands to run tests
-npm test --workspace=sdk
+pnpm --filter @tokenisation/sdk test
+cd contracts && forge test
 ```
 
 ## Screenshots (if applicable)

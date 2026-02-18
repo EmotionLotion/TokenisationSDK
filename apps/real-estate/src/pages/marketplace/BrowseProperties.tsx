@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, MapPin, TrendingUp, Filter } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useAsset } from '@tokenisation/sdk-react';
 import { StatusBadge } from '@tokenisation/ui-kit';
 import {
@@ -73,6 +74,31 @@ function PropertyCard({ property }: { property: DubaiProperty }) {
           <p className="text-xs text-gray-500 uppercase tracking-wider">Valuation</p>
           <p className="text-xl font-bold text-white">{formatAED(property.valuationAED)}</p>
         </div>
+
+        {/* Funding progress bar */}
+        {property.tokensSold != null && property.totalTokens > 0 && (() => {
+          const pct = Math.min(100, Math.round((property.tokensSold! / property.totalTokens) * 100));
+          const fundedAED = property.tokensSold! * property.tokenPriceAED;
+          const goalAED = property.fundingGoalAED ?? property.valuationAED;
+          return (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-white">{pct}% Funded</span>
+                <span className="text-[10px] text-gray-500">
+                  {formatAED(fundedAED)} of {formatAED(goalAED)}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-amber-400"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 1, ease: 'easeOut', delay: 0.2 }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Stats grid */}
         <div className="grid grid-cols-3 gap-3 pt-3 border-t border-white/5">

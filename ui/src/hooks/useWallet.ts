@@ -7,7 +7,34 @@
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useBalance } from 'wagmi';
 import { chainMetadata, type SupportedChainId } from '../config/wagmi';
 
-export function useWallet() {
+interface ChainMeta {
+  name: string;
+  icon: string;
+  isDefault: boolean;
+  isTestnet: boolean;
+}
+
+interface UseWalletReturn {
+  address: ReturnType<typeof useAccount>['address'];
+  chainId: ReturnType<typeof useAccount>['chainId'];
+  isConnected: boolean;
+  isConnecting: boolean;
+  isDisconnecting: boolean;
+  isSwitchingChain: boolean;
+  currentChain: ChainMeta | null;
+  balance: ReturnType<typeof useBalance>['data'];
+  displayAddress: string | null;
+  displayBalance: string | null;
+  isBalanceLoading: boolean;
+  connect: ReturnType<typeof useConnect>['connect'];
+  disconnect: ReturnType<typeof useDisconnect>['disconnect'];
+  switchChain: ReturnType<typeof useSwitchChain>['switchChain'];
+  connectors: ReturnType<typeof useConnect>['connectors'];
+  connectError: ReturnType<typeof useConnect>['error'];
+  switchError: ReturnType<typeof useSwitchChain>['error'];
+}
+
+export function useWallet(): UseWalletReturn {
   const { address, chainId, isConnected, isConnecting, isReconnecting } = useAccount();
   const { connect, connectors, isPending: isConnectPending, error: connectError } = useConnect();
   const { disconnect, isPending: isDisconnectPending } = useDisconnect();
@@ -17,7 +44,7 @@ export function useWallet() {
   });
 
   // Get current chain metadata
-  const currentChain = chainId ? chainMetadata[chainId as SupportedChainId] : null;
+  const currentChain = chainId ? chainMetadata[chainId as SupportedChainId] ?? null : null;
 
   // Format address for display
   const displayAddress = address

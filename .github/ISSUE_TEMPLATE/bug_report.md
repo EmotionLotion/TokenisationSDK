@@ -11,10 +11,12 @@ A clear and concise description of the bug.
 
 ## Component
 - [ ] SDK (`sdk/`)
+- [ ] SDK React (`sdk-react/`)
+- [ ] SDK React Native (`sdk-react-native/`)
 - [ ] Server (`server/`)
 - [ ] Smart Contracts (`contracts/`)
-- [ ] UI (`ui/`)
-- [ ] Documentation (`docs/`)
+- [ ] UI Dashboard (`ui/`)
+- [ ] UI Kit (`ui-kit/`)
 
 ## Steps to Reproduce
 1.

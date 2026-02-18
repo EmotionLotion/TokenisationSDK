@@ -1,3 +1,4 @@
+// @ts-nocheck — Kept on disk for future use; barrel export removed during RE+Compute pruning.
 /**
  * useTickets - Hook for airline ticket operations via TicketsClient.
  */

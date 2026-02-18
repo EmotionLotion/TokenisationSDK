@@ -45,8 +45,6 @@ import {
   EscrowModule,
   CashFlowModule,
   DLDModule,
-  TicketsClient,
-  ResaleModule,
   LegalModule,
 } from '@tokenisation/sdk/client';
 
@@ -110,6 +108,7 @@ export function TokenisationProvider({
     return new BrowserHttpClient({
       baseUrl: config.apiUrl,
       publishableKey: config.publishableKey,
+      apiKey: config.apiKey,
       getAccessToken: () => authTokenRef.current,
       onAuthError: () => {
         setAuthToken(null);
@@ -119,7 +118,7 @@ export function TokenisationProvider({
       timeout: 30000,
       retry: { maxRetries: 3, retryDelay: 1000 },
     });
-  }, [config.apiUrl, config.publishableKey, config.orgId, config.onAuthError]);
+  }, [config.apiUrl, config.publishableKey, config.apiKey, config.orgId, config.onAuthError]);
 
   // SDK modules - instantiated once, sharing the same HTTP client
   const modules = useMemo<SDKModules>(() => {
@@ -140,14 +139,16 @@ export function TokenisationProvider({
       escrow: new EscrowModule(http),
       cashflow: new CashFlowModule(http),
       dld: new DLDModule(http),
-      tickets: new TicketsClient(http),
-      resale: new ResaleModule(http),
       legal: new LegalModule(http),
     };
   }, [api]);
 
   // Initialize SDK on mount
+  const initRef = useRef(false);
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     async function initialize() {
       try {
         if (config.debug) {
@@ -179,7 +180,7 @@ export function TokenisationProvider({
     }
 
     initialize();
-  }, [config, api]);
+  }, [config.apiUrl, config.publishableKey, config.debug, api]);
 
   // Connect wallet
   const connectWallet = useCallback(

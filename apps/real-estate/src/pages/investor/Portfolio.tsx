@@ -6,7 +6,7 @@ import {
   formatAED,
   type DubaiProperty,
 } from '../../data/dubai-properties';
-import { useInvestor, useTokenBalance, useCashFlow } from '@tokenisation/sdk-react';
+import { useInvestor, useCashFlow } from '@tokenisation/sdk-react';
 import { useSDKWithFallback } from '../../hooks/useSDKWithFallback';
 
 interface Holding {
@@ -80,25 +80,31 @@ export function Portfolio() {
   const investor = useInvestor();
   const cashFlow = useCashFlow();
 
-  // Try to fetch real token balances per asset, falling back to mock holdings
+  // Try to fetch real investor holdings from the API
   const fetchHoldings = useCallback(async (): Promise<Holding[] | null> => {
-    // Attempt to get real investor data and token balances for each property
     const investors = await investor.list({ status: 'active', limit: 1 });
     if (!investors || investors.length === 0) return null;
 
+    // Attempt to get token balances for each known property
     const holdings: Holding[] = [];
-    for (const prop of DUBAI_PROPERTIES.slice(0, 3)) {
-      // Build holding from real data if available
-      holdings.push({
-        property: prop,
-        tokenBalance: 0, // Would be populated from real balance
-        purchasePrice: prop.tokenPriceAED,
-        yieldEarned: 0,
-      });
+    for (const prop of DUBAI_PROPERTIES) {
+      try {
+        const balances = await investor.getBalances?.({ assetId: prop.id } as any);
+        if (balances && Array.isArray(balances) && balances.length > 0) {
+          const bal = balances[0];
+          holdings.push({
+            property: prop,
+            tokenBalance: parseFloat(bal.balance || '0'),
+            purchasePrice: prop.tokenPriceAED,
+            yieldEarned: parseFloat(bal.yieldEarned || '0'),
+          });
+        }
+      } catch {
+        // Skip properties where balance fetch fails
+      }
     }
 
-    // Only use if we got meaningful data back
-    return holdings.some((h) => h.tokenBalance > 0) ? holdings : null;
+    return holdings.length > 0 ? holdings : null;
   }, [investor]);
 
   const {

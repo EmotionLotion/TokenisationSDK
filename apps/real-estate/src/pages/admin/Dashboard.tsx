@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   LayoutDashboard,
   Building2,
@@ -6,7 +6,7 @@ import {
   DollarSign,
   TrendingUp,
 } from 'lucide-react';
-import { useAsset, useCashFlow, useInvestor } from '@tokenisation/sdk-react';
+import { useAsset, useInvestor } from '@tokenisation/sdk-react';
 import { StatusBadge } from '@tokenisation/ui-kit';
 import { useSDKWithFallback } from '../../hooks/useSDKWithFallback';
 import { assetToDubaiProperty, toStatusBadgeVariant } from '../../utils/mappers';
@@ -59,6 +59,7 @@ function StatCard({
 
 export function Dashboard() {
   const { listAssets } = useAsset();
+  const investor = useInvestor();
 
   // Fetch properties from SDK, fall back to static mock data
   const { data: properties, isLive } = useSDKWithFallback<DubaiProperty[]>(
@@ -69,6 +70,15 @@ export function Dashboard() {
     },
     DUBAI_PROPERTIES,
   );
+
+  // Fetch pending KYC count from SDK, fall back to 5
+  const fetchPendingKyc = useCallback(async (): Promise<number | null> => {
+    const pending = await investor.list({ kycStatus: 'pending' } as any);
+    if (!pending) return null;
+    return pending.length;
+  }, [investor]);
+
+  const { data: pendingKycCount } = useSDKWithFallback<number>(fetchPendingKyc, 5, []);
 
   // Compute portfolio totals from resolved data
   const totals = useMemo(() => {
@@ -139,13 +149,13 @@ export function Dashboard() {
         <StatCard
           icon={Users}
           label="Pending KYC"
-          value="5"
+          value={String(pendingKycCount)}
           sub="Awaiting review"
         />
         <StatCard
           icon={TrendingUp}
           label="Distributions (Q)"
-          value={formatAED(176700000)}
+          value={formatAED(Math.round(totals.annualIncomeAED / 4))}
           sub="This quarter"
         />
       </div>

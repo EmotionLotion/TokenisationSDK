@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import type { AssetInstance, TemplateType } from '../types';
+import type { AssetInstance } from '../types';
 import { getAllTemplates, getTemplate } from '../templates/registry';
 import { GenericAssetCard } from './AssetCard';
 import { AssetGrid } from './AssetGrid';
@@ -45,75 +45,45 @@ const mockAssets: AssetInstance[] = [
     holdersCount: 156,
   },
   {
-    id: 'asset_cc_001',
-    templateId: 'tmpl_carbon_credit_v1',
-    template: getTemplate('carbon_credit'),
+    id: 'asset_re_002',
+    templateId: 'tmpl_real_estate_v1',
+    template: getTemplate('real_estate'),
     metadata: {
-      name: 'Amazon Rainforest REDD+ Credits',
-      description: 'Verified carbon credits from forest conservation project',
-      image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400',
-      registryId: 'VCS-1234',
-      registryName: 'Verra',
-      projectType: 'Forestry',
-      vintage: 2023,
-      co2Tonnes: 1,
-      projectLocation: 'Brazil',
+      name: 'Downtown Business Center - Floor 3',
+      description: 'Prime commercial office space in downtown district',
+      image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400',
+      propertyAddress: 'Financial District, DIFC, UAE',
+      propertyType: 'Commercial',
+      appraisalValue: 5800000,
+      annualYield: 6.2,
     },
-    supply: { model: 'capped', total: '500000', decimals: 0 },
+    supply: { model: 'fixed', total: '5000000', decimals: 6 },
     status: 'active',
     issuerId: 'issuer_002',
-    jurisdiction: 'BR',
+    jurisdiction: 'UAE',
     policies: [],
     createdAt: '2024-02-01T10:00:00Z',
     updatedAt: '2024-02-01T10:00:00Z',
-    currentPrice: '15',
+    currentPrice: '1160',
     holdersCount: 89,
   },
   {
-    id: 'asset_tk_001',
-    templateId: 'tmpl_ticket_v1',
-    template: getTemplate('ticket'),
+    id: 'asset_custom_001',
+    templateId: 'tmpl_custom_v1',
+    template: getTemplate('custom'),
     metadata: {
-      name: 'Web3 Summit 2024 - VIP Pass',
-      description: 'Full access VIP ticket with backstage access',
-      image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400',
-      eventName: 'Web3 Summit 2024',
-      eventDate: '2024-06-15',
-      venue: 'Dubai World Trade Centre',
-      ticketType: 'VIP',
-    },
-    supply: { model: 'fixed', total: '500', decimals: 0 },
-    status: 'active',
-    issuerId: 'issuer_003',
-    jurisdiction: 'UAE',
-    policies: [],
-    createdAt: '2024-03-01T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
-    currentPrice: '500',
-    holdersCount: 245,
-  },
-  {
-    id: 'asset_ry_001',
-    templateId: 'tmpl_royalty_v1',
-    template: getTemplate('royalty'),
-    metadata: {
-      name: 'Indie Album Royalties - "Electric Dreams"',
-      description: 'Share in streaming royalties from hit album',
-      image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400',
-      assetTitle: 'Electric Dreams',
-      assetType: 'Music',
-      royaltyPercentage: 25,
-      distributionFrequency: 'Monthly',
+      name: 'Custom Asset Example',
+      description: 'A custom asset type demonstration',
     },
     supply: { model: 'fixed', total: '100000', decimals: 2 },
     status: 'active',
-    issuerId: 'issuer_004',
+    issuerId: 'issuer_003',
     jurisdiction: 'US',
     policies: [],
-    createdAt: '2024-01-20T10:00:00Z',
-    updatedAt: '2024-01-20T10:00:00Z',
-    currentPrice: '10',
-    holdersCount: 412,
+    createdAt: '2024-03-01T10:00:00Z',
+    updatedAt: '2024-03-01T10:00:00Z',
+    currentPrice: '50',
+    holdersCount: 245,
   },
 ];
 
@@ -364,12 +334,12 @@ console.log(template.availableActions); // ['issue', 'transfer', 'distribute', .
             </div>
             <div>
               <p className="text-sm text-gray-500 mb-2">Dropdown Variant</p>
-              <ActionStation assetId="asset_cc_001" asset={mockAssets[1]} variant="dropdown" />
+              <ActionStation assetId="asset_re_002" asset={mockAssets[1]} variant="dropdown" />
             </div>
             <div>
               <p className="text-sm text-gray-500 mb-2">Full Panel Variant</p>
               <div className="max-w-md">
-                <ActionStation assetId="asset_ry_001" asset={mockAssets[3]} variant="full" />
+                <ActionStation assetId="asset_custom_001" asset={mockAssets[2]} variant="full" />
               </div>
             </div>
           </div>

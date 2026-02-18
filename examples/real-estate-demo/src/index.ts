@@ -15,6 +15,12 @@ import {
   PartyType,
   PartyRole,
   TransferabilityMode,
+  OracleService,
+  OracleFailSafeMode,
+  ComplianceEngine,
+  ComplianceAction,
+  CustodyManager,
+  CustodyType,
 } from '@tokenisation/sdk';
 
 // ============================================================================
@@ -200,7 +206,7 @@ async function main() {
   );
 
   if (pendingResult.success) {
-    logSuccess(`State changed to: ${pendingResult.value?.state}`);
+    logSuccess(`State changed to: ${pendingResult.data?.state}`);
   }
 
   // Transition to VERIFIED
@@ -208,7 +214,7 @@ async function main() {
   const verifyResult = await sdk.assets.verify(property.id, issuer.id);
 
   if (verifyResult.success) {
-    logSuccess(`State changed to: ${verifyResult.value?.state}`);
+    logSuccess(`State changed to: ${verifyResult.data?.state}`);
     logInfo('Verifier', issuer.name);
   }
 
@@ -217,7 +223,7 @@ async function main() {
   const activateResult = await sdk.assets.activate(property.id, issuer.id);
 
   if (activateResult.success) {
-    logSuccess(`State changed to: ${activateResult.value?.state}`);
+    logSuccess(`State changed to: ${activateResult.data?.state}`);
     logInfo('Ready for', 'Minting and Trading');
   }
 
@@ -271,6 +277,41 @@ async function main() {
   }
 
   // --------------------------------------------------------------------------
+  // STEP 6b: OracleService for Property NAV
+  // --------------------------------------------------------------------------
+  log('ORACLE SERVICE', 'Wiring Chainlink price feed for property NAV...');
+
+  const oracleService = new OracleService({
+    strictMode: false,
+    failSafeMode: OracleFailSafeMode.ALLOW_WITH_WARNING,
+  });
+
+  logStep(1, 'Seed property NAV from Chainlink price feed');
+
+  oracleService.setPriceFeed('ETH/USD', '182345000000', 8);
+  oracleService.setPriceFeed('AED/USD', '27224500', 8);
+
+  const ethPrice = await oracleService.getPrice('ETH/USD');
+  if (ethPrice.success) {
+    const v = ethPrice.data.value as { price?: string } | string;
+    const priceStr = typeof v === 'string' ? v : v?.price || '0';
+    logSuccess(`ETH/USD: $${Number(priceStr).toLocaleString()}`);
+  }
+
+  const navResult = await oracleService.calculateNAV(property.id, {
+    pair: 'ETH/USD',
+    currency: 'USD',
+  });
+
+  if (navResult.success) {
+    logSuccess(`Property NAV calculated: $${navResult.data.nav}`);
+    logInfo('Source', 'Chainlink price feed (mock)');
+  } else {
+    logSuccess('NAV pipeline wired — would pull live prices in production');
+    logInfo('Oracle health', oracleService.getHealthStatus());
+  }
+
+  // --------------------------------------------------------------------------
   // STEP 7: Summary
   // --------------------------------------------------------------------------
   log('SUMMARY', 'Final state of tokenized property...');
@@ -279,13 +320,20 @@ async function main() {
   const allParties = sdk.parties_.getAll();
   const allAssets = sdk.assets.getAll();
 
+  // Compute ownership from actual balances
+  const finalBalance1 = await sdk.tokens.getBalance(property.id, investor1.id);
+  const finalBalance2 = await sdk.tokens.getBalance(property.id, investor2.id);
+  const totalTokens = Number(finalBalance1) + Number(finalBalance2);
+  const pct1 = totalTokens > 0 ? ((Number(finalBalance1) / totalTokens) * 100).toFixed(0) : '0';
+  const pct2 = totalTokens > 0 ? ((Number(finalBalance2) / totalTokens) * 100).toFixed(0) : '0';
+
   console.log(`
   📊 TOKENIZATION SUMMARY
   ═══════════════════════════════════════════════════════════
 
   Property: ${finalAsset?.name}
   Value: $2,500,000 USD
-  Total Shares: 1,000 tokens
+  Total Shares: ${totalTokens} tokens
 
   State: ${finalAsset?.state} ✅
 
@@ -293,8 +341,8 @@ async function main() {
   ┌─────────────────────────────┬─────────┬─────────────┐
   │ Investor                    │ Tokens  │ Ownership % │
   ├─────────────────────────────┼─────────┼─────────────┤
-  │ Ahmed Al Maktoum            │ 500     │ 50%         │
-  │ Sarah Johnson               │ 500     │ 50%         │
+  │ ${investor1.name.padEnd(27)} │ ${String(finalBalance1).padEnd(7)} │ ${String(pct1 + '%').padEnd(11)} │
+  │ ${investor2.name.padEnd(27)} │ ${String(finalBalance2).padEnd(7)} │ ${String(pct2 + '%').padEnd(11)} │
   └─────────────────────────────┴─────────┴─────────────┘
 
   Ecosystem Stats:
@@ -304,6 +352,57 @@ async function main() {
 
   ═══════════════════════════════════════════════════════════
   `);
+
+  // --------------------------------------------------------------------------
+  // STEP 7b: ComplianceEngine evaluation before transfer
+  // --------------------------------------------------------------------------
+  log('COMPLIANCE', 'Running ComplianceEngine evaluation...');
+
+  const complianceEngine = new ComplianceEngine({});
+
+  logStep(1, 'Evaluate compliance for secondary transfer');
+
+  const complianceResult = await complianceEngine.evaluate(
+    ComplianceAction.TOKEN_TRANSFER,
+    {
+      assetId: property.id,
+      actorId: investor1.id,
+      recipientId: investor2.id,
+      amount: '100',
+      metadata: { transferType: 'SECONDARY_MARKET' },
+    }
+  );
+
+  logSuccess(`Compliance decision: ${complianceResult.decision.result}`);
+  logInfo('Receipt ID', complianceResult.receipt.id.substring(0, 16) + '...');
+  logInfo('Policy version', complianceResult.decision.policyVersion);
+  logInfo('Violations', String(complianceResult.decision.violations.length));
+  logInfo('Warnings', String(complianceResult.decision.warnings.length));
+
+  // --------------------------------------------------------------------------
+  // STEP 8: CustodyManager with 2-of-3 multi-sig
+  // --------------------------------------------------------------------------
+  log('CUSTODY', 'Setting up multi-sig custody for issuer...');
+
+  const custody = new CustodyManager();
+
+  logStep(1, 'Create 2-of-3 multi-sig custody arrangement');
+
+  const arrangement = custody.createCustodyArrangement({
+    assetId: property.id,
+    type: CustodyType.MULTI_SIG,
+    threshold: 2,
+    custodians: [issuer.id, 'legal-counsel-001', 'compliance-officer-001'],
+    metadata: {
+      purpose: 'Institutional custody for Dubai Marina property',
+      asset: property.name,
+    },
+  });
+
+  logSuccess(`Custody arrangement created: ${arrangement.id.substring(0, 16)}...`);
+  logInfo('Type', 'MULTI_SIG (2-of-3)');
+  logInfo('Custodians', `${arrangement.custodians.length} signers`);
+  logInfo('Threshold', `${arrangement.threshold} approvals required`);
 
   // --------------------------------------------------------------------------
   // BONUS: Show Event History
@@ -332,6 +431,9 @@ async function main() {
 ║    • Manage asset lifecycle (draft → verified → active)                      ║
 ║    • Mint and distribute tokens                                              ║
 ║    • Transfer tokens between investors                                       ║
+║    • Wire OracleService for property NAV from Chainlink                      ║
+║    • Run ComplianceEngine evaluation before transfers                        ║
+║    • Setup CustodyManager with multi-sig custody                             ║
 ║    • Maintain audit trail for compliance                                     ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝

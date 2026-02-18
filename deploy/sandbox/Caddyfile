@@ -1,0 +1,79 @@
+# =============================================================================
+# AHOY Sandbox - Caddy Reverse Proxy Configuration
+# =============================================================================
+# Provides automatic HTTPS via Let's Encrypt for sandbox endpoints.
+# Replace domain names with your actual sandbox domains.
+# =============================================================================
+
+# API endpoint
+sandbox.api.ahoy.fund {
+	# Proxy to API server
+	reverse_proxy api:3001
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# CORS for sandbox (allow all origins)
+	header Access-Control-Allow-Origin *
+	header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+	header Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key, Idempotency-Key"
+
+	# Rate limiting (100 requests per minute per IP)
+	rate_limit {
+		zone sandbox_api {
+			key {remote_host}
+			events 100
+			window 1m
+		}
+	}
+
+	# Request size limit
+	request_body {
+		max_size 10MB
+	}
+
+	# Logging
+	log {
+		output file /var/log/caddy/api-access.log {
+			roll_size 100MB
+			roll_keep 10
+		}
+	}
+}
+
+# Sandbox RPC endpoint (WebSocket + HTTP)
+sandbox.rpc.ahoy.fund {
+	reverse_proxy chain:8545
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		-Server
+	}
+
+	# Rate limiting for RPC
+	rate_limit {
+		zone sandbox_rpc {
+			key {remote_host}
+			events 300
+			window 1m
+		}
+	}
+}
+
+# Sandbox UI Dashboard
+sandbox.ahoy.fund {
+	reverse_proxy ui:5173
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		-Server
+	}
+}

@@ -75,6 +75,13 @@ import { travelShieldRouter } from './routes/travel-shield.routes.js';
 import { proofOfFundsRouter } from './routes/proof-of-funds.routes.js';
 import { depinRouter } from './routes/depin.routes.js';
 import { propertyManagementRouter } from './routes/property-management.routes.js';
+import { gpuComputeRouter } from './routes/gpu-compute.routes.js';
+// Phase 2: Real Estate Hardening routes
+import { investorTierRouter } from './routes/investor-tier.routes.js';
+import { exitWindowRouter } from './routes/exit-window.routes.js';
+import { secondaryMarketRouter } from './routes/secondary-market.routes.js';
+
+import { isVerticalEnabled, getEnabledVerticals } from './config/verticals.js';
 import { validateChainConfig } from './config/chains.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware } from './middleware/auth.js';
@@ -104,7 +111,9 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 app.use(securityHeaders);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+    : ['http://localhost:5173', 'http://localhost:5174'],
   credentials: true,
 }));
 
@@ -230,13 +239,30 @@ app.use('/api/v1/export', apiKeyMiddleware, tenantContextMiddleware, exportRoute
 // State Transitions & Audit Trail
 app.use('/api/v1/transitions', apiKeyMiddleware, tenantContextMiddleware, transitionRouter);
 
+// Phase 2: Real Estate Hardening — Investor Tiers, Exit Windows, Secondary Market
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, investorTierRouter);
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, exitWindowRouter);
+app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, secondaryMarketRouter);
+
+// ============================================================================
+// Vertical Extension routes (conditionally loaded via ENABLED_VERTICALS)
+// ============================================================================
+
 // Airline Tickets (NFT Utility Tokens)
-app.use('/api/v1/tickets', apiKeyMiddleware, tenantContextMiddleware, ticketRouter);
+if (isVerticalEnabled('airline')) {
+  app.use('/api/v1/tickets', apiKeyMiddleware, tenantContextMiddleware, ticketRouter);
+}
 
 // Vertical NFT Tokens
-app.use('/api/v1/hotels', apiKeyMiddleware, tenantContextMiddleware, hotelRouter);
-app.use('/api/v1/car-rentals', apiKeyMiddleware, tenantContextMiddleware, carRentalRouter);
-app.use('/api/v1/concerts', apiKeyMiddleware, tenantContextMiddleware, concertRouter);
+if (isVerticalEnabled('hotel')) {
+  app.use('/api/v1/hotels', apiKeyMiddleware, tenantContextMiddleware, hotelRouter);
+}
+if (isVerticalEnabled('car-rental')) {
+  app.use('/api/v1/car-rentals', apiKeyMiddleware, tenantContextMiddleware, carRentalRouter);
+}
+if (isVerticalEnabled('concert')) {
+  app.use('/api/v1/concerts', apiKeyMiddleware, tenantContextMiddleware, concertRouter);
+}
 
 // Dashboard Metrics
 app.use('/api/v1/metrics', apiKeyMiddleware, tenantContextMiddleware, metricsRouter);
@@ -245,13 +271,17 @@ app.use('/api/v1/metrics', apiKeyMiddleware, tenantContextMiddleware, metricsRou
 app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, navRouter);
 
 // Flight Oracle (Gap 5)
-app.use('/api/v1/flights', apiKeyMiddleware, tenantContextMiddleware, flightOracleRouter);
+if (isVerticalEnabled('airline')) {
+  app.use('/api/v1/flights', apiKeyMiddleware, tenantContextMiddleware, flightOracleRouter);
+}
 
 // Redemption Workflow (Gap 9)
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, redemptionRouter);
 
 // Boarding Pass (Gap 16)
-app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, boardingPassRouter);
+if (isVerticalEnabled('airline')) {
+  app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, boardingPassRouter);
+}
 
 // Accreditation (Gap 17)
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, accreditationRouter);
@@ -263,16 +293,29 @@ app.use('/api/v1/scheduler', apiKeyMiddleware, tenantContextMiddleware, schedule
 app.use('/api/v1/themes', apiKeyMiddleware, tenantContextMiddleware, themeRouter);
 
 // Hackathon Apps
-app.use('/api/v1/markets', apiKeyMiddleware, tenantContextMiddleware, predictionMarketRouter);
-app.use('/api/v1/policies', apiKeyMiddleware, tenantContextMiddleware, travelShieldRouter);
-app.use('/api/v1/proofs', apiKeyMiddleware, tenantContextMiddleware, proofOfFundsRouter);
-app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, depinRouter);
+if (isVerticalEnabled('prediction-market')) {
+  app.use('/api/v1/markets', apiKeyMiddleware, tenantContextMiddleware, predictionMarketRouter);
+}
+if (isVerticalEnabled('travel-shield')) {
+  app.use('/api/v1/policies', apiKeyMiddleware, tenantContextMiddleware, travelShieldRouter);
+}
+if (isVerticalEnabled('proof-of-funds')) {
+  app.use('/api/v1/proofs', apiKeyMiddleware, tenantContextMiddleware, proofOfFundsRouter);
+}
+if (isVerticalEnabled('depin')) {
+  app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, depinRouter);
+}
 
-// External Integrations
-app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);
+// External Integrations (Real Estate)
+if (isVerticalEnabled('real-estate')) {
+  app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);
+  app.use('/api/v1/properties', apiKeyMiddleware, tenantContextMiddleware, propertyManagementRouter);
+}
 
-// Property Management (Real Estate)
-app.use('/api/v1/properties', apiKeyMiddleware, tenantContextMiddleware, propertyManagementRouter);
+// GPU Compute Infrastructure
+if (isVerticalEnabled('gpu-compute')) {
+  app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, gpuComputeRouter);
+}
 app.use('/api/v1/datasources', apiKeyMiddleware, tenantContextMiddleware, datasourcesRouter);
 
 // Events (using authMiddleware for JWT-based access)
@@ -348,6 +391,12 @@ async function start() {
 
     // Check Redis connection (rate limiting will log its own status)
     const redisOk = isRedisAvailable();
+
+    // Log enabled verticals
+    const enabledVerticals = getEnabledVerticals();
+    logger.info('Vertical extensions loaded', {
+      metadata: { verticals: Array.from(enabledVerticals), count: enabledVerticals.size },
+    });
 
     // Get environment summary for logging
     const envSummary = getEnvironmentSummary();

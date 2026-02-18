@@ -6,10 +6,41 @@ export interface BoardingPassProps {
     flight: Flight;
     passengerName: string;
     seat: string;
+    gate?: string;
+    boardingTime?: string;
+    barcode?: string;
     theme?: TokenisationTheme;
 }
 
-export function BoardingPass({ flight, passengerName, seat, theme = defaultTheme }: BoardingPassProps) {
+function renderCode128Barcode(data: string): React.ReactElement {
+    // Simple Code 128 visual representation using SVG bars
+    const bars: { x: number; w: number }[] = [];
+    let x = 0;
+    for (let i = 0; i < data.length; i++) {
+        const charCode = data.charCodeAt(i);
+        // Generate deterministic bar widths from character codes
+        const narrow = 1;
+        const wide = 2.5;
+        const w = (charCode % 3 === 0) ? wide : narrow;
+        bars.push({ x, w });
+        x += w + 1;
+        // Gap bar
+        const gapW = (charCode % 2 === 0) ? wide : narrow;
+        bars.push({ x, w: gapW });
+        x += gapW + 1;
+    }
+    const totalWidth = x || 100;
+
+    return (
+        <svg viewBox={`0 0 ${totalWidth} 40`} width="100%" height="40" preserveAspectRatio="none">
+            {bars.map((bar, i) => (
+                <rect key={i} x={bar.x} y={0} width={bar.w} height={40} fill={i % 2 === 0 ? '#000' : '#FFF'} />
+            ))}
+        </svg>
+    );
+}
+
+export function BoardingPass({ flight, passengerName, seat, gate, boardingTime, barcode, theme = defaultTheme }: BoardingPassProps) {
     return (
         <div style={{
             maxWidth: '350px',
@@ -61,8 +92,14 @@ export function BoardingPass({ flight, passengerName, seat, theme = defaultTheme
                 }}>
                     <div>
                         <div style={{ fontSize: '10px', color: '#666' }}>GATE</div>
-                        <div style={{ fontWeight: 600, fontSize: '18px' }}>A12</div>
+                        <div style={{ fontWeight: 600, fontSize: '18px' }}>{gate ?? '--'}</div>
                     </div>
+                    {boardingTime && (
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '10px', color: '#666' }}>BOARDING</div>
+                            <div style={{ fontWeight: 600, fontSize: '14px' }}>{boardingTime}</div>
+                        </div>
+                    )}
                     <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '10px', color: '#666' }}>SEAT</div>
                         <div style={{ fontWeight: 600, fontSize: '18px', color: theme.colors.primaryHover }}>{seat}</div>
@@ -75,11 +112,8 @@ export function BoardingPass({ flight, passengerName, seat, theme = defaultTheme
                 backgroundColor: '#F3F4F6',
                 padding: '12px',
                 textAlign: 'center',
-                fontSize: '10px',
-                color: '#666',
-                letterSpacing: '4px'
             }}>
-                ||| || ||| || ||| ||| || |||
+                {renderCode128Barcode(barcode || `${flight.flightNumber}-${seat}`)}
             </div>
         </div>
     );

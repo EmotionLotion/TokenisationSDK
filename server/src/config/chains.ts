@@ -276,4 +276,52 @@ export function getExplorerAddressUrl(chainId: number, address: string): string 
   return chain ? `${chain.blockExplorerUrl}/address/${address}` : undefined;
 }
 
+// ============================================================================
+// RPC Configuration Validation
+// ============================================================================
+
+const PUBLIC_RPC_PATTERNS = [
+  'publicnode.com',
+  'llamarpc.com',
+  'rpc.sepolia.org',
+  'polygon-rpc.com',
+  'mainnet.base.org',
+  'sepolia.base.org',
+  'arb1.arbitrum.io',
+  'mainnet.optimism.io',
+  'eth.llamarpc.com',
+  'sepolia-rollup.arbitrum.io',
+];
+
+function isPublicRpc(url: string): boolean {
+  return PUBLIC_RPC_PATTERNS.some(pattern => url.includes(pattern));
+}
+
+/**
+ * Validate chain RPC configuration and log warnings for public RPCs.
+ * Call from server startup to surface misconfiguration early.
+ */
+export function validateChainConfig(): void {
+  const isProd = process.env.NODE_ENV === 'production';
+  const chainsUsingPublicRpc: string[] = [];
+
+  for (const chain of Object.values(SUPPORTED_CHAINS)) {
+    if (!chain.isActive) continue;
+
+    const primaryRpc = chain.rpcUrls[0];
+    if (primaryRpc && isPublicRpc(primaryRpc)) {
+      chainsUsingPublicRpc.push(`${chain.name} (${chain.chainId}): ${primaryRpc}`);
+    }
+  }
+
+  if (chainsUsingPublicRpc.length > 0) {
+    const message = `Chains using public RPCs (rate-limited):\n  ${chainsUsingPublicRpc.join('\n  ')}`;
+    if (isProd) {
+      console.warn(`[chains] WARNING: ${message}\nSet dedicated RPC URLs via environment variables for production use.`);
+    } else {
+      console.info(`[chains] INFO: ${message}`);
+    }
+  }
+}
+
 export default SUPPORTED_CHAINS;

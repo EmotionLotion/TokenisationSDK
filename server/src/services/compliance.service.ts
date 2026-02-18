@@ -1,11 +1,68 @@
 import { db, schema } from '../config/database.js';
 import { eq, and, desc } from 'drizzle-orm';
-import { createHash, createSign, createVerify, generateKeyPairSync, randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { NotFoundError, ValidationError, AppError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
+import * as whitelistService from './whitelist.service.js';
 import { logger } from '../middleware/logger.js';
+import { getSanctionsService } from './sanctions/sanctions.service.js';
+import { getSigningService, canonicalJsonStringify } from './signing/signing.service.js';
 
-const { policies, policyVersions, decisions, investors, dldTitles, tokens, eventBusQueue } = schema;
+const { policies, policyVersions, decisions, investors, parties, dldTitles, tokens, eventBusQueue, assets, ledgerPositions } = schema;
+
+// ============================================================================
+// Sanctions Screening Helper
+// ============================================================================
+
+export async function screenInvestorSanctions(investorId: string): Promise<'flagged' | 'clear'> {
+  const investor = await db.query.investors.findFirst({
+    where: eq(investors.id, investorId),
+  });
+  if (!investor) {
+    throw new NotFoundError('Investor not found for sanctions screening');
+  }
+
+  // Resolve investor name via party join
+  let name = '';
+  let country = investor.jurisdiction || '';
+  if (investor.partyId) {
+    const party = await db.query.parties.findFirst({
+      where: eq(parties.id, investor.partyId),
+    });
+    if (party) {
+      name = party.name;
+      country = country || party.jurisdiction;
+    }
+  }
+
+  if (!name) {
+    // Fallback: use email prefix or external ID as name if no party linked
+    name = investor.email?.split('@')[0] || investor.externalId || 'unknown';
+  }
+
+  const sanctionsService = getSanctionsService();
+  const result = await sanctionsService.screen({ name, country });
+  const status = result.matchFound ? 'flagged' : 'clear';
+
+  // Persist result
+  await db.update(investors)
+    .set({
+      sanctionsStatus: status,
+      sanctionsScreenedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(investors.id, investorId));
+
+  if (result.matchFound) {
+    logger.warn('Sanctions match found for investor', {
+      investorId,
+      matchCount: result.matches.length,
+      topScore: result.matches[0]?.score,
+    });
+  }
+
+  return status;
+}
 
 // ============================================================================
 // Types & Interfaces
@@ -71,6 +128,7 @@ export interface DecisionInput {
   };
   asset?: {
     state?: string;
+    transferabilityMode?: string;
     dld?: {
       flags?: string[];
       status?: string;
@@ -81,6 +139,19 @@ export interface DecisionInput {
     afterPct?: number;
     beforeAmount?: string;
     afterAmount?: string;
+  };
+  // Computed fields populated during evaluation
+  lockup?: {
+    /** Whether lockup period has elapsed (true = can transfer) */
+    elapsed: boolean;
+    /** Remaining lockup seconds (0 if elapsed) */
+    remainingSeconds: number;
+  };
+  whitelist?: {
+    /** Whether the sender is whitelisted */
+    senderWhitelisted: boolean;
+    /** Whether the recipient is whitelisted */
+    recipientWhitelisted: boolean;
   };
 }
 
@@ -342,29 +413,102 @@ export async function evaluateTransfer(input: EvaluateTransferInput): Promise<De
       where: eq(investors.id, fromInvestorId),
     });
     if (fromInvestor) {
+      // Run real sanctions screening
+      let sanctionsResult: 'flagged' | 'clear' = 'clear';
+      try {
+        sanctionsResult = await screenInvestorSanctions(fromInvestorId);
+      } catch (err) {
+        logger.warn('Sanctions screening failed, defaulting to flagged', { error: err, investorId: fromInvestorId });
+        sanctionsResult = 'flagged';
+      }
       decisionInput.investor = {
         kycStatus: fromInvestor.status === 'active' ? 'approved' : 'pending',
         classification: fromInvestor.classification,
         jurisdiction: fromInvestor.jurisdiction,
         accreditedStatus: fromInvestor.accreditedStatus || 'unknown',
-        sanctions: 'clear', // Would be fetched from sanctions screening
+        sanctions: sanctionsResult,
       };
     }
   }
 
-  // Get DLD data if available
+  // Get asset data for transferability rules
+  let transferabilityRules: { mode?: string; lockupPeriodSeconds?: number } | null = null;
   if (token.assetId) {
+    const asset = await db.query.assets.findFirst({
+      where: eq(assets.id, token.assetId),
+      columns: { transferabilityRules: true },
+    });
+    if (asset?.transferabilityRules) {
+      transferabilityRules = asset.transferabilityRules as { mode?: string; lockupPeriodSeconds?: number };
+    }
+
+    // Get DLD data
     const dldTitle = await db.query.dldTitles.findFirst({
       where: eq(dldTitles.assetId, token.assetId),
     });
-    if (dldTitle) {
-      decisionInput.asset = {
-        dld: {
-          flags: dldTitle.flags || [],
-          status: dldTitle.status,
-        },
+
+    decisionInput.asset = {
+      transferabilityMode: transferabilityRules?.mode,
+      dld: dldTitle ? {
+        flags: dldTitle.flags || [],
+        status: dldTitle.status,
+      } : undefined,
+    };
+  }
+
+  // --- Lockup period check ---
+  const lockupSeconds = transferabilityRules?.lockupPeriodSeconds ?? 0;
+  if (lockupSeconds > 0) {
+    // Get earliest position for the sender wallet on this token
+    const position = await db.query.ledgerPositions.findFirst({
+      where: and(
+        eq(ledgerPositions.tokenId, tokenId),
+        eq(ledgerPositions.walletAddress, fromWallet.toLowerCase()),
+      ),
+      columns: { createdAt: true },
+    });
+
+    if (position?.createdAt) {
+      const acquiredAt = new Date(position.createdAt).getTime();
+      const lockupEnd = acquiredAt + lockupSeconds * 1000;
+      const now = Date.now();
+      decisionInput.lockup = {
+        elapsed: now >= lockupEnd,
+        remainingSeconds: Math.max(0, Math.ceil((lockupEnd - now) / 1000)),
+      };
+    } else {
+      // No position found — treat as locked (cannot verify acquisition date)
+      decisionInput.lockup = { elapsed: false, remainingSeconds: lockupSeconds };
+    }
+  } else {
+    decisionInput.lockup = { elapsed: true, remainingSeconds: 0 };
+  }
+
+  // --- Whitelist check ---
+  const mode = transferabilityRules?.mode;
+  if (mode === 'WHITELIST_ONLY') {
+    try {
+      const [senderOk, recipientOk] = await Promise.all([
+        whitelistService.isWhitelisted(orgId, tokenId, fromWallet),
+        whitelistService.isWhitelisted(orgId, tokenId, toWallet),
+      ]);
+      decisionInput.whitelist = {
+        senderWhitelisted: senderOk,
+        recipientWhitelisted: recipientOk,
+      };
+    } catch (err) {
+      logger.warn('Whitelist check failed, denying by default', { error: err });
+      decisionInput.whitelist = {
+        senderWhitelisted: false,
+        recipientWhitelisted: false,
       };
     }
+  } else {
+    // Not in whitelist mode — treat as whitelisted
+    decisionInput.whitelist = {
+      senderWhitelisted: true,
+      recipientWhitelisted: true,
+    };
   }
 
   // Evaluate ruleset
@@ -434,12 +578,20 @@ export async function evaluateIssuance(input: {
       where: eq(investors.id, toInvestorId),
     });
     if (toInvestor) {
+      // Run real sanctions screening
+      let sanctionsResult: 'flagged' | 'clear' = 'clear';
+      try {
+        sanctionsResult = await screenInvestorSanctions(toInvestorId!);
+      } catch (err) {
+        logger.warn('Sanctions screening failed, defaulting to flagged', { error: err, investorId: toInvestorId });
+        sanctionsResult = 'flagged';
+      }
       decisionInput.investor = {
         kycStatus: toInvestor.status === 'active' ? 'approved' : 'pending',
         classification: toInvestor.classification,
         jurisdiction: toInvestor.jurisdiction,
         accreditedStatus: toInvestor.accreditedStatus || 'unknown',
-        sanctions: 'clear',
+        sanctions: sanctionsResult,
       };
     }
   }
@@ -597,7 +749,7 @@ interface CreateDecisionInput {
 async function createDecision(input: CreateDecisionInput): Promise<DecisionOutput> {
   // Create canonical hash of inputs
   const inputsHash = createHash('sha256')
-    .update(JSON.stringify(input.inputs, Object.keys(input.inputs).sort()))
+    .update(canonicalJsonStringify(input.inputs))
     .digest('hex');
 
   // Create decision hash (for receipt linkage)
@@ -613,7 +765,7 @@ async function createDecision(input: CreateDecisionInput): Promise<DecisionOutpu
     timestamp: new Date(),
   };
 
-  const signature = signDecision(decisionPayload);
+  const signature = await signDecisionAsync(decisionPayload);
 
   const [decision] = await db.insert(decisions).values({
     orgId: input.orgId,
@@ -685,7 +837,7 @@ function computeDecisionHash(input: CreateDecisionInput, inputsHash: string): st
   };
 
   return createHash('sha256')
-    .update(JSON.stringify(payload, Object.keys(payload).sort()))
+    .update(canonicalJsonStringify(payload))
     .digest('hex');
 }
 
@@ -734,37 +886,17 @@ export async function listDecisions(orgId: string, params: {
 }
 
 // ============================================================================
-// Decision Signing (Mock - in production use HSM)
+// Decision Signing — delegates to ISigningService (see signing/signing.service.ts)
 // ============================================================================
 
-// In production, keys would be stored in HSM/KMS
-let signingKeyPair: { privateKey: string; publicKey: string } | null = null;
-
-function getSigningKeyPair() {
-  if (!signingKeyPair) {
-    // Generate key pair (in production, load from HSM/KMS)
-    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    });
-    signingKeyPair = { privateKey, publicKey };
-  }
-  return signingKeyPair;
+async function signDecisionAsync(payload: object): Promise<string> {
+  const service = getSigningService();
+  return service.sign(canonicalJsonStringify(payload));
 }
 
-function signDecision(payload: object): string {
-  const { privateKey } = getSigningKeyPair();
-  const sign = createSign('RSA-SHA256');
-  sign.update(JSON.stringify(payload));
-  return sign.sign(privateKey, 'base64');
-}
-
-export function verifyDecisionSignature(payload: object, signature: string): boolean {
-  const { publicKey } = getSigningKeyPair();
-  const verify = createVerify('RSA-SHA256');
-  verify.update(JSON.stringify(payload));
-  return verify.verify(publicKey, signature, 'base64');
+export async function verifyDecisionSignature(payload: object, signature: string): Promise<boolean> {
+  const service = getSigningService();
+  return service.verify(canonicalJsonStringify(payload), signature);
 }
 
 // ============================================================================
@@ -998,6 +1130,33 @@ export function getDefaultRuleset(): Ruleset {
         value: 'transfer_locked',
         code: 'DLD_TRANSFER_LOCKED',
         message: 'Asset transfers are locked at DLD',
+      },
+      {
+        id: 'lockup_elapsed',
+        type: 'require',
+        field: 'lockup.elapsed',
+        op: 'eq',
+        value: true,
+        code: 'LOCKUP_PERIOD_ACTIVE',
+        message: 'Tokens are still within the lockup period and cannot be transferred',
+      },
+      {
+        id: 'whitelist_sender',
+        type: 'require',
+        field: 'whitelist.senderWhitelisted',
+        op: 'eq',
+        value: true,
+        code: 'SENDER_NOT_WHITELISTED',
+        message: 'Sender wallet is not on the transfer whitelist',
+      },
+      {
+        id: 'whitelist_recipient',
+        type: 'require',
+        field: 'whitelist.recipientWhitelisted',
+        op: 'eq',
+        value: true,
+        code: 'RECIPIENT_NOT_WHITELISTED',
+        message: 'Recipient wallet is not on the transfer whitelist',
       },
     ],
     actions: {

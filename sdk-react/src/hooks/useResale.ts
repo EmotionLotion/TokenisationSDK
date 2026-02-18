@@ -1,4 +1,7 @@
 /**
+ * @deprecated Use useSecondaryMarket for asset-agnostic P2P secondary trading.
+ * This hook is airline-ticket-scoped and maintained only for backward compatibility.
+ *
  * useResale - Hook for ticket resale operations via ResaleModule.
  */
 

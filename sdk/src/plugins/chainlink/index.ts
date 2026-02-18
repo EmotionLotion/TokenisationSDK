@@ -155,3 +155,34 @@ export {
   type ReserveConfig,
   type MintAllowance,
 } from './ProofOfReservePlugin.js';
+
+// DECO (Privacy-Preserving Proofs) Plugin
+export {
+  DecoPlugin,
+  createDecoPlugin,
+  createSepoliaDecoPlugin,
+  createBaseSepoliaDecoPlugin,
+  DecoProofType,
+  DecoSessionStatus,
+  type DecoPluginConfig,
+  type DecoProofRequest,
+  type DecoProofResult,
+  type DecoDataSource,
+} from './DecoPlugin.js';
+
+// CCID (Cross-Chain Identity) Plugin
+export {
+  CCIDPlugin,
+  createCCIDPlugin,
+  createSepoliaCCIDPlugin,
+  createBaseSepoliaCCIDPlugin,
+  CCIDVertical,
+  DEFAULT_VERTICAL_REQUIREMENTS,
+  type CCIDPluginConfig,
+  type CCIDIdentity,
+  type CCIDEligibilityResult,
+  type VerticalRequirements,
+  type VerticalClearance,
+  type ChainLink,
+} from './CCIDPlugin.js';
+

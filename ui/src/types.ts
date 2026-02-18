@@ -2,9 +2,14 @@
 import {
   LifecycleState,
   VALID_TRANSITIONS,
+  type Asset as SDKAsset,
 } from '@tokenisation/sdk';
 
+// Re-export everything except Asset (which we augment below)
 export * from '@tokenisation/sdk';
+
+/** UI-friendly Asset type — augments the SDK's Zod-inferred type with guaranteed runtime fields */
+export type Asset = SDKAsset & { id: string; name: string; state: any; metadata?: any; [key: string]: any };
 
 export interface TokenBalance {
   partyId: string;

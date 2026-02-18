@@ -21,6 +21,7 @@ createRoot(document.getElementById('root')!).render(
       config={{
         apiUrl: import.meta.env.VITE_API_URL || '/api',
         publishableKey: import.meta.env.VITE_PUBLISHABLE_KEY || '',
+        apiKey: import.meta.env.VITE_API_KEY || '',
         defaultJurisdiction: 'AE',
         debug: import.meta.env.VITE_DEBUG === 'true',
       }}

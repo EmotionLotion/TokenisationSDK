@@ -130,19 +130,21 @@ assetRouter.get('/:id', async (req: AuthRequest, res, next) => {
     }
 
     res.json({
-      ...asset,
-      issuer: issuer ? {
-        id: issuer.id,
-        name: issuer.name,
-        type: issuer.type,
-      } : null,
-      balances: balances.reduce((acc, b) => ({
-        ...acc,
-        [b.holderId]: {
-          balance: b.balance,
-          holderName: b.holderName,
-        },
-      }), {}),
+      asset: {
+        ...asset,
+        issuer: issuer ? {
+          id: issuer.id,
+          name: issuer.name,
+          type: issuer.type,
+        } : null,
+        balances: balances.reduce((acc, b) => ({
+          ...acc,
+          [b.holderId]: {
+            balance: b.balance,
+            holderName: b.holderName,
+          },
+        }), {}),
+      },
     });
   } catch (error) {
     next(error);
@@ -199,7 +201,7 @@ assetRouter.post('/', async (req: AuthRequest, res, next) => {
       timestamp: now,
     });
 
-    res.status(201).json(asset);
+    res.status(201).json({ asset });
   } catch (error) {
     if (error instanceof z.ZodError) {
       next(new ValidationError(error.errors.map(e => e.message).join(', ')));
@@ -310,6 +312,8 @@ assetRouter.post('/:id/transition', async (req: AuthRequest, res, next) => {
     }).returning();
 
     res.json({
+      success: true,
+      newState: toState,
       asset: updated,
       event,
     });

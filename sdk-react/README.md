@@ -5,11 +5,13 @@ React SDK for tokenizing real-world assets with compliance-first architecture.
 ## Installation
 
 ```bash
-npm install @tokenisation/sdk-react
-# or
-yarn add @tokenisation/sdk-react
-# or
 pnpm add @tokenisation/sdk-react
+```
+
+### Peer Dependencies
+
+```bash
+pnpm add react react-dom @tokenisation/sdk
 ```
 
 ## Quick Start
@@ -59,9 +61,7 @@ function MainContent() {
     <main>
       <KYCFlow
         requiredLevel="standard"
-        onComplete={(verification) => {
-          console.log('KYC completed:', verification);
-        }}
+        onComplete={(verification) => console.log('KYC completed:', verification)}
       />
       <AssetCreator />
     </main>
@@ -81,16 +81,11 @@ function AssetCreator() {
       pricePerShare: 10,
       documents: [],
     });
-
-    if (result.success) {
-      console.log('Asset created:', result.asset);
-    }
+    if (result.success) console.log('Asset created:', result.asset);
   };
 
   return (
-    <button onClick={handleCreate} disabled={loading}>
-      Create Asset
-    </button>
+    <button onClick={handleCreate} disabled={loading}>Create Asset</button>
   );
 }
 ```
@@ -100,47 +95,17 @@ function AssetCreator() {
 ```tsx
 <TokenisationProvider
   config={{
-    // Required: API endpoint
-    apiUrl: 'https://api.example.com',
-
-    // Optional: Organization ID for multi-tenant
-    orgId: 'org-123',
-
-    // Optional: Default jurisdiction
-    defaultJurisdiction: 'AE',
-
-    // Optional: Supported networks
-    networks: [
-      {
-        chainId: 1,
-        name: 'Ethereum',
-        rpcUrl: 'https://eth.llamarpc.com',
-        blockExplorerUrl: 'https://etherscan.io',
-        isDefault: true,
-      },
-      {
-        chainId: 137,
-        name: 'Polygon',
-        rpcUrl: 'https://polygon.llamarpc.com',
-        blockExplorerUrl: 'https://polygonscan.com',
-      },
+    apiUrl: 'https://api.example.com',       // Required
+    orgId: 'org-123',                         // Optional: multi-tenant
+    defaultJurisdiction: 'AE',               // Optional
+    networks: [                               // Optional: supported chains
+      { chainId: 1, name: 'Ethereum', rpcUrl: '...', isDefault: true },
+      { chainId: 137, name: 'Polygon', rpcUrl: '...' },
+      { chainId: 8453, name: 'Base', rpcUrl: '...' },
     ],
-
-    // Optional: Custom storage for documents
-    storage: {
-      type: 'ipfs',
-      endpoint: 'https://ipfs.infura.io:5001',
-      apiKey: 'your-api-key',
-    },
-
-    // Optional: KYC provider
-    kyc: {
-      provider: 'onfido',
-      apiKey: 'your-api-key',
-    },
-
-    // Optional: Debug mode
-    debug: true,
+    storage: { type: 'ipfs', endpoint: '...' },  // Optional
+    kyc: { provider: 'sumsub', apiKey: '...' },   // Optional
+    debug: true,                                   // Optional
   }}
   callbacks={{
     onWalletConnect: (wallet) => analytics.track('wallet_connected', wallet),
@@ -175,18 +140,10 @@ Extended wallet utilities.
 
 ```tsx
 const {
-  address,
-  chainId,
-  balance,
-  ensName,
-  isConnected,
-  isCorrectNetwork,
-  connect,
-  disconnect,
-  switchNetwork,
-  signMessage,
-  signTypedData,
-  sendTransaction,
+  address, chainId, balance, ensName,
+  isConnected, isCorrectNetwork,
+  connect, disconnect, switchNetwork,
+  signMessage, signTypedData, sendTransaction,
 } = useWallet();
 ```
 
@@ -196,25 +153,14 @@ KYC verification flow.
 
 ```tsx
 const {
-  initiateKYC,
-  status,
-  level,
-  verification,
-  isAccredited,
-  meetsLevel,
-  screenSanctions,
+  initiateKYC, status, level, verification,
+  isAccredited, meetsLevel, screenSanctions,
 } = useKYC();
 
-// Check if user meets required level
-if (meetsLevel('standard')) {
-  // Allow action
-}
+if (meetsLevel('standard')) { /* Allow action */ }
 
-// Initiate KYC
 await initiateKYC('enhanced', {
-  firstName: 'John',
-  lastName: 'Doe',
-  email: 'john@example.com',
+  firstName: 'John', lastName: 'Doe', email: 'john@example.com',
 });
 ```
 
@@ -224,38 +170,9 @@ Asset creation and management.
 
 ```tsx
 const {
-  createAsset,
-  getAsset,
-  listAssets,
-  transitionAsset,
-  uploadDocument,
-  getDocuments,
-  currentAsset,
-  loading,
-  error,
+  createAsset, getAsset, listAssets, transitionAsset,
+  uploadDocument, getDocuments, currentAsset, loading, error,
 } = useAsset();
-
-// Create an asset
-const result = await createAsset({
-  name: 'Property Token',
-  symbol: 'PROP',
-  rightType: 'OWNERSHIP',
-  jurisdiction: 'AE',
-  totalShares: 1000000,
-  documents: [file1, file2],
-});
-
-// List assets
-const assets = await listAssets({
-  state: 'ACTIVE',
-  jurisdiction: 'AE',
-});
-
-// Transition state
-await transitionAsset(assetId, 'VERIFIED', {
-  type: 'legal_review',
-  data: { reviewedBy: 'legal@example.com' },
-});
 ```
 
 ### useTokens
@@ -264,59 +181,31 @@ Token operations.
 
 ```tsx
 const {
-  mint,
-  transfer,
-  burn,
-  getBalance,
-  getHolders,
-  tokenInfo,
-  totalSupply,
+  mint, transfer, burn, getBalance,
+  getHolders, tokenInfo, totalSupply,
 } = useTokens(assetId);
-
-// Mint tokens
-await mint('0x123...', '1000');
-
-// Transfer tokens
-await transfer('0x123...', '0x456...', '100');
-
-// Get balance
-const balance = await getBalance('0x123...');
 ```
 
 ### useCompliance
 
-Compliance checking.
+Compliance checking with signed DecisionReceipts.
 
 ```tsx
 const {
-  checkTransfer,
-  checkMint,
-  checkAction,
-  getReceipts,
-  verifyReceipt,
-  verifyReceiptChain,
+  checkTransfer, checkMint, checkAction,
+  getReceipts, verifyReceipt, verifyReceiptChain,
 } = useCompliance();
 
-// Check if transfer is allowed
 const { decision, receipt } = await checkTransfer({
   assetId: 'asset-123',
-  fromAddress: '0x123...',
-  toAddress: '0x456...',
-  amount: '100',
+  fromAddress: '0x123...', toAddress: '0x456...', amount: '100',
 });
 
 if (decision.result === 'ALLOW') {
   // Proceed with transfer
 } else {
-  // Show violations
   decision.violations.forEach((v) => console.log(v.message));
 }
-
-// Get audit trail
-const receipts = await getReceipts(assetId);
-
-// Verify receipt integrity
-const verification = await verifyReceipt(receiptId);
 ```
 
 ## Components
@@ -326,18 +215,10 @@ const verification = await verifyReceipt(receiptId);
 ```tsx
 <WalletConnect
   connectText="Connect Wallet"
-  disconnectText="Disconnect"
-  showAddress
-  showBalance
+  showAddress showBalance
   onConnect={(wallet) => console.log(wallet)}
-  onDisconnect={() => console.log('disconnected')}
-  onError={(error) => console.error(error)}
-  // Custom rendering
   renderConnected={({ address, balance, disconnect }) => (
-    <div>
-      <span>{address}</span>
-      <button onClick={disconnect}>Logout</button>
-    </div>
+    <div><span>{address}</span><button onClick={disconnect}>Logout</button></div>
   )}
 />
 ```
@@ -348,16 +229,8 @@ const verification = await verifyReceipt(receiptId);
 <KYCFlow
   requiredLevel="standard"
   autoStart={false}
-  onComplete={(verification) => {
-    // User passed KYC
-  }}
-  onStatusChange={(status) => {
-    // Track status changes
-  }}
-  labels={{
-    startButton: 'Verify Identity',
-    approved: 'Identity Verified',
-  }}
+  onComplete={(verification) => { /* User passed KYC */ }}
+  labels={{ startButton: 'Verify Identity', approved: 'Identity Verified' }}
 />
 ```
 
@@ -367,29 +240,18 @@ const verification = await verifyReceipt(receiptId);
 <DocumentUpload
   assetId={asset.id}
   documentType="proof_of_ownership"
-  acceptedTypes={['proof_of_ownership', 'valuation_report']}
   multiple
-  maxSize={10 * 1024 * 1024} // 10MB
+  maxSize={10 * 1024 * 1024}
   onUpload={(doc) => console.log('Uploaded:', doc)}
-  onError={(error, file) => console.error(error)}
 />
 ```
 
 ## TypeScript Support
 
-The SDK is written in TypeScript and exports all types.
-
 ```tsx
 import type {
-  TokenisationConfig,
-  WalletConnection,
-  Asset,
-  TokenInfo,
-  PolicyDecision,
-  DecisionReceipt,
-  KYCLevel,
-  KYCStatus,
-  DocumentType,
+  TokenisationConfig, WalletConnection, Asset, TokenInfo,
+  PolicyDecision, DecisionReceipt, KYCLevel, KYCStatus,
 } from '@tokenisation/sdk-react';
 ```
 

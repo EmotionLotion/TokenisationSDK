@@ -123,6 +123,66 @@ export const workflowRegistry: WorkflowRegistryEntry[] = [
       'reports the result on-chain to the OracleRegistry contract, and ' +
       'posts to the server callback endpoint.',
   },
+  {
+    id: 'flight-status',
+    name: 'Flight Status Oracle',
+    module: './workflows/flight-status.js',
+    enabled: true,
+    requiredCapabilities: ['http', 'evm', 'cron'],
+    description:
+      'Fetches real-time flight status from AviationStack and FlightAware APIs ' +
+      'with DON consensus. Reports on-chain and triggers ticket state transitions.',
+  },
+  {
+    id: 'lockup-monitor',
+    name: 'Lockup Monitor',
+    module: './workflows/lockup-monitor.js',
+    enabled: true,
+    requiredCapabilities: ['evm', 'http', 'cron'],
+    description:
+      'Hourly monitor for expired token lockups. Reports unlock events and ' +
+      'notifies the server via batch callback.',
+  },
+  {
+    id: 'price-monitor',
+    name: 'Price Monitor',
+    module: './workflows/price-monitor.js',
+    enabled: true,
+    requiredCapabilities: ['evm', 'http'],
+    description:
+      'Monitors secondary market Transfer events for suspicious patterns ' +
+      'including rapid transfers, price spikes, wash trading, and concentration.',
+  },
+  {
+    id: 'car-rental-telematics',
+    name: 'Car Rental Telematics',
+    module: './workflows/car-rental-telematics.js',
+    enabled: true,
+    requiredCapabilities: ['http', 'evm', 'cron'],
+    description:
+      'Fetches vehicle telematics from Smartcar/High Mobility APIs with DON consensus. ' +
+      'Detects mileage/fuel/geofence overages and auto-charges renter deposits.',
+  },
+  {
+    id: 'hotel-checkin-reconciliation',
+    name: 'Hotel Check-In Reconciliation',
+    module: './workflows/hotel-checkin.js',
+    enabled: true,
+    requiredCapabilities: ['http', 'evm'],
+    description:
+      'Consumes PMS webhooks (Oracle OHIP / Mews) and transitions on-chain ' +
+      'reservation tokens through CONFIRMED → CHECKED_IN → CHECKED_OUT to prevent double-booking.',
+  },
+  {
+    id: 'concert-royalty-enforcement',
+    name: 'Concert Royalty Enforcement',
+    module: './workflows/concert-royalty.js',
+    enabled: true,
+    requiredCapabilities: ['evm', 'http'],
+    description:
+      'Intercepts secondary market concert ticket transfers, calculates ' +
+      'artist/promoter royalty splits, and executes atomic settlement.',
+  },
 ];
 
 // ============================================================================

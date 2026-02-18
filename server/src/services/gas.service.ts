@@ -94,7 +94,8 @@ let chainConfigs: ChainConfig[];
 try {
   // Try to load from existing chain config module
   const chainsModule = await import('../config/chains.js');
-  chainConfigs = chainsModule.SUPPORTED_CHAINS || chainsModule.default || [];
+  const raw = chainsModule.SUPPORTED_CHAINS || chainsModule.default || [];
+  chainConfigs = Array.isArray(raw) ? raw : Object.values(raw);
 } catch {
   // Fallback: define inline
   chainConfigs = [

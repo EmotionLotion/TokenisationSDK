@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { createHash, randomBytes } from 'crypto';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
+import { SUPPORTED_CHAINS as CHAIN_REGISTRY, getRpcUrl } from '../config/chains.js';
 
 const { eventBusQueue } = schema;
 
@@ -106,48 +107,17 @@ interface EthTransactionReceipt {
 // Chain Configuration
 // ============================================================================
 
-const SUPPORTED_CHAINS: ChainConfig[] = [
-  {
-    chainId: 1,
-    name: 'Ethereum Mainnet',
-    rpcUrl: process.env.ETH_MAINNET_RPC || 'https://eth.llamarpc.com',
-    explorerUrl: 'https://etherscan.io',
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-    isTestnet: false,
-  },
-  {
-    chainId: 11155111,
-    name: 'Sepolia Testnet',
-    rpcUrl: process.env.ETH_SEPOLIA_RPC || 'https://rpc.sepolia.org',
-    explorerUrl: 'https://sepolia.etherscan.io',
-    nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
-    isTestnet: true,
-  },
-  {
-    chainId: 137,
-    name: 'Polygon Mainnet',
-    rpcUrl: process.env.POLYGON_RPC || 'https://polygon-rpc.com',
-    explorerUrl: 'https://polygonscan.com',
-    nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-    isTestnet: false,
-  },
-  {
-    chainId: 80001,
-    name: 'Polygon Mumbai',
-    rpcUrl: process.env.POLYGON_MUMBAI_RPC || 'https://rpc-mumbai.maticvigil.com',
-    explorerUrl: 'https://mumbai.polygonscan.com',
-    nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-    isTestnet: true,
-  },
-  {
-    chainId: 43114,
-    name: 'Avalanche C-Chain',
-    rpcUrl: process.env.AVAX_RPC || 'https://api.avax.network/ext/bc/C/rpc',
-    explorerUrl: 'https://snowtrace.io',
-    nativeCurrency: { name: 'Avalanche', symbol: 'AVAX', decimals: 18 },
-    isTestnet: false,
-  },
-];
+// Derive relayer chain configs from the canonical chain registry in config/chains.ts
+const SUPPORTED_CHAINS: ChainConfig[] = Object.values(CHAIN_REGISTRY)
+  .filter(c => c.isActive)
+  .map(c => ({
+    chainId: c.chainId,
+    name: c.name,
+    rpcUrl: c.rpcUrls[0],
+    explorerUrl: c.blockExplorerUrl,
+    nativeCurrency: c.nativeCurrency,
+    isTestnet: c.isTestnet,
+  }));
 
 export function getChainConfig(chainId: number): ChainConfig {
   const config = SUPPORTED_CHAINS.find(c => c.chainId === chainId);

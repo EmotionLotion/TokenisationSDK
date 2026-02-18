@@ -56,13 +56,16 @@ export interface OracleSource {
 }
 
 export interface OracleAggregatorConfig {
-  chainId: number;
-  rpcUrl: string;
+  chainId?: number;
+  rpcUrl?: string;
   strategy: AggregationStrategy;
   deviationThreshold?: number; // Percentage (e.g., 5 for 5%)
   minOracles?: number; // Minimum oracles required for consensus
+  minSources?: number; // Alias for minOracles (used by demos)
+  maxStalenessMs?: number; // Alias for cacheTimeMs
   timeoutMs?: number;
   cacheTimeMs?: number;
+  sources?: Array<{ name: string; type: string; pair?: string; endpoint?: string; weight?: number }>;
 }
 
 export interface AggregatedResult {
@@ -103,13 +106,13 @@ export class OracleAggregator implements IOraclePlugin {
   private cache: Map<string, { result: AggregatedResult; expiresAt: number }> = new Map();
 
   constructor(config: OracleAggregatorConfig) {
-    this.chainId = config.chainId;
-    this.provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+    this.chainId = config.chainId || 84532;
+    this.provider = new ethers.JsonRpcProvider(config.rpcUrl || 'https://sepolia.base.org', this.chainId);
     this.strategy = config.strategy;
     this.deviationThreshold = config.deviationThreshold || 5; // 5% default
-    this.minOracles = config.minOracles || 1;
+    this.minOracles = config.minOracles || config.minSources || 1;
     this.timeoutMs = config.timeoutMs || 10000;
-    this.cacheTimeMs = config.cacheTimeMs || 30000;
+    this.cacheTimeMs = config.cacheTimeMs || config.maxStalenessMs || 30000;
   }
 
   // ============================================
@@ -670,10 +673,39 @@ export class OracleAggregator implements IOraclePlugin {
   }
 
   /**
+   * Convenience method: aggregate price for a given identifier.
+   * Returns a simplified result suitable for demos.
+   */
+  async aggregatePrice(identifier: string): Promise<Result<{ aggregatedValue: string; sourcesUsed: number; confidence: string }, string>> {
+    try {
+      const result = await this.getAggregatedPrice(identifier);
+      if (result.success) {
+        return ok({
+          aggregatedValue: result.data.formattedValue || result.data.value,
+          sourcesUsed: result.data.sources.filter((s: { used: boolean }) => s.used).length,
+          confidence: `${(result.data.confidence * 100).toFixed(0)}%`,
+        });
+      }
+      return err(result.error);
+    } catch (error) {
+      return err(`Aggregation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Clear cache
    */
   clearCache(): void {
     this.cache.clear();
+  }
+
+  /**
+   * Cleanup — used in demos.
+   */
+  destroy(): void {
+    this.cache.clear();
+    this.sources.clear();
+    this.pairSources.clear();
   }
 }
 

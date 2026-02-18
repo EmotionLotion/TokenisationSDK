@@ -5,27 +5,25 @@ React Native SDK for building mobile applications with tokenized assets. Provide
 ## Installation
 
 ```bash
-npm install @tokenisation/sdk-react-native
-# or
-yarn add @tokenisation/sdk-react-native
+pnpm add @tokenisation/sdk-react-native
 ```
 
 ### Peer Dependencies
 
 ```bash
-npm install react react-native @tokenisation/sdk
+pnpm add react react-native @tokenisation/sdk
 ```
 
 ### Optional Dependencies
 
 For wallet connectivity:
 ```bash
-npm install @walletconnect/modal-react-native
+pnpm add @walletconnect/modal-react-native
 ```
 
 For document capture:
 ```bash
-npm install react-native-vision-camera
+pnpm add react-native-vision-camera
 ```
 
 ## Quick Start
@@ -41,11 +39,8 @@ function App() {
       config={{
         apiKey: 'your-api-key',
         walletConnectProjectId: 'your-wc-project-id',
-        supportedChains: [1, 137], // Ethereum, Polygon
-        appMetadata: {
-          name: 'My App',
-          description: 'My tokenized asset app',
-        },
+        supportedChains: [1, 137, 8453], // Ethereum, Polygon, Base
+        appMetadata: { name: 'My App', description: 'My tokenized asset app' },
       }}
     >
       <MainNavigator />
@@ -82,8 +77,6 @@ import { useTokens } from '@tokenisation/sdk-react-native';
 function PortfolioScreen() {
   const { holdings, isLoading, refresh } = useTokens();
 
-  if (isLoading) return <ActivityIndicator />;
-
   return (
     <FlatList
       data={holdings}
@@ -114,22 +107,14 @@ function KycScreen() {
     setShowCapture(true);
   };
 
-  const handleCapture = async (document) => {
-    setShowCapture(false);
-    await submitDocuments([document]);
-    await completeVerification();
-  };
-
   return (
     <View>
       <Text>KYC Status: {status}</Text>
       <Button title="Start KYC" onPress={handleStartKyc} />
-
       <DocumentCapture
-        asModal
-        visible={showCapture}
+        asModal visible={showCapture}
         documentType="drivers_license"
-        onCapture={handleCapture}
+        onCapture={async (doc) => { setShowCapture(false); await submitDocuments([doc]); }}
         onCancel={() => setShowCapture(false)}
       />
     </View>
@@ -147,9 +132,7 @@ function AssetDetailScreen({ assetId }) {
 
   const handleInvest = async () => {
     const result = await invest({ amount: '1000' });
-    if (result.status === 'completed') {
-      Alert.alert('Success', 'Investment completed!');
-    }
+    if (result.status === 'completed') Alert.alert('Success', 'Investment completed!');
   };
 
   if (isLoading) return <ActivityIndicator />;
@@ -158,23 +141,13 @@ function AssetDetailScreen({ assetId }) {
     <View>
       <Text>{asset.name}</Text>
       <Text>Price: {asset.tokenPrice} {asset.currency}</Text>
-      <Text>Min. Investment: {asset.minimumInvestment}</Text>
-
-      {canInvest && (
-        <Button title="Invest Now" onPress={handleInvest} />
-      )}
+      {canInvest && <Button title="Invest Now" onPress={handleInvest} />}
     </View>
   );
 }
 ```
 
-## API Reference
-
-### Provider
-
-#### `TokenisationProvider`
-
-Root provider component that must wrap your application.
+## Provider Configuration
 
 ```tsx
 <TokenisationProvider config={config}>
@@ -183,150 +156,91 @@ Root provider component that must wrap your application.
 ```
 
 **Config options:**
-- `apiKey` (required): Your API key
-- `baseUrl`: API base URL (defaults to production)
-- `walletConnectProjectId`: WalletConnect project ID for mobile wallet connectivity
-- `supportedChains`: Array of supported chain IDs
-- `autoConnect`: Auto-connect wallet on mount
-- `debug`: Enable debug logging
-- `appMetadata`: App metadata for WalletConnect
+- `apiKey` (required) — Your API key
+- `baseUrl` — API base URL (defaults to production)
+- `walletConnectProjectId` — WalletConnect project ID for mobile wallet connectivity
+- `supportedChains` — Array of supported chain IDs (default: Ethereum, Polygon)
+- `autoConnect` — Auto-connect wallet on mount
+- `debug` — Enable debug logging
+- `appMetadata` — App metadata for WalletConnect
 
-### Hooks
+## Hooks
 
-#### `useWallet()`
+### useWallet()
 
-Wallet connection and management.
+Wallet connection and management. Balances and message signing are routed through the API client with local fallbacks.
 
 ```tsx
 const {
-  isConnected,
-  isConnecting,
-  address,
-  shortAddress,
-  chainId,
-  chainName,
-  error,
-  connect,
-  disconnect,
-  switchChain,
-  signMessage,
-  getBalance,
-  isChainSupported,
+  isConnected, isConnecting, address, shortAddress,
+  chainId, chainName, error,
+  connect, disconnect, switchChain, signMessage,
+  getBalance, isChainSupported,
 } = useWallet();
 ```
 
-#### `useTokens(options?)`
+Supported chains: Ethereum, Polygon, Base, Arbitrum, Optimism, BNB Chain, Avalanche + testnets.
 
-Token listing and management.
+### useTokens(options?)
 
 ```tsx
 const {
-  tokens,
-  holdings,
-  isLoading,
-  error,
-  refresh,
-  getToken,
-  getHolding,
-  transfer,
-  totalValue,
-  hasTokens,
-} = useTokens({
-  refreshInterval: 30000,
-  chainId: 1,
-  activeOnly: true,
-});
+  tokens, holdings, isLoading, error, refresh,
+  getToken, getHolding, transfer, totalValue, hasTokens,
+} = useTokens({ refreshInterval: 30000, chainId: 1, activeOnly: true });
 ```
 
-#### `useKYC()`
-
-KYC verification management.
+### useKYC()
 
 ```tsx
 const {
-  status,
-  level,
-  verification,
-  isLoading,
-  error,
-  startVerification,
-  submitDocuments,
-  submitSelfie,
-  completeVerification,
-  refresh,
-  checkStatus,
-  isVerified,
-  needsVerification,
-  canInvest,
+  status, level, verification, isLoading, error,
+  startVerification, submitDocuments, submitSelfie,
+  completeVerification, refresh, checkStatus,
+  isVerified, needsVerification, canInvest,
 } = useKYC();
 ```
 
-#### `useAsset(assetId, options?)`
-
-Individual asset management.
+### useAsset(assetId, options?)
 
 ```tsx
 const {
-  asset,
-  investment,
-  isLoading,
-  error,
-  refresh,
-  invest,
-  canInvest,
-  isInvested,
-  remainingSupply,
-  percentFunded,
-} = useAsset('ast_123', {
-  refreshInterval: 30000,
-  includeInvestment: true,
-});
+  asset, investment, isLoading, error, refresh,
+  invest, canInvest, isInvested, remainingSupply, percentFunded,
+} = useAsset('ast_123', { refreshInterval: 30000, includeInvestment: true });
 ```
 
-### Components
+## Components
 
-#### `WalletConnectButton`
-
-Pre-built wallet connection button.
+### WalletConnectButton
 
 ```tsx
 <WalletConnectButton
-  variant="primary" // 'primary' | 'secondary' | 'outline'
-  size="medium"     // 'small' | 'medium' | 'large'
-  showAddress
-  showChain
-  onConnect={() => {}}
-  onDisconnect={() => {}}
-  onError={(error) => {}}
+  variant="primary"  // 'primary' | 'secondary' | 'outline'
+  size="medium"      // 'small' | 'medium' | 'large'
+  showAddress showChain
+  onConnect={() => {}} onDisconnect={() => {}} onError={(e) => {}}
 />
 ```
 
-#### `DocumentCapture`
+### DocumentCapture
 
 Camera-based document scanning for KYC.
 
 ```tsx
 <DocumentCapture
   documentType="drivers_license"
-  asModal
-  visible={showCapture}
+  asModal visible={show}
   hasBackSide
-  onCapture={(document) => {}}
-  onCancel={() => {}}
+  onCapture={(doc) => {}} onCancel={() => {}}
 />
 ```
 
 ## TypeScript Support
 
-The SDK is written in TypeScript and provides full type definitions. All hooks and components are fully typed.
-
 ```tsx
 import type {
-  Token,
-  TokenHolding,
-  Asset,
-  KycStatus,
-  WalletState,
+  Token, TokenHolding, Asset, KycStatus, WalletState,
 } from '@tokenisation/sdk-react-native';
 ```
 

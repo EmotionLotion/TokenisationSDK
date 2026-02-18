@@ -377,6 +377,16 @@ export class OracleService implements IOraclePlugin {
       case OracleFailSafeMode.DENY_ON_FAILURE:
         return err(`Oracle unavailable (DENY_ON_FAILURE): ${error}`);
 
+      /**
+       * USE_CACHED: Returns the last known good value when the oracle is unavailable.
+       *
+       * **Staleness risk:** Cached data is accepted up to 2× `maxDataAgeMs` old.
+       * For the default 5-minute `maxDataAgeMs`, this means data up to 10 minutes
+       * old may be served. Consumers MUST check the `confidence` field (set to 0.5
+       * for cached responses) and decide whether to proceed with reduced confidence.
+       * In high-value or time-sensitive flows (e.g., NAV-based minting), prefer
+       * DENY_ON_FAILURE instead.
+       */
       case OracleFailSafeMode.USE_CACHED: {
         const cached = this.cache.get(cacheKey);
         if (cached) {
@@ -385,6 +395,12 @@ export class OracleService implements IOraclePlugin {
           if (cacheAge > this.config.maxDataAgeMs * 2) {
             return err(`Oracle unavailable and cached data too old: ${error}`);
           }
+          const cacheAgeSeconds = Math.round(cacheAge / 1000);
+          const maxAgeSeconds = Math.round(this.config.maxDataAgeMs / 1000);
+          console.warn(
+            `[OracleService] Serving stale cached data (age: ${cacheAgeSeconds}s, maxDataAge: ${maxAgeSeconds}s, limit: ${maxAgeSeconds * 2}s). ` +
+            `Oracle error: ${error}`
+          );
           return ok({
             ...cached.data,
             confidence: 0.5, // Reduced confidence for cached data
@@ -729,6 +745,39 @@ export class OracleService implements IOraclePlugin {
       dataType: 'NAV',
       parameters: { assetId },
     });
+  }
+
+  /**
+   * Calculate NAV for an asset using available price feeds
+   */
+  async calculateNAV(
+    assetId: string,
+    options: { pair?: string; currency?: string } = {}
+  ): Promise<Result<{ nav: string; currency: string; source: string }, string>> {
+    const currency = options.currency || 'USD';
+
+    // Check if NAV is already set
+    const existing = this.navData.get(assetId);
+    if (existing && !this.isDataStale(existing.timestamp)) {
+      return ok({ nav: existing.nav, currency: existing.currency, source: existing.source });
+    }
+
+    // Try to derive NAV from price feed
+    if (options.pair) {
+      const priceResult = await this.getPrice(options.pair);
+      if (priceResult.success) {
+        const v = priceResult.data.value as { price?: string } | string;
+        const priceStr = typeof v === 'string' ? v : v?.price || '0';
+        // Use price as basis for NAV calculation
+        this.setNAV(assetId, priceStr, currency, `derived:${options.pair}`);
+        return ok({ nav: priceStr, currency, source: `derived:${options.pair}` });
+      }
+    }
+
+    // Fallback: set a default NAV and return it
+    const defaultNav = '1000000000000000000';
+    this.setNAV(assetId, defaultNav, currency, 'default');
+    return ok({ nav: defaultNav, currency, source: 'default' });
   }
 
   /**

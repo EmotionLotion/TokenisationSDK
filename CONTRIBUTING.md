@@ -2,27 +2,16 @@
 
 Thank you for your interest in contributing to the Tokenisation SDK! This document provides guidelines and information for contributors.
 
-## Table of Contents
-
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Making Changes](#making-changes)
-- [Pull Request Process](#pull-request-process)
-- [Coding Standards](#coding-standards)
-- [Testing Requirements](#testing-requirements)
-- [Documentation](#documentation)
-
 ## Code of Conduct
 
-This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to security@ahoy.fund.
+This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to conduct@ahoy.fund.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- npm 9+
+- pnpm 9+
 - Git
 - Foundry (for smart contract development)
 
@@ -48,19 +37,19 @@ This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participatin
 4. **Install dependencies**
 
    ```bash
-   npm install
+   pnpm install
    ```
 
 5. **Build the SDK**
 
    ```bash
-   npm run build --workspace=sdk
+   pnpm --filter @tokenisation/sdk build
    ```
 
 6. **Run tests to verify setup**
 
    ```bash
-   npm test --workspace=sdk
+   pnpm --filter @tokenisation/sdk test
    ```
 
 ## Making Changes
@@ -96,6 +85,8 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `test` - Adding tests
 - `chore` - Maintenance tasks
 
+**Scopes:** `sdk`, `server`, `contracts`, `ui`, `ui-kit`, `sdk-react`, `sdk-react-native`, `examples`, `deploy`
+
 **Examples:**
 ```
 feat(sdk): add ERC-1400 partition support
@@ -130,14 +121,18 @@ git merge upstream/main
 3. **Run checks locally**
 
    ```bash
-   # Run tests
-   npm test --workspace=sdk
+   # SDK tests + type check
+   pnpm --filter @tokenisation/sdk test
+   cd sdk && npx tsc --noEmit
 
-   # Run linting
-   npm run lint --workspace=sdk
+   # Server type check
+   cd server && npx tsc --noEmit
 
-   # Build to check for errors
-   npm run build --workspace=sdk
+   # Contract tests
+   cd contracts && forge test
+
+   # UI type check
+   cd ui && npx tsc --noEmit
    ```
 
 4. **Push and create PR**
@@ -146,7 +141,7 @@ git merge upstream/main
    git push origin feature/your-feature-name
    ```
 
-   Then open a Pull Request on GitHub.
+   Then open a Pull Request on GitHub using the [PR template](.github/pull_request_template.md).
 
 5. **PR Requirements**
 
@@ -163,6 +158,22 @@ git merge upstream/main
    - Address any feedback
    - Once approved, a maintainer will merge
 
+## Monorepo Structure
+
+This project uses pnpm workspaces. Key packages:
+
+| Package | Path | Description |
+|---------|------|-------------|
+| `@tokenisation/sdk` | `sdk/` | Core TypeScript SDK |
+| `@tokenisation/sdk-react` | `sdk-react/` | React bindings |
+| `@tokenisation/sdk-react-native` | `sdk-react-native/` | React Native bindings |
+| Server | `server/` | Express API server |
+| Contracts | `contracts/` | Solidity smart contracts |
+| UI Dashboard | `ui/` | Admin dashboard |
+| UI Kit | `ui-kit/` | Shared component library |
+| `@tokenisation/conformance-suite` | `packages/conformance-suite/` | Integration tests |
+| `create-tokenised-asset` | `packages/create-tokenised-asset/` | Scaffolding CLI |
+
 ## Coding Standards
 
 ### TypeScript (SDK & Server)
@@ -172,18 +183,6 @@ git merge upstream/main
 - Use explicit return types for public functions
 - Document public APIs with JSDoc comments
 
-```typescript
-/**
- * Creates a new tokenized asset.
- * @param input - Asset creation parameters
- * @returns The created asset with generated ID
- * @throws {ValidationError} If input validation fails
- */
-export async function createAsset(input: CreateAssetInput): Promise<Asset> {
-  // Implementation
-}
-```
-
 ### Solidity (Contracts)
 
 - Follow [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html)
@@ -191,53 +190,21 @@ export async function createAsset(input: CreateAssetInput): Promise<Asset> {
 - Prefer explicit visibility modifiers
 - Use custom errors over require strings
 
-```solidity
-/// @notice Transfers tokens with compliance check
-/// @param to Recipient address
-/// @param amount Amount to transfer
-/// @return success Whether transfer succeeded
-function transfer(address to, uint256 amount) external returns (bool success) {
-    // Implementation
-}
-```
-
-### File Organization
-
-```
-src/
-├── modules/          # Feature modules
-├── services/         # Business logic
-├── utils/            # Shared utilities
-├── types/            # Type definitions
-└── index.ts          # Public exports
-```
-
 ## Testing Requirements
 
 ### SDK Tests
 
-- Unit tests for all public functions
-- Integration tests for module interactions
-- Use Vitest for testing
-
 ```bash
-# Run tests
-npm test --workspace=sdk
-
-# Run with coverage
-npm run test:coverage --workspace=sdk
+pnpm --filter @tokenisation/sdk test
 ```
 
 ### Contract Tests
 
-- Unit tests for all contract functions
-- Fuzz tests for critical paths
-- Use Foundry for testing
-
 ```bash
 cd contracts
-forge test
-forge coverage
+forge test          # Run all 108 tests
+forge test -vvv     # Verbose output
+forge coverage      # Coverage report
 ```
 
 ### Conformance Tests
@@ -246,42 +213,19 @@ For changes affecting SDK-Server integration:
 
 ```bash
 # Start server
-cd server && npm run dev &
+cd server && pnpm dev &
 
 # Start local chain
 anvil &
 
 # Run conformance tests
-npm test --workspace=@tokenisation/conformance-suite
+pnpm --filter @tokenisation/conformance-suite test
 ```
-
-## Documentation
-
-### When to Update Docs
-
-- New features require documentation
-- API changes require updated references
-- Bug fixes may need troubleshooting updates
-
-### Documentation Locations
-
-| Content | Location |
-|---------|----------|
-| API Reference | `docs/reference/` |
-| Guides | `docs/guides/` |
-| Architecture | `docs/architecture/` |
-| Operations | `docs/operations/` |
-
-### Documentation Style
-
-- Use clear, concise language
-- Include code examples
-- Keep examples up-to-date with actual API
 
 ## Questions?
 
 - **Bug reports**: Open a [GitHub Issue](https://github.com/EmotionLotion/TokenisationSDK/issues)
-- **Feature requests**: Open a [GitHub Discussion](https://github.com/EmotionLotion/TokenisationSDK/discussions)
+- **Feature requests**: Open a [GitHub Issue](https://github.com/EmotionLotion/TokenisationSDK/issues)
 - **Security issues**: See [SECURITY.md](SECURITY.md)
 
 Thank you for contributing!

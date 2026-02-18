@@ -583,7 +583,7 @@ export async function executeRedemption(redemptionId: string): Promise<Redemptio
       });
     }
 
-    throw new AppError(500, errorMessage, 'REDEMPTION_EXECUTION_FAILED');
+    throw new AppError(errorMessage, 500, 'REDEMPTION_EXECUTION_FAILED');
   }
 }
 

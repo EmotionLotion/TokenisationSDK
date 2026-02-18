@@ -39,9 +39,20 @@ export interface TokenisationConfig {
   /** Custom fonts */
   fonts?: { family: string; src: string }[];
 
+  /** Environment preset: 'test' | 'sandbox' | 'staging' | 'live' */
+  environment?: 'test' | 'sandbox' | 'staging' | 'live';
+
   /** Enable debug mode */
   debug?: boolean;
 }
+
+/** Pre-configured environment URL presets */
+const ENVIRONMENT_PRESETS: Record<string, string> = {
+  test: 'http://localhost:3001',
+  sandbox: 'http://localhost:3001',
+  staging: 'https://staging-api.tokenisation.io/v1',
+  live: 'https://api.tokenisation.io',
+};
 
 export interface TokenisationInstance {
   /** API client for backend calls */
@@ -113,11 +124,10 @@ class TokenisationClient implements TokenisationInstance {
       throw new Error('Tokenisation: Invalid publishable key format. Expected pk_live_xxx or pk_test_xxx');
     }
 
-    // Determine environment from key
+    // Determine environment from explicit config or key prefix
     const isTest = config.publishableKey.startsWith('pk_test_');
-    const defaultApiUrl = isTest
-      ? 'http://localhost:3001'
-      : 'https://api.tokenisation.io';
+    const environment = config.environment || (isTest ? 'test' : 'live');
+    const defaultApiUrl = ENVIRONMENT_PRESETS[environment] || 'https://api.tokenisation.io';
 
     // Initialize API client
     const apiConfig: ApiClientConfig = {
@@ -143,7 +153,7 @@ class TokenisationClient implements TokenisationInstance {
     // Debug logging
     if (config.debug) {
       console.log('[Tokenisation] Initialized', {
-        environment: isTest ? 'test' : 'live',
+        environment,
         apiUrl: apiConfig.baseUrl,
       });
     }

@@ -155,8 +155,8 @@ export function OnboardProperty() {
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [executingStep, setExecutingStep] = useState<string | null>(null);
 
-  // Placeholder asset ID — in a real flow this would come from the first step's result or route params
-  const [assetId] = useState('pending-onboard');
+  // Asset ID — set from the first step's result or route params
+  const [assetId, setAssetId] = useState('pending-onboard');
 
   /* ---------------------------------------------------------------- */
   /*  SDK hooks                                                        */
@@ -173,8 +173,8 @@ export function OnboardProperty() {
   // -- Due Diligence: dd-1 — createAsset (Property Identification)
   const ddCreateAsset = useSDKMutationWithFallback(
     useCallback(
-      async () =>
-        asset.createAsset({
+      async () => {
+        const result = await asset.createAsset({
           name: 'New Property',
           symbol: 'PROP',
           description: 'Onboarding property',
@@ -184,10 +184,17 @@ export function OnboardProperty() {
           pricePerShare: 100,
           documents: [],
           metadata: {},
-        } as any),
-      [asset],
+        } as any);
+        if (result?.asset?.id) setAssetId(result.asset.id);
+        return result;
+      },
+      [asset, setAssetId],
     ),
-    useCallback(async () => simulateDelay({ success: true }), []),
+    useCallback(async () => {
+      const mockId = `mock-asset-${Date.now().toString(36)}`;
+      setAssetId(mockId);
+      return simulateDelay({ success: true, id: mockId });
+    }, [setAssetId]),
   );
 
   // -- Due Diligence: dd-2 — registerTitle (Title Verification)

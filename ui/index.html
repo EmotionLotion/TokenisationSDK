@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AHOY | Unified Tokenisation Platform</title>
+    <title>Tokenisation SDK | Developer Console</title>
     <!-- AHOY Institutional Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +12,19 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.getElementById('root').innerHTML =
+          '<pre style="color:red;padding:20px;font-size:14px;white-space:pre-wrap;">JS ERROR: ' +
+          e.message + '\n\nFile: ' + e.filename + ':' + e.lineno + ':' + e.colno +
+          '\n\nStack: ' + (e.error && e.error.stack ? e.error.stack : 'N/A') + '</pre>';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.getElementById('root').innerHTML =
+          '<pre style="color:orange;padding:20px;font-size:14px;white-space:pre-wrap;">UNHANDLED PROMISE: ' +
+          (e.reason && e.reason.stack ? e.reason.stack : e.reason) + '</pre>';
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

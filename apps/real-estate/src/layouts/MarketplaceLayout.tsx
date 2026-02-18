@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Building2, Search, User, Shield } from 'lucide-react';
+import { Building2, Search, Shield } from 'lucide-react';
+import { ConnectWalletButton } from '../components/ConnectWalletButton';
 
 export function MarketplaceLayout() {
   return (
@@ -49,13 +50,7 @@ export function MarketplaceLayout() {
             <button className="p-2 text-gray-400 hover:text-white transition-colors">
               <Search className="w-5 h-5" />
             </button>
-            <NavLink
-              to="/investor/onboarding"
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-black font-semibold rounded-lg hover:bg-primary-dark transition-colors text-sm"
-            >
-              <User className="w-4 h-4" />
-              Get Started
-            </NavLink>
+            <ConnectWalletButton />
           </div>
         </div>
       </header>

@@ -125,6 +125,28 @@ export const oauthTokens = pgTable('oauth_tokens', {
   expiresIdx: index('idx_oauth_tokens_expires').on(table.expiresAt),
 }));
 
+// OAuth Authorization Codes - For authorization code flow + PKCE
+export const oauthAuthorizationCodes = pgTable('oauth_authorization_codes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+  codeHash: varchar('code_hash', { length: 128 }).notNull(),
+  redirectUri: varchar('redirect_uri', { length: 512 }).notNull(),
+  scopes: text('scopes').notNull(),
+  partyId: uuid('party_id').references(() => parties.id),
+  userId: uuid('user_id'),
+  state: varchar('state', { length: 256 }),
+  codeChallenge: varchar('code_challenge', { length: 128 }),
+  codeChallengeMethod: varchar('code_challenge_method', { length: 10 }), // 'S256' | 'plain'
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  codeHashIdx: uniqueIndex('idx_oauth_codes_hash').on(table.codeHash),
+  clientIdx: index('idx_oauth_codes_client').on(table.clientId),
+  expiresIdx: index('idx_oauth_codes_expires').on(table.expiresAt),
+}));
+
 // ============================================================================
 // SECTION 1b: Billing & Usage Tracking
 // ============================================================================
@@ -310,6 +332,8 @@ export const investors = pgTable('investors', {
   accreditedStatus: varchar('accredited_status', { length: 32 }).default('unknown'), // unknown, pending, verified, expired
   accreditedVerifiedAt: timestamp('accredited_verified_at', { withTimezone: true }),
   accreditedExpiresAt: timestamp('accredited_expires_at', { withTimezone: true }),
+  sanctionsStatus: varchar('sanctions_status', { length: 32 }).default('not_screened'), // not_screened, clear, flagged
+  sanctionsScreenedAt: timestamp('sanctions_screened_at', { withTimezone: true }),
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -321,6 +345,7 @@ export const investors = pgTable('investors', {
   statusIdx: index('idx_investors_status').on(table.status),
   kycStatusIdx: index('idx_investors_kyc_status').on(table.kycStatus),
   classificationIdx: index('idx_investors_classification').on(table.classification),
+  sanctionsStatusIdx: index('idx_investors_sanctions_status').on(table.sanctionsStatus),
 }));
 
 // Investor Wallets - Wallet addresses for investors
@@ -1974,6 +1999,8 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type OAuthClient = typeof oauthClients.$inferSelect;
 export type NewOAuthClient = typeof oauthClients.$inferInsert;
+export type OAuthAuthorizationCode = typeof oauthAuthorizationCodes.$inferSelect;
+export type NewOAuthAuthorizationCode = typeof oauthAuthorizationCodes.$inferInsert;
 
 // Billing & Usage Types
 export type BillingPlan = typeof billingPlans.$inferSelect;
@@ -2152,3 +2179,615 @@ export type ResaleFeeEntry = typeof resaleFeeLedger.$inferSelect;
 export type NewResaleFeeEntry = typeof resaleFeeLedger.$inferInsert;
 export type TicketWebhook = typeof ticketWebhooks.$inferSelect;
 export type NewTicketWebhook = typeof ticketWebhooks.$inferInsert;
+
+// ============================================================================
+// SECTION: Payment Rails
+// ============================================================================
+
+export const paymentRailConfigs = pgTable('payment_rail_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  railType: varchar('rail_type', { length: 32 }).notNull(), // usdc, bank_ach, bank_wire, bank_sepa
+  name: varchar('name', { length: 256 }).notNull(),
+  config: jsonb('config').notNull().default({}), // provider-specific config (encrypted at rest)
+  supportedCurrencies: jsonb('supported_currencies').notNull().default([]),
+  fees: jsonb('fees').default({}), // { fixed?: string, percentage?: number }
+  limits: jsonb('limits').default({}), // { minAmount?, maxAmount?, dailyLimit? }
+  isDefault: boolean('is_default').default(false),
+  status: varchar('status', { length: 32 }).notNull().default('active'), // active, disabled
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_payment_rail_configs_org').on(table.orgId),
+  typeIdx: index('idx_payment_rail_configs_type').on(table.railType),
+  statusIdx: index('idx_payment_rail_configs_status').on(table.status),
+}));
+
+export const paymentTransactions = pgTable('payment_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  railConfigId: uuid('rail_config_id').notNull().references(() => paymentRailConfigs.id),
+  railType: varchar('rail_type', { length: 32 }).notNull(),
+  direction: varchar('direction', { length: 16 }).notNull(), // inbound, outbound
+  amount: numeric('amount', { precision: 36, scale: 18 }).notNull(),
+  currency: varchar('currency', { length: 8 }).notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('pending'), // pending, processing, completed, failed, cancelled
+  reference: varchar('reference', { length: 256 }),
+  externalId: varchar('external_id', { length: 256 }), // provider's transaction ID (Stripe PI, Circle transfer ID)
+  investorId: uuid('investor_id').references(() => investors.id),
+  walletAddress: varchar('wallet_address', { length: 128 }),
+  bankDetails: jsonb('bank_details').default({}),
+  txHash: varchar('tx_hash', { length: 128 }), // on-chain hash for USDC
+  feeAmount: numeric('fee_amount', { precision: 36, scale: 18 }),
+  feeCurrency: varchar('fee_currency', { length: 8 }),
+  error: text('error'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => ({
+  orgIdx: index('idx_payment_txns_org').on(table.orgId),
+  railIdx: index('idx_payment_txns_rail').on(table.railConfigId),
+  statusIdx: index('idx_payment_txns_status').on(table.status),
+  investorIdx: index('idx_payment_txns_investor').on(table.investorId),
+  directionIdx: index('idx_payment_txns_direction').on(table.direction),
+  externalIdx: index('idx_payment_txns_external').on(table.externalId),
+  createdIdx: index('idx_payment_txns_created').on(table.createdAt),
+}));
+
+// Payment Rail Types
+export type PaymentRailConfig = typeof paymentRailConfigs.$inferSelect;
+export type NewPaymentRailConfig = typeof paymentRailConfigs.$inferInsert;
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type NewPaymentTransaction = typeof paymentTransactions.$inferInsert;
+
+// ============================================================================
+// SECTION 17: Hotel Reservations (NFT Utility Tokens)
+// ============================================================================
+
+// Hotel Reservations - Core reservation records
+export const hotelReservations = pgTable('hotel_reservations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').references(() => tokens.id, { onDelete: 'set null' }),
+  // On-chain reference
+  chainTokenId: varchar('chain_token_id', { length: 78 }),
+  contractAddress: varchar('contract_address', { length: 42 }),
+  chainId: integer('chain_id'),
+  // Hotel info
+  hotelCode: varchar('hotel_code', { length: 16 }).notNull(),
+  hotelName: varchar('hotel_name', { length: 256 }).notNull(),
+  guestName: varchar('guest_name', { length: 256 }).notNull(),
+  roomType: varchar('room_type', { length: 32 }).notNull().default('STANDARD'), // STANDARD, DELUXE, SUITE, PENTHOUSE
+  roomNumber: varchar('room_number', { length: 16 }),
+  checkInDate: timestamp('check_in_date', { withTimezone: true }).notNull(),
+  checkOutDate: timestamp('check_out_date', { withTimezone: true }).notNull(),
+  nightCount: integer('night_count').notNull(),
+  // Pricing
+  rate: numeric('rate', { precision: 18, scale: 8 }).notNull(),
+  currency: varchar('currency', { length: 8 }).default('USD'),
+  // Guest
+  guestId: uuid('guest_id').references(() => investors.id, { onDelete: 'set null' }),
+  guestWallet: varchar('guest_wallet', { length: 42 }),
+  confirmationCode: varchar('confirmation_code', { length: 32 }).notNull(),
+  bookingReference: varchar('booking_reference', { length: 16 }),
+  // Lifecycle
+  status: varchar('status', { length: 32 }).notNull().default('CREATED'),
+  // CREATED, CONFIRMED, CHECKED_IN, CHECKED_OUT, CLOSED, CANCELLED, NO_SHOW, EXPIRED, VOID
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  // Transfer rules
+  transferable: boolean('transferable').default(true),
+  maxTransfers: integer('max_transfers').default(2),
+  transferCount: integer('transfer_count').default(0),
+  // Metadata
+  metadataVersion: integer('metadata_version').default(1),
+  metadata: jsonb('metadata').default({}),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_hotel_reservations_org').on(table.orgId),
+  hotelCheckInIdx: index('idx_hotel_reservations_hotel_checkin').on(table.hotelCode, table.checkInDate),
+  statusIdx: index('idx_hotel_reservations_status').on(table.status),
+  guestIdx: index('idx_hotel_reservations_guest').on(table.guestId),
+  guestWalletIdx: index('idx_hotel_reservations_wallet').on(table.guestWallet),
+  confirmationIdx: uniqueIndex('idx_hotel_reservations_confirmation').on(table.orgId, table.confirmationCode),
+}));
+
+// Hotel Reservation Transfers - Transfer request history
+export const hotelReservationTransfers = pgTable('hotel_reservation_transfers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  reservationId: uuid('reservation_id').notNull().references(() => hotelReservations.id, { onDelete: 'cascade' }),
+  // Transfer details
+  fromWallet: varchar('from_wallet', { length: 42 }).notNull(),
+  toWallet: varchar('to_wallet', { length: 42 }).notNull(),
+  fromGuestId: uuid('from_guest_id').references(() => investors.id, { onDelete: 'set null' }),
+  toGuestId: uuid('to_guest_id').references(() => investors.id, { onDelete: 'set null' }),
+  // Approval
+  status: varchar('status', { length: 32 }).notNull().default('PENDING'), // PENDING, KYC_REQUIRED, APPROVED, REJECTED, COMPLETED, EXPIRED
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+  // Re-KYC
+  kycRequired: boolean('kyc_required').default(false),
+  kycCompleted: boolean('kyc_completed').default(false),
+  kycCompletedAt: timestamp('kyc_completed_at', { withTimezone: true }),
+  // Resale fee
+  resaleFee: numeric('resale_fee', { precision: 18, scale: 8 }),
+  resaleFeeCurrency: varchar('resale_fee_currency', { length: 8 }),
+  resaleFeePaid: boolean('resale_fee_paid').default(false),
+  // Idempotency
+  idempotencyKey: varchar('idempotency_key', { length: 128 }),
+  // On-chain
+  txHash: varchar('tx_hash', { length: 66 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_hotel_reservation_transfers_org').on(table.orgId),
+  reservationIdx: index('idx_hotel_reservation_transfers_reservation').on(table.reservationId),
+  statusIdx: index('idx_hotel_reservation_transfers_status').on(table.status),
+  idempotencyIdx: uniqueIndex('idx_hotel_reservation_transfers_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
+// Hotel Reservation Events - Audit trail for reservation operations
+export const hotelReservationEvents = pgTable('hotel_reservation_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  reservationId: uuid('reservation_id').notNull().references(() => hotelReservations.id, { onDelete: 'cascade' }),
+  eventType: varchar('event_type', { length: 64 }).notNull(),
+  // RESERVATION_CREATED, RESERVATION_CONFIRMED, CHECK_IN_COMPLETED, CHECK_OUT_COMPLETED,
+  // RESERVATION_TRANSFERRED, RESERVATION_CANCELLED, RESERVATION_EXPIRED, METADATA_UPDATED, KYC_VERIFIED
+  actor: varchar('actor', { length: 256 }),
+  actorRole: varchar('actor_role', { length: 32 }), // HOTEL_ADMIN, HOTEL_AGENT, GUEST, SYSTEM
+  previousState: varchar('previous_state', { length: 32 }),
+  newState: varchar('new_state', { length: 32 }),
+  details: jsonb('details').default({}),
+  correlationId: varchar('correlation_id', { length: 64 }),
+  txHash: varchar('tx_hash', { length: 66 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_hotel_reservation_events_org').on(table.orgId),
+  reservationIdx: index('idx_hotel_reservation_events_reservation').on(table.reservationId),
+  eventTypeIdx: index('idx_hotel_reservation_events_type').on(table.eventType),
+  correlationIdx: index('idx_hotel_reservation_events_correlation').on(table.correlationId),
+  createdAtIdx: index('idx_hotel_reservation_events_created').on(table.createdAt),
+}));
+
+// ============================================================================
+// SECTION 18: Car Rentals (NFT Utility Tokens)
+// ============================================================================
+
+// Car Rentals - Core rental records
+export const carRentals = pgTable('car_rentals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').references(() => tokens.id, { onDelete: 'set null' }),
+  // On-chain reference
+  chainTokenId: varchar('chain_token_id', { length: 78 }),
+  contractAddress: varchar('contract_address', { length: 42 }),
+  chainId: integer('chain_id'),
+  // Rental company info
+  rentalCompanyCode: varchar('rental_company_code', { length: 16 }).notNull(),
+  rentalCompanyName: varchar('rental_company_name', { length: 256 }).notNull(),
+  // Driver
+  driverName: varchar('driver_name', { length: 256 }).notNull(),
+  driverId: uuid('driver_id').references(() => investors.id, { onDelete: 'set null' }),
+  driverWallet: varchar('driver_wallet', { length: 42 }),
+  // Vehicle info
+  vehicleCategory: varchar('vehicle_category', { length: 32 }).notNull().default('ECONOMY'), // ECONOMY, COMPACT, MIDSIZE, FULLSIZE, LUXURY, SUV, VAN
+  vehicleMake: varchar('vehicle_make', { length: 64 }).notNull(),
+  vehicleModel: varchar('vehicle_model', { length: 64 }).notNull(),
+  licensePlate: varchar('license_plate', { length: 20 }),
+  // Rental period
+  pickupDate: timestamp('pickup_date', { withTimezone: true }).notNull(),
+  returnDate: timestamp('return_date', { withTimezone: true }).notNull(),
+  pickupLocation: varchar('pickup_location', { length: 256 }).notNull(),
+  returnLocation: varchar('return_location', { length: 256 }).notNull(),
+  // Pricing
+  dailyRate: numeric('daily_rate', { precision: 18, scale: 8 }).notNull(),
+  currency: varchar('currency', { length: 8 }).default('USD'),
+  // Deposit
+  depositAmount: numeric('deposit_amount', { precision: 18, scale: 8 }).notNull(),
+  depositStatus: varchar('deposit_status', { length: 32 }).notNull().default('HELD'), // HELD, RELEASED, PARTIALLY_CHARGED, FULLY_CHARGED
+  // Mileage & fuel
+  pickupMileage: integer('pickup_mileage'),
+  returnMileage: integer('return_mileage'),
+  pickupFuel: varchar('pickup_fuel', { length: 16 }),
+  returnFuel: varchar('return_fuel', { length: 16 }),
+  // Vehicle condition
+  vehicleCondition: jsonb('vehicle_condition').default({}),
+  damageReport: jsonb('damage_report'),
+  // Insurance
+  insuranceType: varchar('insurance_type', { length: 32 }),
+  insuranceProvider: varchar('insurance_provider', { length: 128 }),
+  // Booking
+  confirmationCode: varchar('confirmation_code', { length: 32 }).notNull(),
+  bookingReference: varchar('booking_reference', { length: 16 }),
+  // Lifecycle
+  status: varchar('status', { length: 32 }).notNull().default('CREATED'),
+  // CREATED, CONFIRMED, PICKED_UP, RETURNED, INSPECTED, CLOSED, CANCELLED, NO_SHOW, EXPIRED, VOID
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  pickedUpAt: timestamp('picked_up_at', { withTimezone: true }),
+  returnedAt: timestamp('returned_at', { withTimezone: true }),
+  inspectedAt: timestamp('inspected_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  // Transfer rules
+  transferable: boolean('transferable').default(true),
+  maxTransfers: integer('max_transfers').default(2),
+  transferCount: integer('transfer_count').default(0),
+  // Metadata
+  metadataVersion: integer('metadata_version').default(1),
+  metadata: jsonb('metadata').default({}),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_car_rentals_org').on(table.orgId),
+  companyPickupIdx: index('idx_car_rentals_company_pickup').on(table.rentalCompanyCode, table.pickupDate),
+  statusIdx: index('idx_car_rentals_status').on(table.status),
+  driverIdx: index('idx_car_rentals_driver').on(table.driverId),
+  driverWalletIdx: index('idx_car_rentals_wallet').on(table.driverWallet),
+  confirmationIdx: uniqueIndex('idx_car_rentals_confirmation').on(table.orgId, table.confirmationCode),
+}));
+
+// Car Rental Transfers - Transfer request history
+export const carRentalTransfers = pgTable('car_rental_transfers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  rentalId: uuid('rental_id').notNull().references(() => carRentals.id, { onDelete: 'cascade' }),
+  // Transfer details
+  fromWallet: varchar('from_wallet', { length: 42 }).notNull(),
+  toWallet: varchar('to_wallet', { length: 42 }).notNull(),
+  fromDriverId: uuid('from_driver_id').references(() => investors.id, { onDelete: 'set null' }),
+  toDriverId: uuid('to_driver_id').references(() => investors.id, { onDelete: 'set null' }),
+  // Approval
+  status: varchar('status', { length: 32 }).notNull().default('PENDING'), // PENDING, KYC_REQUIRED, APPROVED, REJECTED, COMPLETED, EXPIRED
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+  // Re-KYC
+  kycRequired: boolean('kyc_required').default(false),
+  kycCompleted: boolean('kyc_completed').default(false),
+  kycCompletedAt: timestamp('kyc_completed_at', { withTimezone: true }),
+  // Resale fee
+  resaleFee: numeric('resale_fee', { precision: 18, scale: 8 }),
+  resaleFeeCurrency: varchar('resale_fee_currency', { length: 8 }),
+  resaleFeePaid: boolean('resale_fee_paid').default(false),
+  // Idempotency
+  idempotencyKey: varchar('idempotency_key', { length: 128 }),
+  // On-chain
+  txHash: varchar('tx_hash', { length: 66 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_car_rental_transfers_org').on(table.orgId),
+  rentalIdx: index('idx_car_rental_transfers_rental').on(table.rentalId),
+  statusIdx: index('idx_car_rental_transfers_status').on(table.status),
+  idempotencyIdx: uniqueIndex('idx_car_rental_transfers_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
+// Car Rental Events - Audit trail for rental operations
+export const carRentalEvents = pgTable('car_rental_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  rentalId: uuid('rental_id').notNull().references(() => carRentals.id, { onDelete: 'cascade' }),
+  eventType: varchar('event_type', { length: 64 }).notNull(),
+  // RENTAL_CREATED, RENTAL_CONFIRMED, PICKUP_COMPLETED, RETURN_COMPLETED,
+  // INSPECTION_COMPLETED, RENTAL_TRANSFERRED, RENTAL_CANCELLED, RENTAL_EXPIRED,
+  // DAMAGE_REPORTED, DEPOSIT_RELEASED, METADATA_UPDATED, KYC_VERIFIED
+  actor: varchar('actor', { length: 256 }),
+  actorRole: varchar('actor_role', { length: 32 }), // RENTAL_ADMIN, RENTAL_AGENT, DRIVER, SYSTEM
+  previousState: varchar('previous_state', { length: 32 }),
+  newState: varchar('new_state', { length: 32 }),
+  details: jsonb('details').default({}),
+  correlationId: varchar('correlation_id', { length: 64 }),
+  txHash: varchar('tx_hash', { length: 66 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_car_rental_events_org').on(table.orgId),
+  rentalIdx: index('idx_car_rental_events_rental').on(table.rentalId),
+  eventTypeIdx: index('idx_car_rental_events_type').on(table.eventType),
+  correlationIdx: index('idx_car_rental_events_correlation').on(table.correlationId),
+  createdAtIdx: index('idx_car_rental_events_created').on(table.createdAt),
+}));
+
+// ============================================================================
+// SECTION 19: Concert Tickets (NFT Utility Tokens)
+// ============================================================================
+
+// Concert Tickets - Core ticket records
+export const concertTickets = pgTable('concert_tickets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  tokenId: uuid('token_id').references(() => tokens.id, { onDelete: 'set null' }),
+  // On-chain reference
+  chainTokenId: varchar('chain_token_id', { length: 78 }),
+  contractAddress: varchar('contract_address', { length: 42 }),
+  chainId: integer('chain_id'),
+  // Venue & event info
+  venueCode: varchar('venue_code', { length: 16 }).notNull(),
+  venueName: varchar('venue_name', { length: 256 }).notNull(),
+  eventName: varchar('event_name', { length: 256 }).notNull(),
+  artist: varchar('artist', { length: 256 }).notNull(),
+  eventDate: timestamp('event_date', { withTimezone: true }).notNull(),
+  doorsOpen: timestamp('doors_open', { withTimezone: true }),
+  // Seating
+  section: varchar('section', { length: 32 }),
+  row: varchar('row', { length: 16 }),
+  seatNumber: varchar('seat_number', { length: 16 }),
+  seatingTier: varchar('seating_tier', { length: 32 }).notNull().default('GA'), // GA, FLOOR, LOWER, UPPER, VIP, BACKSTAGE
+  // Pricing
+  faceValue: numeric('face_value', { precision: 18, scale: 8 }).notNull(),
+  resalePriceCap: numeric('resale_price_cap', { precision: 18, scale: 8 }),
+  currency: varchar('currency', { length: 8 }).default('USD'),
+  // Fan
+  fanName: varchar('fan_name', { length: 256 }),
+  fanId: uuid('fan_id').references(() => investors.id, { onDelete: 'set null' }),
+  fanWallet: varchar('fan_wallet', { length: 42 }),
+  ageVerified: boolean('age_verified').default(false),
+  admittedAt: timestamp('admitted_at', { withTimezone: true }),
+  // Booking
+  confirmationCode: varchar('confirmation_code', { length: 32 }).notNull(),
+  bookingReference: varchar('booking_reference', { length: 16 }),
+  // Lifecycle
+  status: varchar('status', { length: 32 }).notNull().default('CREATED'),
+  // CREATED, ISSUED, ADMITTED, USED, CLOSED, CANCELLED, REFUNDED, EXPIRED, VOID
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  issuedAt: timestamp('issued_at', { withTimezone: true }),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  refundedAt: timestamp('refunded_at', { withTimezone: true }),
+  // Transfer rules
+  transferable: boolean('transferable').default(true),
+  maxTransfers: integer('max_transfers').default(3),
+  transferCount: integer('transfer_count').default(0),
+  // Metadata
+  metadataVersion: integer('metadata_version').default(1),
+  metadata: jsonb('metadata').default({}),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_concert_tickets_org').on(table.orgId),
+  venueEventIdx: index('idx_concert_tickets_venue_event').on(table.venueCode, table.eventDate),
+  statusIdx: index('idx_concert_tickets_status').on(table.status),
+  fanIdx: index('idx_concert_tickets_fan').on(table.fanId),
+  fanWalletIdx: index('idx_concert_tickets_wallet').on(table.fanWallet),
+  confirmationIdx: uniqueIndex('idx_concert_tickets_confirmation').on(table.orgId, table.confirmationCode),
+}));
+
+// Concert Ticket Transfers - Transfer request history
+export const concertTicketTransfers = pgTable('concert_ticket_transfers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  concertTicketId: uuid('concert_ticket_id').notNull().references(() => concertTickets.id, { onDelete: 'cascade' }),
+  // Transfer details
+  fromWallet: varchar('from_wallet', { length: 42 }).notNull(),
+  toWallet: varchar('to_wallet', { length: 42 }).notNull(),
+  fromFanId: uuid('from_fan_id').references(() => investors.id, { onDelete: 'set null' }),
+  toFanId: uuid('to_fan_id').references(() => investors.id, { onDelete: 'set null' }),
+  // Resale price
+  resalePrice: numeric('resale_price', { precision: 18, scale: 8 }),
+  // Approval
+  status: varchar('status', { length: 32 }).notNull().default('PENDING'), // PENDING, KYC_REQUIRED, APPROVED, REJECTED, COMPLETED, EXPIRED
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+  // Re-KYC
+  kycRequired: boolean('kyc_required').default(false),
+  kycCompleted: boolean('kyc_completed').default(false),
+  kycCompletedAt: timestamp('kyc_completed_at', { withTimezone: true }),
+  // Resale fee
+  resaleFee: numeric('resale_fee', { precision: 18, scale: 8 }),
+  resaleFeeCurrency: varchar('resale_fee_currency', { length: 8 }),
+  resaleFeePaid: boolean('resale_fee_paid').default(false),
+  // Idempotency
+  idempotencyKey: varchar('idempotency_key', { length: 128 }),
+  // On-chain
+  txHash: varchar('tx_hash', { length: 66 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_concert_ticket_transfers_org').on(table.orgId),
+  concertTicketIdx: index('idx_concert_ticket_transfers_ticket').on(table.concertTicketId),
+  statusIdx: index('idx_concert_ticket_transfers_status').on(table.status),
+  idempotencyIdx: uniqueIndex('idx_concert_ticket_transfers_idempotency').on(table.orgId, table.idempotencyKey),
+}));
+
+// Concert Ticket Events - Audit trail for concert ticket operations
+export const concertTicketEvents = pgTable('concert_ticket_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  concertTicketId: uuid('concert_ticket_id').notNull().references(() => concertTickets.id, { onDelete: 'cascade' }),
+  eventType: varchar('event_type', { length: 64 }).notNull(),
+  // TICKET_CREATED, TICKET_ISSUED, TICKET_ADMITTED, TICKET_USED,
+  // TICKET_TRANSFERRED, TICKET_CANCELLED, TICKET_REFUNDED, TICKET_EXPIRED,
+  // RESALE_PRICE_SET, METADATA_UPDATED, KYC_VERIFIED, AGE_VERIFIED
+  actor: varchar('actor', { length: 256 }),
+  actorRole: varchar('actor_role', { length: 32 }), // VENUE_ADMIN, VENUE_AGENT, FAN, SYSTEM
+  previousState: varchar('previous_state', { length: 32 }),
+  newState: varchar('new_state', { length: 32 }),
+  details: jsonb('details').default({}),
+  correlationId: varchar('correlation_id', { length: 64 }),
+  txHash: varchar('tx_hash', { length: 66 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgIdx: index('idx_concert_ticket_events_org').on(table.orgId),
+  concertTicketIdx: index('idx_concert_ticket_events_ticket').on(table.concertTicketId),
+  eventTypeIdx: index('idx_concert_ticket_events_type').on(table.eventType),
+  correlationIdx: index('idx_concert_ticket_events_correlation').on(table.correlationId),
+  createdAtIdx: index('idx_concert_ticket_events_created').on(table.createdAt),
+}));
+
+// ============================================================================
+// SECTION 20: Dashboard Metrics
+// ============================================================================
+
+// Dashboard Metrics - Aggregated metric snapshots
+export const dashboardMetrics = pgTable('dashboard_metrics', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => orgs.id, { onDelete: 'cascade' }),
+  metricName: varchar('metric_name', { length: 64 }).notNull(),
+  metricValue: numeric('metric_value', { precision: 18, scale: 8 }).notNull(),
+  metricDate: varchar('metric_date', { length: 10 }).notNull(), // YYYY-MM-DD
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgMetricDateIdx: uniqueIndex('idx_dashboard_metrics_org_metric_date').on(table.orgId, table.metricName, table.metricDate),
+}));
+
+// Hotel Types
+export type HotelReservation = typeof hotelReservations.$inferSelect;
+export type NewHotelReservation = typeof hotelReservations.$inferInsert;
+export type HotelReservationTransfer = typeof hotelReservationTransfers.$inferSelect;
+export type NewHotelReservationTransfer = typeof hotelReservationTransfers.$inferInsert;
+export type HotelReservationEvent = typeof hotelReservationEvents.$inferSelect;
+export type NewHotelReservationEvent = typeof hotelReservationEvents.$inferInsert;
+
+// Car Rental Types
+export type CarRental = typeof carRentals.$inferSelect;
+export type NewCarRental = typeof carRentals.$inferInsert;
+export type CarRentalTransfer = typeof carRentalTransfers.$inferSelect;
+export type NewCarRentalTransfer = typeof carRentalTransfers.$inferInsert;
+export type CarRentalEvent = typeof carRentalEvents.$inferSelect;
+export type NewCarRentalEvent = typeof carRentalEvents.$inferInsert;
+
+// Concert Ticket Types
+export type ConcertTicket = typeof concertTickets.$inferSelect;
+export type NewConcertTicket = typeof concertTickets.$inferInsert;
+export type ConcertTicketTransfer = typeof concertTicketTransfers.$inferSelect;
+export type NewConcertTicketTransfer = typeof concertTicketTransfers.$inferInsert;
+export type ConcertTicketEvent = typeof concertTicketEvents.$inferSelect;
+export type NewConcertTicketEvent = typeof concertTicketEvents.$inferInsert;
+
+// Dashboard Metrics Types
+export type DashboardMetric = typeof dashboardMetrics.$inferSelect;
+export type NewDashboardMetric = typeof dashboardMetrics.$inferInsert;
+
+// ============================================================================
+// SECTION 24: Real Estate — Investor Tiers, Exit Windows, Secondary Market
+// ============================================================================
+
+// Investor Plans — per-asset tier investment plans (VARA compliance)
+export const investorPlans = pgTable('investor_plans', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull(),
+  tier: varchar('tier', { length: 32 }).notNull(), // retail, qualified, professional, institutional
+  name: varchar('name', { length: 256 }).notNull(),
+  minInvestment: numeric('min_investment', { precision: 18, scale: 2 }).notNull(),
+  maxInvestment: numeric('max_investment', { precision: 18, scale: 2 }).notNull(),
+  maxHoldingPercent: numeric('max_holding_percent', { precision: 5, scale: 2 }).notNull(),
+  managementFeePercent: numeric('management_fee_percent', { precision: 5, scale: 2 }).notNull(),
+  performanceFeePercent: numeric('performance_fee_percent', { precision: 5, scale: 2 }).notNull(),
+  lockupDays: integer('lockup_days').notNull(),
+  accreditationRequired: boolean('accreditation_required').notNull().default(false),
+  accreditationTypes: jsonb('accreditation_types').default([]),
+  currency: varchar('currency', { length: 8 }).notNull().default('AED'),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  assetIdx: index('idx_investor_plans_asset').on(table.assetId),
+  tierIdx: index('idx_investor_plans_tier').on(table.tier),
+}));
+
+// Investor Tier Assignments — which tier an investor is verified for
+export const investorTierAssignments = pgTable('investor_tier_assignments', {
+  id: text('id').primaryKey(),
+  investorId: text('investor_id').notNull(),
+  tier: varchar('tier', { length: 32 }).notNull(),
+  accreditationStatus: varchar('accreditation_status', { length: 32 }).notNull().default('none'),
+  totalInvested: numeric('total_invested', { precision: 18, scale: 2 }).notNull().default('0'),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  accreditationDocs: jsonb('accreditation_docs').default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  investorIdx: uniqueIndex('idx_investor_tier_assignments_investor').on(table.investorId),
+}));
+
+// Exit Window Schedules — recurring redemption window configuration
+export const exitWindowSchedules = pgTable('exit_window_schedules', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull(),
+  frequency: varchar('frequency', { length: 32 }).notNull(), // monthly, quarterly, semi-annually, annually
+  windowDurationDays: integer('window_duration_days').notNull(),
+  maxRedemptionPercent: numeric('max_redemption_percent', { precision: 5, scale: 2 }).notNull(),
+  noticePeriodDays: integer('notice_period_days').notNull(),
+  nextWindowOpens: text('next_window_opens').notNull(),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  assetIdx: uniqueIndex('idx_exit_window_schedules_asset').on(table.assetId),
+}));
+
+// Exit Windows — individual window instances
+export const exitWindows = pgTable('exit_windows', {
+  id: text('id').primaryKey(),
+  scheduleId: text('schedule_id').notNull(),
+  assetId: text('asset_id').notNull(),
+  opensAt: text('opens_at').notNull(),
+  closesAt: text('closes_at').notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('scheduled'), // scheduled, open, closed
+  maxRedemptionPercent: numeric('max_redemption_percent', { precision: 5, scale: 2 }).notNull(),
+  totalRedeemed: numeric('total_redeemed', { precision: 18, scale: 2 }).notNull().default('0'),
+  totalRequested: numeric('total_requested', { precision: 18, scale: 2 }).notNull().default('0'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  assetIdx: index('idx_exit_windows_asset').on(table.assetId),
+  scheduleIdx: index('idx_exit_windows_schedule').on(table.scheduleId),
+  statusIdx: index('idx_exit_windows_status').on(table.status),
+}));
+
+// Exit Redemptions — individual redemption requests within a window
+export const exitRedemptions = pgTable('exit_redemptions', {
+  id: text('id').primaryKey(),
+  windowId: text('window_id').notNull(),
+  investorId: text('investor_id').notNull(),
+  amount: numeric('amount', { precision: 18, scale: 2 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('pending'), // pending, approved, executed, rejected
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  windowIdx: index('idx_exit_redemptions_window').on(table.windowId),
+  investorIdx: index('idx_exit_redemptions_investor').on(table.investorId),
+}));
+
+// Secondary Listings — P2P token trading on secondary market
+export const secondaryListings = pgTable('secondary_listings', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull(),
+  sellerId: text('seller_id').notNull(),
+  sellerWallet: varchar('seller_wallet', { length: 128 }).notNull(),
+  tokenAmount: numeric('token_amount', { precision: 18, scale: 2 }).notNull(),
+  pricePerToken: numeric('price_per_token', { precision: 18, scale: 2 }).notNull(),
+  currency: varchar('currency', { length: 8 }).notNull().default('AED'),
+  status: varchar('status', { length: 16 }).notNull().default('active'), // active, sold, cancelled, expired
+  buyerId: text('buyer_id'),
+  listedAt: timestamp('listed_at', { withTimezone: true }).defaultNow(),
+  soldAt: timestamp('sold_at', { withTimezone: true }),
+  expiresAt: text('expires_at'),
+}, (table) => ({
+  assetIdx: index('idx_secondary_listings_asset').on(table.assetId),
+  sellerIdx: index('idx_secondary_listings_seller').on(table.sellerId),
+  statusIdx: index('idx_secondary_listings_status').on(table.status),
+}));
+
+// Real Estate Phase 2 Types
+export type InvestorPlanRow = typeof investorPlans.$inferSelect;
+export type NewInvestorPlanRow = typeof investorPlans.$inferInsert;
+export type InvestorTierAssignment = typeof investorTierAssignments.$inferSelect;
+export type NewInvestorTierAssignment = typeof investorTierAssignments.$inferInsert;
+export type ExitWindowScheduleRow = typeof exitWindowSchedules.$inferSelect;
+export type NewExitWindowScheduleRow = typeof exitWindowSchedules.$inferInsert;
+export type ExitWindowRow = typeof exitWindows.$inferSelect;
+export type NewExitWindowRow = typeof exitWindows.$inferInsert;
+export type ExitRedemptionRow = typeof exitRedemptions.$inferSelect;
+export type NewExitRedemptionRow = typeof exitRedemptions.$inferInsert;
+export type SecondaryListingRow = typeof secondaryListings.$inferSelect;
+export type NewSecondaryListingRow = typeof secondaryListings.$inferInsert;

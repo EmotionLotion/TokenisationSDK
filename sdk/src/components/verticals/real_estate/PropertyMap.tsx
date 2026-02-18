@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { defaultTheme, type TokenisationTheme } from '../../theme.js';
 
 export interface PropertyMapProps {
@@ -7,6 +7,7 @@ export interface PropertyMapProps {
     longitude?: number;
     theme?: TokenisationTheme;
     height?: string;
+    zoom?: number;
 }
 
 export function PropertyMap({
@@ -14,48 +15,118 @@ export function PropertyMap({
     latitude = 25.0763, // Default to Dubai Marina
     longitude = 55.1435,
     theme = defaultTheme,
-    height = '300px'
+    height = '300px',
+    zoom: initialZoom = 15
 }: PropertyMapProps) {
-    // Visual placeholder for a map interaction
-    return (
-        <div style={{
-            width: '100%',
-            height,
-            backgroundColor: '#E5E7EB',
-            borderRadius: theme.borderRadius.lg,
-            border: `1px solid ${theme.colors.border}`,
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundImage: 'repeating-linear-gradient(45deg, #F3F4F6 25%, transparent 25%, transparent 75%, #F3F4F6 75%, #F3F4F6), repeating-linear-gradient(45deg, #F3F4F6 25%, #E5E7EB 25%, #E5E7EB 75%, #F3F4F6 75%, #F3F4F6)',
-            backgroundPosition: '0 0, 10px 10px',
-            backgroundSize: '20px 20px'
-        }}>
+    const mapRef = useRef<HTMLDivElement>(null);
+    const [currentZoom, setCurrentZoom] = useState(initialZoom);
+    const [leafletLoaded, setLeafletLoaded] = useState(false);
+    const mapInstanceRef = useRef<any>(null);
+
+    // Load Leaflet dynamically from CDN
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // Check if Leaflet is already loaded
+        if ((window as any).L) {
+            setLeafletLoaded(true);
+            return;
+        }
+
+        // Load CSS
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+
+        // Load JS
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => setLeafletLoaded(true);
+        document.head.appendChild(script);
+
+        return () => {
+            // Cleanup is optional since Leaflet may be used by other components
+        };
+    }, []);
+
+    // Initialize map when Leaflet is loaded
+    useEffect(() => {
+        if (!leafletLoaded || !mapRef.current) return;
+
+        const L = (window as any).L;
+        if (!L) return;
+
+        // Destroy previous map instance if it exists
+        if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+        }
+
+        const map = L.map(mapRef.current).setView([latitude, longitude], currentZoom);
+        mapInstanceRef.current = map;
+
+        // OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+        }).addTo(map);
+
+        // Add marker
+        const marker = L.marker([latitude, longitude]).addTo(map);
+        marker.bindPopup(`<b>${address}</b>`).openPopup();
+
+        // Sync zoom state
+        map.on('zoomend', () => {
+            setCurrentZoom(map.getZoom());
+        });
+
+        return () => {
+            map.remove();
+            mapInstanceRef.current = null;
+        };
+    }, [leafletLoaded, latitude, longitude, address]);
+
+    // Fallback when Leaflet hasn't loaded yet
+    if (!leafletLoaded) {
+        return (
             <div style={{
-                position: 'absolute',
-                textAlign: 'center',
-                padding: theme.spacing.md,
-                backgroundColor: 'rgba(255,255,255,0.9)',
-                borderRadius: theme.borderRadius.md,
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                maxWidth: '80%'
+                width: '100%',
+                height,
+                backgroundColor: '#E5E7EB',
+                borderRadius: theme.borderRadius.lg,
+                border: `1px solid ${theme.colors.border}`,
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
             }}>
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📍</div>
-                <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>Map View</div>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {address}
-                    <br />
-                    Lat: {latitude}, Lng: {longitude}
+                <div style={{
+                    textAlign: 'center',
+                    padding: theme.spacing.md,
+                    backgroundColor: 'rgba(255,255,255,0.9)',
+                    borderRadius: theme.borderRadius.md,
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                }}>
+                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>Loading map...</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                        {address}
+                    </div>
                 </div>
             </div>
+        );
+    }
 
-            {/* Mock Map Controls */}
-            <div style={{ position: 'absolute', right: 10, bottom: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button style={{ width: 30, height: 30, cursor: 'pointer', border: '1px solid #ccc', background: 'white' }}>+</button>
-                <button style={{ width: 30, height: 30, cursor: 'pointer', border: '1px solid #ccc', background: 'white' }}>-</button>
-            </div>
-        </div>
+    return (
+        <div
+            ref={mapRef}
+            style={{
+                width: '100%',
+                height,
+                borderRadius: theme.borderRadius.lg,
+                border: `1px solid ${theme.colors.border}`,
+                overflow: 'hidden',
+            }}
+        />
     );
 }

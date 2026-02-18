@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 import { defaultTheme, type TokenisationTheme } from '../../theme.js';
 
+export interface Section {
+    name: string;
+    rows: number;
+    cols: number;
+    price?: string;
+    color?: string;
+}
+
 export interface SeatSelectionMapProps {
     rows?: number;
     cols?: number;
-    blockedSeats?: string[]; // e.g. "A1", "B2"
+    sections?: Section[];
+    blockedSeats?: string[]; // e.g. "A1", "B2", or "VIP-A1"
     onSelect?: (seat: string) => void;
     theme?: TokenisationTheme;
 }
@@ -12,7 +21,8 @@ export interface SeatSelectionMapProps {
 export function SeatSelectionMap({
     rows = 5,
     cols = 8,
-    blockedSeats = ['A3', 'A4', 'C2', 'C3', 'C4'],
+    sections,
+    blockedSeats = [],
     onSelect,
     theme = defaultTheme
 }: SeatSelectionMapProps) {
@@ -25,6 +35,51 @@ export function SeatSelectionMap({
         setSelected(seatId);
         onSelect?.(seatId);
     };
+
+    const renderSection = (sectionRows: number, sectionCols: number, prefix: string, seatColor: string) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+            {Array.from({ length: sectionRows }).map((_, r) => {
+                const rowLabel = rowLabels[r];
+                return (
+                    <div key={r} style={{ display: 'flex', gap: theme.spacing.sm, justifyContent: 'center' }}>
+                        {Array.from({ length: sectionCols }).map((_, c) => {
+                            const seatId = prefix ? `${prefix}-${rowLabel}${c + 1}` : `${rowLabel}${c + 1}`;
+                            const isBlocked = blockedSeats.includes(seatId);
+                            const isSelected = selected === seatId;
+
+                            return (
+                                <button
+                                    key={seatId}
+                                    onClick={() => handleSeatClick(seatId)}
+                                    disabled={isBlocked}
+                                    title={isBlocked ? `Seat ${seatId} (Unavailable)` : `Seat ${seatId}`}
+                                    style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        backgroundColor: isBlocked
+                                            ? '#374151'
+                                            : isSelected
+                                                ? theme.colors.primary
+                                                : seatColor,
+                                        cursor: isBlocked ? 'not-allowed' : 'pointer',
+                                        color: isSelected ? '#000' : '#FFF',
+                                        fontSize: '10px',
+                                        fontWeight: 600,
+                                        transition: 'all 0.2s',
+                                        transform: isSelected ? 'scale(1.1)' : 'scale(1)'
+                                    }}
+                                >
+                                    {c + 1}
+                                </button>
+                            );
+                        })}
+                    </div>
+                );
+            })}
+        </div>
+    );
 
     return (
         <div style={{
@@ -52,48 +107,20 @@ export function SeatSelectionMap({
                 STAGE
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-                {Array.from({ length: rows }).map((_, r) => {
-                    const rowLabel = rowLabels[r];
-                    return (
-                        <div key={r} style={{ display: 'flex', gap: theme.spacing.sm, justifyContent: 'center' }}>
-                            {Array.from({ length: cols }).map((_, c) => {
-                                const seatId = `${rowLabel}${c + 1}`;
-                                const isBlocked = blockedSeats.includes(seatId);
-                                const isSelected = selected === seatId;
-
-                                return (
-                                    <button
-                                        key={seatId}
-                                        onClick={() => handleSeatClick(seatId)}
-                                        disabled={isBlocked}
-                                        title={isBlocked ? `Seat ${seatId} (Unavailable)` : `Seat ${seatId}`}
-                                        style={{
-                                            width: '32px',
-                                            height: '32px',
-                                            borderRadius: '8px',
-                                            border: 'none',
-                                            backgroundColor: isBlocked
-                                                ? '#374151'
-                                                : isSelected
-                                                    ? theme.colors.primary
-                                                    : '#4B5563',
-                                            cursor: isBlocked ? 'not-allowed' : 'pointer',
-                                            color: isSelected ? '#000' : '#FFF',
-                                            fontSize: '10px',
-                                            fontWeight: 600,
-                                            transition: 'all 0.2s',
-                                            transform: isSelected ? 'scale(1.1)' : 'scale(1)'
-                                        }}
-                                    >
-                                        {c + 1}
-                                    </button>
-                                );
-                            })}
+            {sections && sections.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
+                    {sections.map((section) => (
+                        <div key={section.name}>
+                            <div style={{ textAlign: 'center', marginBottom: theme.spacing.sm, fontSize: '11px', fontWeight: 600, color: section.color || theme.colors.textMuted }}>
+                                {section.name}{section.price ? ` - ${section.price}` : ''}
+                            </div>
+                            {renderSection(section.rows, section.cols, section.name, section.color || '#4B5563')}
                         </div>
-                    );
-                })}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                renderSection(rows, cols, '', '#4B5563')
+            )}
 
             {/* Legend */}
             <div style={{ display: 'flex', gap: theme.spacing.md, justifyContent: 'center', marginTop: theme.spacing.lg }}>

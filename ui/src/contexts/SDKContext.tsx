@@ -14,8 +14,12 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { sdkStore } from '../store';
-import { LifecycleState, PartyRole, type Asset, type Party } from '@tokenisation/sdk';
+import { sdkStore, type AhoyState, type AhoyTransaction } from '../store';
+import { LifecycleState, PartyRole, type Asset as SDKAsset, type Party } from '@tokenisation/sdk';
+import { config } from '../config';
+
+/** UI-friendly Asset type with guaranteed runtime fields */
+type Asset = SDKAsset & { id: string; name: string; state: any; metadata?: any; [key: string]: any };
 
 // ============================================================================
 // TYPES
@@ -212,25 +216,63 @@ export function SDKProvider({ children }: SDKProviderProps) {
     };
   }, [storeState.assets]);
 
+  const [dashboardMetrics, setDashboardMetrics] = useState<Record<string, number>>({});
+  const [recentEventsState, setRecentEventsState] = useState<any[]>([]);
+
+  // Fetch real metrics from the API when backend is enabled
+  useEffect(() => {
+    if (!config.useApiBackend) return;
+
+    fetch(`${config.apiUrl}/metrics`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setDashboardMetrics(json.data);
+      })
+      .catch(() => { /* metrics are best-effort */ });
+  }, []);
+
+  // Fetch recent events from the API when backend is enabled
+  useEffect(() => {
+    if (!config.useApiBackend) return;
+
+    fetch(`${config.apiUrl}/events?limit=50`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setRecentEventsState(json.data);
+        else if (Array.isArray(json)) setRecentEventsState(json);
+      })
+      .catch(() => { /* events are best-effort */ });
+  }, []);
+
   const getServiceMetrics = useCallback((serviceId: string): ServiceMetrics => {
-    // Service-specific metrics (simulated for now, will be replaced with real SDK calls)
-    const metricsMap: Record<string, ServiceMetrics> = {
-      comet: { activeUsers: 2847, totalTransactions: 15432, dailyVolume: '1.2M', growthPercent: 12 },
-      flyplus: { activeUsers: 45230, totalTransactions: 12847, dailyVolume: '890K', growthPercent: 8 },
-      h2o: { activeUsers: 8432, totalTransactions: 5621, dailyVolume: '456K', growthPercent: 23 },
-      ams: { activeUsers: 234, totalTransactions: 89200, dailyVolume: '2.1M', growthPercent: 15 },
-      trouve: { activeUsers: 412, totalTransactions: 3200, dailyVolume: '340K', growthPercent: 18 },
-      connect: { activeUsers: 142, totalTransactions: 8900, dailyVolume: '452K', growthPercent: 12 },
-      equity: { activeUsers: 28, totalTransactions: 156, dailyVolume: '12M', growthPercent: 5 },
+    // Map service IDs to dashboard metric keys
+    const serviceToMetric: Record<string, string> = {
+      comet: 'transfers',
+      flyplus: 'airlineTickets',
+      h2o: 'hotelReservations',
+      ams: 'tokens',
+      trouve: 'carRentals',
+      connect: 'concertTickets',
+      equity: 'assets',
     };
 
-    return metricsMap[serviceId.toLowerCase()] || {
-      activeUsers: 0,
-      totalTransactions: 0,
-      dailyVolume: '0',
-      growthPercent: 0,
+    const metricKey = serviceToMetric[serviceId.toLowerCase()];
+    const count = metricKey ? (dashboardMetrics[metricKey] ?? 0) : 0;
+
+    // Compute daily volume and growth from metrics when available
+    const dailyVolumeKey = `${metricKey}Daily`;
+    const previousKey = `${metricKey}Previous`;
+    const dailyVolume = dashboardMetrics[dailyVolumeKey] ?? 0;
+    const previous = dashboardMetrics[previousKey] ?? 0;
+    const growthPercent = previous > 0 ? ((count - previous) / previous) * 100 : 0;
+
+    return {
+      activeUsers: count,
+      totalTransactions: count,
+      dailyVolume: dailyVolume > 0 ? dailyVolume.toLocaleString() : '0',
+      growthPercent: Math.round(growthPercent * 10) / 10,
     };
-  }, []);
+  }, [dashboardMetrics]);
 
   // Ahoy ecosystem
   const simulateAhoyAction = useCallback(
@@ -264,7 +306,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
     createParty,
     getAssetMetrics,
     getServiceMetrics,
-    recentEvents: [], // Will be populated from event store
+    recentEvents: recentEventsState,
     sdkLogs: storeState.sdkLogs,
     ahoyState: storeState.ahoyState,
     simulateAhoyAction,
@@ -355,7 +397,7 @@ export function useSDKLogs() {
 /**
  * Hook to get Ahoy ecosystem state
  */
-export function useAhoyState() {
+export function useAhoyState(): { ahoyState: AhoyState; simulateAhoyAction: typeof sdkStore.simulateAhoyAction } {
   const { ahoyState, simulateAhoyAction } = useSDK();
   return { ahoyState, simulateAhoyAction };
 }
@@ -363,7 +405,7 @@ export function useAhoyState() {
 /**
  * Hook to get recent events/transaction feed
  */
-export function useTransactionFeed() {
+export function useTransactionFeed(): { events: any[]; transactions: AhoyTransaction[] } {
   const { recentEvents, ahoyState } = useSDK();
   // Combine SDK events with Ahoy transactions for a unified feed
   return {

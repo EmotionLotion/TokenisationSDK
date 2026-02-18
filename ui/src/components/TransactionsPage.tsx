@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { sdkStore } from '../store';
 import { Event } from '../types';
+import { config } from '../config';
 
 type TransactionType = 'transfer' | 'mint' | 'burn' | 'freeze' | 'distribute' | 'redeem';
 type TransactionStatus = 'completed' | 'pending' | 'failed';
@@ -109,7 +110,21 @@ const SAMPLE_TRANSACTIONS: Transaction[] = [
 
 export function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>(SAMPLE_TRANSACTIONS);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (!config.useApiBackend) return;
+    setLoading(true);
+    fetch(`${config.apiUrl}/transfers`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setTransactions(json.data);
+        else if (Array.isArray(json)) setTransactions(json);
+      })
+      .catch(() => { /* fallback to sample data */ })
+      .finally(() => setLoading(false));
+  }, []);
   const [filterType, setFilterType] = useState<TransactionType | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<TransactionStatus | 'all'>('all');
   const [dateRange, setDateRange] = useState<'24h' | '7d' | '30d' | 'all'>('all');

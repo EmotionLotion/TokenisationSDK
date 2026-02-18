@@ -476,16 +476,74 @@ export function getErrorMessage(error: unknown): string {
  */
 export function formatErrorForUser(error: SDKError): string {
   const messages: Record<string, string> = {
+    // General
+    [ErrorCode.UNKNOWN]: 'An unexpected error occurred. Please try again.',
+    [ErrorCode.INTERNAL]: 'An internal error occurred. Please contact support if this persists.',
+    [ErrorCode.INVALID_ARGUMENT]: 'Invalid input provided. Please check your data and try again.',
+    [ErrorCode.NOT_FOUND]: 'The requested resource was not found.',
+    [ErrorCode.ALREADY_EXISTS]: 'This resource already exists.',
+    [ErrorCode.TIMEOUT]: 'The operation timed out. Please try again.',
+    [ErrorCode.NOT_INITIALIZED]: 'The SDK has not been initialized. Please call initialize() first.',
+
+    // Authentication & Authorization
     [ErrorCode.UNAUTHENTICATED]: 'Please sign in to continue.',
-    [ErrorCode.SESSION_EXPIRED]: 'Your session has expired. Please sign in again.',
     [ErrorCode.UNAUTHORIZED]: 'You do not have permission to perform this action.',
+    [ErrorCode.SESSION_EXPIRED]: 'Your session has expired. Please sign in again.',
+    [ErrorCode.INVALID_TOKEN]: 'Your authentication token is invalid. Please sign in again.',
+    [ErrorCode.SIGNATURE_INVALID]: 'The provided signature is invalid. Please sign the message again.',
+    [ErrorCode.AUTH_FAILED]: 'Authentication failed. Please check your credentials and try again.',
+
+    // Validation
+    [ErrorCode.VALIDATION_FAILED]: 'Validation failed. Please check your input and try again.',
+    [ErrorCode.SCHEMA_VALIDATION_FAILED]: 'The data does not match the expected format.',
+    [ErrorCode.INVALID_ADDRESS]: 'The provided wallet address is invalid.',
+    [ErrorCode.INVALID_AMOUNT]: 'The provided amount is invalid.',
+    [ErrorCode.INVALID_STATE]: 'This operation is not allowed in the current state.',
+
+    // Compliance
+    [ErrorCode.COMPLIANCE_FAILED]: 'This operation does not meet compliance requirements.',
     [ErrorCode.KYC_REQUIRED]: 'Identity verification is required to proceed.',
+    [ErrorCode.KYC_EXPIRED]: 'Your identity verification has expired. Please re-verify your identity.',
     [ErrorCode.JURISDICTION_BLOCKED]: 'This action is not available in your region.',
     [ErrorCode.TRANSFER_RESTRICTED]: 'This transfer cannot be completed due to restrictions.',
+    [ErrorCode.INVESTOR_LIMIT_EXCEEDED]: 'The maximum number of investors for this asset has been reached.',
+    [ErrorCode.ACCREDITATION_REQUIRED]: 'Accredited investor status is required for this operation.',
+
+    // Contract & Blockchain
+    [ErrorCode.CONTRACT_ERROR]: 'A smart contract error occurred. Please try again.',
+    [ErrorCode.CONTRACT_NOT_DEPLOYED]: 'The smart contract has not been deployed to this network.',
+    [ErrorCode.CONTRACT_CALL_FAILED]: 'The smart contract call failed. Please try again.',
+    [ErrorCode.TRANSACTION_FAILED]: 'The transaction failed. Please check your wallet and try again.',
+    [ErrorCode.TRANSACTION_REVERTED]: 'The transaction was reverted by the network.',
     [ErrorCode.INSUFFICIENT_BALANCE]: 'Insufficient balance for this operation.',
+    [ErrorCode.INSUFFICIENT_ALLOWANCE]: 'Insufficient token allowance. Please approve the required amount first.',
+    [ErrorCode.GAS_ESTIMATION_FAILED]: 'Unable to estimate gas for this transaction. The transaction may fail.',
+    [ErrorCode.NONCE_TOO_LOW]: 'Transaction nonce conflict. Please try again.',
+
+    // Network
     [ErrorCode.NETWORK_ERROR]: 'Unable to connect. Please check your internet connection.',
-    [ErrorCode.SERVICE_UNAVAILABLE]: 'Service is temporarily unavailable. Please try again later.',
+    [ErrorCode.RPC_ERROR]: 'The blockchain network is not responding. Please try again later.',
     [ErrorCode.RATE_LIMITED]: 'Too many requests. Please wait a moment and try again.',
+    [ErrorCode.SERVICE_UNAVAILABLE]: 'Service is temporarily unavailable. Please try again later.',
+    [ErrorCode.CIRCUIT_OPEN]: 'The service is temporarily disabled due to repeated failures. Please try again later.',
+
+    // Asset & Token
+    [ErrorCode.ASSET_NOT_FOUND]: 'The requested asset was not found.',
+    [ErrorCode.TOKEN_NOT_FOUND]: 'The requested token was not found.',
+    [ErrorCode.INVALID_TOKEN_STANDARD]: 'The token standard is not supported.',
+    [ErrorCode.MINTING_PAUSED]: 'Token minting is currently paused.',
+    [ErrorCode.TRANSFER_PAUSED]: 'Token transfers are currently paused.',
+    [ErrorCode.ACCOUNT_FROZEN]: 'This account has been frozen. Please contact support.',
+
+    // Oracle
+    [ErrorCode.ORACLE_ERROR]: 'Unable to retrieve price data. Please try again.',
+    [ErrorCode.ORACLE_STALE_DATA]: 'Price data is outdated. Please wait for fresh data.',
+    [ErrorCode.ORACLE_UNAVAILABLE]: 'The price oracle is currently unavailable.',
+
+    // Storage
+    [ErrorCode.STORAGE_ERROR]: 'A storage error occurred. Please try again.',
+    [ErrorCode.UPLOAD_FAILED]: 'File upload failed. Please try again.',
+    [ErrorCode.DOWNLOAD_FAILED]: 'File download failed. Please try again.',
   };
 
   return messages[error.code] || error.message;

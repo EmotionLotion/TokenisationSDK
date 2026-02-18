@@ -125,20 +125,6 @@ const translations: TranslationMap = {
     totalSupply: 'Offre totale',
     export: 'Exporter la table de capitalisation',
   },
-
-  boarding: {
-    title: "Carte d'embarquement",
-    flight: 'Vol',
-    gate: 'Porte',
-    seat: 'Siège',
-    class: 'Classe',
-    passenger: 'Passager',
-    download: "Télécharger la carte d'embarquement",
-    departure: 'Départ',
-    arrival: 'Arrivée',
-    boardingTime: "Heure d'embarquement",
-    terminal: 'Terminal',
-  },
 };
 
 export default {

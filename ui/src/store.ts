@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   TokenisationSDK,
   LifecycleState,
-  type Asset,
+  type Asset as SDKAsset,
   type Party,
   type BaseEvent,
   PartyType,
@@ -11,11 +11,14 @@ import {
   BrowserEventStore,
   RightType,
 } from '@tokenisation/sdk';
+
+/** UI-friendly Asset type that includes all runtime fields */
+type Asset = SDKAsset & { id: string; name: string; state: any; [key: string]: any };
 import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@tokenisation/sdk/plugins';
 import { config } from './config';
 
 // Ahoy ecosystem types
-interface AhoyTransaction {
+export interface AhoyTransaction {
   id: string;
   userId: string;
   userName: string;
@@ -25,7 +28,7 @@ interface AhoyTransaction {
   timestamp: string;
 }
 
-interface AhoyState {
+export interface AhoyState {
   balance: string;
   tier: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND';
   transactions: AhoyTransaction[];
@@ -33,6 +36,63 @@ interface AhoyState {
   streak: number;
   lastActivityDate: string | null;
 }
+
+// SDK Settings types & defaults
+export interface SDKSettings {
+  environment: 'testnet' | 'mainnet' | 'local';
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
+  jurisdiction: string;
+  kycProvider: string;
+  complianceMode: 'strict' | 'permissive' | 'audit-only';
+  amlEnabled: boolean;
+  custodyAdapter: string;
+  vaultId: string;
+  enabledChains: Record<number, boolean>;
+  webhookUrl: string;
+  enabledWebhookEvents: Record<string, boolean>;
+  emailAlerts: boolean;
+}
+
+const DEFAULT_CHAINS: Record<number, boolean> = {
+  80002: true,       // Polygon Amoy
+  11155111: true,    // Ethereum Sepolia
+  43113: false,      // Avalanche Fuji
+  421614: false,     // Arbitrum Sepolia
+  84532: false,      // Base Sepolia
+  137: false,        // Polygon Mainnet
+  1: false,          // Ethereum Mainnet
+};
+
+const DEFAULT_WEBHOOK_EVENTS: Record<string, boolean> = {
+  'asset.created': true,
+  'asset.transferred': true,
+  'asset.burned': false,
+  'identity.verified': false,
+  'identity.revoked': false,
+  'compliance.check.passed': true,
+  'compliance.check.failed': true,
+  'cashflow.distributed': false,
+  'escrow.released': false,
+  'governance.vote.cast': false,
+  'governance.proposal.executed': false,
+};
+
+const DEFAULT_SDK_SETTINGS: SDKSettings = {
+  environment: 'testnet',
+  logLevel: 'info',
+  jurisdiction: 'UAE',
+  kycProvider: 'SumSub',
+  complianceMode: 'strict',
+  amlEnabled: true,
+  custodyAdapter: 'Fireblocks',
+  vaultId: 'vault-001',
+  enabledChains: DEFAULT_CHAINS,
+  webhookUrl: 'https://hooks.example.com/sdk',
+  enabledWebhookEvents: DEFAULT_WEBHOOK_EVENTS,
+  emailAlerts: true,
+};
+
+const SDK_SETTINGS_KEY = 'sdk_settings';
 
 // localStorage keys for AHOY persistence
 const AHOY_STATE_KEY = 'ahoy_user_state';
@@ -289,6 +349,9 @@ export interface StateSnapshot {
   state: Record<string, any>;
 }
 
+// Flight status type for Module 5
+export type FlightStatus = 'SCHEDULED' | 'BOARDING' | 'DELAYED' | 'GATE_CHANGED' | 'CANCELLED' | 'IN_FLIGHT' | 'LANDED';
+
 class SDKStore {
   public sdk: TokenisationSDK;
   private listeners: Set<() => void> = new Set();
@@ -299,6 +362,9 @@ class SDKStore {
   private maxSnapshots = 200;
   private currentSnapshotIndex = -1;
   private isTimeTraveling = false;
+
+  // Whitelist management (Module 1)
+  private whitelistedAddresses: Set<string> = new Set();
 
   // SDK Logging for Demo (Legacy support for UI components)
   private sdkLogs: { id: string; method: string; params: any; timestamp: string }[] = [];
@@ -319,6 +385,110 @@ class SDKStore {
     return [...this.sdkLogs];
   }
 
+  // =========================================================================
+  // Whitelist Management (Module 1)
+  // =========================================================================
+
+  whitelistWallet(address: string): void {
+    this.whitelistedAddresses.add(address);
+    this.notifyWithSnapshot('WHITELIST_WALLET', { address });
+    console.log('[SDK] Whitelisted wallet:', address);
+  }
+
+  removeFromWhitelist(address: string): void {
+    this.whitelistedAddresses.delete(address);
+    this.notifyWithSnapshot('REMOVE_FROM_WHITELIST', { address });
+    console.log('[SDK] Removed from whitelist:', address);
+  }
+
+  isWhitelisted(address: string): boolean {
+    return this.whitelistedAddresses.has(address);
+  }
+
+  getWhitelistedAddresses(): string[] {
+    return Array.from(this.whitelistedAddresses);
+  }
+
+  // =========================================================================
+  // Oracle Update (Module 1)
+  // =========================================================================
+
+  triggerOracleUpdate(assetId: string, data: Record<string, unknown>): void {
+    const meta = this.assetMeta.get(assetId) || {};
+    const existing = (meta.oracleData as Record<string, unknown>) || {};
+    meta.oracleData = { ...existing, ...data, _lastUpdated: new Date().toISOString() };
+    this.assetMeta.set(assetId, meta);
+    this.logSdkCall('oracle.update', { assetId, data });
+    this.notifyWithSnapshot('ORACLE_UPDATE', { assetId, data });
+    console.log('[SDK] Oracle update for asset', assetId, ':', data);
+  }
+
+  // =========================================================================
+  // Flight Status Update (Module 5)
+  // =========================================================================
+
+  updateFlightStatus(
+    assetId: string,
+    status: FlightStatus,
+    details?: { delayMinutes?: number; newGate?: string; reason?: string },
+  ): void {
+    this.setAssetMetadata(assetId, 'flightStatus', status);
+    if (details) {
+      this.setAssetMetadata(assetId, 'flightDetails', details);
+    }
+    this.triggerOracleUpdate(assetId, {
+      flightStatus: status,
+      ...(details || {}),
+    });
+    this.notifyWithSnapshot('FLIGHT_STATUS_UPDATE', { assetId, status, details });
+    console.log('[SDK] Flight status updated:', assetId, '→', status, details || '');
+  }
+
+  // =========================================================================
+  // SDK Settings — persisted to localStorage
+  // =========================================================================
+
+  private sdkSettings: SDKSettings = { ...DEFAULT_SDK_SETTINGS };
+
+  private loadSettings(): void {
+    try {
+      const json = localStorage.getItem(SDK_SETTINGS_KEY);
+      if (json) {
+        const saved = JSON.parse(json) as Partial<SDKSettings>;
+        this.sdkSettings = { ...DEFAULT_SDK_SETTINGS, ...saved };
+        console.log('[SDK] Loaded settings from localStorage');
+      }
+    } catch (error) {
+      console.error('[SDK] Error loading settings:', error);
+    }
+  }
+
+  private saveSettings(): void {
+    try {
+      localStorage.setItem(SDK_SETTINGS_KEY, JSON.stringify(this.sdkSettings));
+    } catch (error) {
+      console.error('[SDK] Error saving settings:', error);
+    }
+  }
+
+  getSettings(): SDKSettings {
+    return { ...this.sdkSettings };
+  }
+
+  updateSettings(partial: Partial<SDKSettings>): void {
+    this.sdkSettings = { ...this.sdkSettings, ...partial };
+    this.saveSettings();
+    this.notifyWithSnapshot('SETTINGS_UPDATED', partial);
+    console.log('[SDK] Settings updated:', Object.keys(partial).join(', '));
+  }
+
+  resetSettings(): void {
+    this.sdkSettings = { ...DEFAULT_SDK_SETTINGS };
+    this.saveSettings();
+    this.notifyWithSnapshot('SETTINGS_RESET');
+    console.log('[SDK] Settings reset to defaults');
+  }
+
   // Ahoy ecosystem state - persisted to localStorage
   private ahoyState: AhoyState = {
     balance: '0',
@@ -332,6 +502,8 @@ class SDKStore {
   private currentUserName: string = 'Demo User';
 
   constructor() {
+    // Load persisted settings
+    this.loadSettings();
     // Load AHOY state from localStorage first
     this.loadAhoyState();
     // Load COMET data
@@ -354,7 +526,7 @@ class SDKStore {
       const storagePlugin = new BrowserStoragePlugin();
 
       this.sdk = new TokenisationSDK({
-        useMockPlugins: true,
+        useMockPlugins: !config.useApiBackend,
         eventStore: eventStore,
       });
       this.sdk.plugins.register('storage', storagePlugin);
@@ -497,12 +669,15 @@ class SDKStore {
         initialized: this.initialized,
         assets: this.sdk.assets.getAll(),
         parties: this.sdk.parties_.getAll(),
+        sdkSettings: this.sdkSettings,
         ahoyState: this.ahoyState,
         deliveries: this.deliveries,
         drivers: this.drivers,
         serviceCredits: this.serviceCredits,
         wallets: Object.fromEntries(this.wallets),
         offerings: Object.fromEntries(this.offerings),
+        whitelistedAddresses: Array.from(this.whitelistedAddresses),
+        assetMetadata: Object.fromEntries(this.assetMeta),
       }));
     } catch {
       return { error: 'Failed to capture state' };
@@ -1579,6 +1754,11 @@ export const sdkStore = new SDKStore();
 // ============================================================================
 // ZUSTAND STORE RE-EXPORT (backward-compatible shim)
 // ============================================================================
-// New code should prefer importing from './core/store' directly.
+/**
+ * @deprecated Use `import { useSDKStore } from './core/store'` directly.
+ * This re-export exists for backward compatibility only.
+ * The Zustand store in `./core/store` is the canonical reactive store.
+ */
 export { useSDKStore } from './core/store';
+/** @deprecated Import `SDKStoreState` from `'./core/store'` directly. */
 export type { SDKStoreState } from './core/store';

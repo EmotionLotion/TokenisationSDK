@@ -191,6 +191,224 @@ async function runDemo() {
   await sleep(2000);
 
   // ─────────────────────────────────────────────────────────
+  step(8, 'Wire COMET data through TokenisationSDK');
+  // ─────────────────────────────────────────────────────────
+
+  log('   Initializing SDK and creating driver as a Party...', colors.blue);
+
+  const {
+    TokenisationSDK,
+    PartyType,
+    PartyRole,
+    RightType,
+    LifecycleState,
+    TransferabilityMode,
+    ChainlinkFunctionsPlugin,
+    IndexingEngine,
+    IndexedEventType,
+    DecoPlugin,
+    DecoProofType,
+  } = await import('@tokenisation/sdk');
+
+  const sdk = new TokenisationSDK({ useMockPlugins: true });
+
+  const cometOrg = sdk.parties_.create({
+    name: 'COMET Fleet Services',
+    type: PartyType.ORGANIZATION,
+    roles: [PartyRole.ISSUER, PartyRole.VERIFIER],
+    jurisdiction: 'AE',
+    email: 'fleet@comet.ahoy.dev',
+    legalEntityId: 'LEI-AE-COMET-001',
+    metadata: { service: 'DELIVERY_LOGISTICS' },
+  });
+  sdk.parties_.setKyc(cometOrg.id, true);
+
+  const driverParty = sdk.parties_.create({
+    name: initialScore.driverName || 'Driver DRV-003',
+    type: PartyType.INDIVIDUAL,
+    roles: [PartyRole.INVESTOR],
+    jurisdiction: 'AE',
+    email: 'driver003@comet.ahoy.dev',
+    metadata: {
+      cometDriverId: driverId,
+      tier: 'SILVER',
+      totalDeliveries: String(initialScore.eventCounts?.DELIVERY_COMPLETE || 0),
+    },
+  });
+  sdk.parties_.setKyc(driverParty.id, true);
+
+  log(`   ✓ SDK initialized — COMET org: ${cometOrg.name}`, colors.green);
+  log(`   ✓ Driver party created: ${driverParty.name} (${driverParty.id.substring(0, 8)}...)`, colors.green);
+
+  await sleep(1000);
+
+  // ─────────────────────────────────────────────────────────
+  step(9, 'Simulate oracle-verified safety scoring via ChainlinkFunctionsPlugin');
+  // ─────────────────────────────────────────────────────────
+
+  const functionsPlugin = new ChainlinkFunctionsPlugin({
+    chainId: 84532,
+    rpcUrl: 'https://sepolia.base.org',
+    donId: 'fun-base-sepolia-1',
+    subscriptionId: 1234,
+    routerAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  log('   Chainlink Functions plugin instantiated (mock mode)', colors.blue);
+
+  const safetyScoreResult = await functionsPlugin.executeRequest({
+    source: `
+      const driverId = args[0];
+      const response = await Functions.makeHttpRequest({
+        url: \`${COMET_API}/simulate/safety-score/\${driverId}\`,
+      });
+      return Functions.encodeUint256(Math.round(response.data.score * 100));
+    `,
+    args: [driverId],
+    gasLimit: 300_000,
+  });
+
+  if (safetyScoreResult.success) {
+    log(`   ✓ Chainlink Functions request submitted`, colors.green);
+    log(`   ✓ Request ID: ${safetyScoreResult.data.requestId}`, colors.green);
+  } else {
+    log(`   ⚠️  Functions simulated (no DON): ${safetyScoreResult.error}`, colors.yellow);
+  }
+
+  log(`   → Oracle score from COMET data: ${newScore.score}/100`, colors.blue);
+
+  await sleep(1000);
+
+  // ─────────────────────────────────────────────────────────
+  step(10, 'Mint ReputationSBT (BEHAVIOR token) based on oracle score');
+  // ─────────────────────────────────────────────────────────
+
+  const reputationSBT = await sdk.assets.create({
+    name: `Driver Reputation SBT — ${driverParty.name}`,
+    description: 'Soulbound reputation token representing verified driver safety score',
+    rightType: RightType.BEHAVIOR,
+    issuerId: cometOrg.id,
+    jurisdiction: {
+      countryCode: 'AE',
+      regulatoryFramework: 'UAE_LOYALTY',
+      accreditedOnly: false,
+      blockedJurisdictions: [],
+    },
+    validityPeriod: { isPerpetual: true, startTime: new Date().toISOString() },
+    transferabilityRules: {
+      mode: TransferabilityMode.NON_TRANSFERABLE,
+      lockupPeriodSeconds: 0,
+      requireKyc: true,
+    },
+    metadata: {
+      assetType: 'BEHAVIOR',
+      scoreType: 'SAFETY_REPUTATION',
+      oracleScore: newScore.score,
+      cometDriverId: driverId,
+      lastUpdated: new Date().toISOString(),
+    },
+  });
+
+  await sdk.assets.transition(reputationSBT.id, LifecycleState.PENDING_VERIFICATION, cometOrg.id);
+  await sdk.assets.verify(reputationSBT.id, cometOrg.id);
+  await sdk.assets.activate(reputationSBT.id, cometOrg.id);
+
+  const mintResult = await sdk.tokens.mint(reputationSBT.id, driverParty.id, '1');
+  if (mintResult.success) {
+    log(`   ✓ ReputationSBT minted: ${reputationSBT.name}`, colors.green);
+    log(`   ✓ Score embedded: ${newScore.score}/100`, colors.green);
+    log(`   ✓ Non-transferable (soulbound) — cannot be sold or traded`, colors.green);
+  }
+
+  await sleep(1000);
+
+  // ─────────────────────────────────────────────────────────
+  step(11, 'Index safety events and generate compliance report');
+  // ─────────────────────────────────────────────────────────
+
+  const indexer = new IndexingEngine();
+
+  indexer.indexEvent({
+    type: IndexedEventType.MINT,
+    assetId: reputationSBT.id,
+    actor: cometOrg.id,
+    data: { to: driverParty.id, amount: '1' },
+  });
+
+  indexer.indexEvent({
+    type: IndexedEventType.COMPLIANCE_CHECK,
+    assetId: reputationSBT.id,
+    actor: cometOrg.id,
+    data: {
+      action: 'SAFETY_SCORE_UPDATE',
+      score: newScore.score,
+      driverId,
+      source: 'CHAINLINK_FUNCTIONS',
+    },
+  });
+
+  indexer.indexEvent({
+    type: IndexedEventType.KYC_VERIFIED,
+    assetId: reputationSBT.id,
+    actor: cometOrg.id,
+    data: { investor: driverParty.id, level: 'VERIFIED' },
+  });
+
+  const report = indexer.generateComplianceReport(reputationSBT.id);
+
+  log(`   ✓ Indexed 3 events (MINT, COMPLIANCE_CHECK, KYC_VERIFIED)`, colors.green);
+  log(`   ✓ Compliance report generated:`, colors.green);
+  console.log(`      Total events: ${report.summary.totalEvents}`);
+  console.log(`      Asset: ${reputationSBT.id.substring(0, 16)}...`);
+
+  await sleep(1000);
+
+  // ─────────────────────────────────────────────────────────
+  step(12, 'DECO privacy proof — driver meets insurance threshold');
+  // ─────────────────────────────────────────────────────────
+
+  const deco = new DecoPlugin({
+    chainId: 84532,
+    rpcUrl: 'https://sepolia.base.org',
+    verifierAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  log('   Creating DECO proof: driver score >= 70 (insurance threshold)', colors.blue);
+  log('   → Proves eligibility WITHOUT revealing actual score', colors.blue);
+
+  const proofResult = await deco.createProof({
+    proofType: DecoProofType.INSURANCE_COVERAGE,
+    dataSource: {
+      url: `${COMET_API}/simulate/safety-score/${driverId}`,
+      method: 'GET',
+      jsonPath: '$.score',
+    },
+    claim: {
+      field: 'score',
+      operator: 'gte',
+      threshold: 70,
+    },
+    metadata: {
+      purpose: 'Insurance eligibility verification',
+      driverId,
+      assetId: reputationSBT.id,
+    },
+  });
+
+  if (proofResult.success) {
+    log(`   ✓ DECO proof created: ${proofResult.data.proofId}`, colors.green);
+    log(`   ✓ Proof type: ${DecoProofType[DecoProofType.INSURANCE_COVERAGE]}`, colors.green);
+    log(`   ✓ Claim verified: score >= 70 (without revealing ${newScore.score})`, colors.green);
+  } else {
+    log(`   ⚠️  DECO proof simulated (no attestation node): ${proofResult.error}`, colors.yellow);
+    log(`   ✓ In production, DECO proves score >= 70 without revealing ${newScore.score}`, colors.green);
+  }
+
+  deco.destroy();
+
+  await sleep(1000);
+
+  // ─────────────────────────────────────────────────────────
   header('Demo Complete');
   // ─────────────────────────────────────────────────────────
 
@@ -208,6 +426,18 @@ async function runDemo() {
 
   4. ${colors.bright}Results go on-chain${colors.reset} - Stored in ReputationSBT
      Immutable, verifiable driver reputation
+
+  5. ${colors.bright}SDK integration${colors.reset} - COMET data flows through full SDK pipeline
+     Parties, Assets, Tokens, Indexing, and Compliance
+
+  6. ${colors.bright}Privacy-preserving proofs${colors.reset} - DECO proves eligibility
+     Insurance threshold met without revealing actual score
+
+  ${colors.cyan}SDK Features Used:${colors.reset}
+  • TokenisationSDK (Parties, Assets, Tokens)
+  • ChainlinkFunctionsPlugin (oracle-verified scoring)
+  • IndexingEngine (event indexing & compliance reports)
+  • DecoPlugin (privacy-preserving proofs)
 
   ${colors.cyan}To connect to REAL COMET:${colors.reset}
   Replace ${COMET_API} with https://api.comet.ahoy.dev

@@ -337,10 +337,12 @@ export function DemoWizard() {
       title: 'Add Investors',
       description: 'Distribute tokens to holders',
       action: async () => {
+        const distA = 50000, distB = 30000, distC = 20000;
+        const total = distA + distB + distC;
         addLog(`✓ Token Distribution:`);
-        addLog(`  • Investor A: 50,000 STREAM (50%)`);
-        addLog(`  • Investor B: 30,000 STREAM (30%)`);
-        addLog(`  • Investor C: 20,000 STREAM (20%)`);
+        addLog(`  • Investor A: ${distA.toLocaleString()} STREAM (${((distA / total) * 100).toFixed(0)}%)`);
+        addLog(`  • Investor B: ${distB.toLocaleString()} STREAM (${((distB / total) * 100).toFixed(0)}%)`);
+        addLog(`  • Investor C: ${distC.toLocaleString()} STREAM (${((distC / total) * 100).toFixed(0)}%)`);
       },
       completed: false,
     },

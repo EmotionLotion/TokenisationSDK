@@ -8,16 +8,16 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
+# Install build dependencies and enable corepack for pnpm
+RUN apk add --no-cache python3 make g++ && corepack enable
 
-# Copy package files
-COPY package*.json ./
-COPY sdk/package*.json ./sdk/
-COPY server/package*.json ./server/
+# Copy package files and workspace config
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY sdk/package.json ./sdk/
+COPY server/package.json ./server/
 
 # Install dependencies
-RUN npm ci --workspace=sdk --workspace=server
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY sdk ./sdk
@@ -25,11 +25,11 @@ COPY server ./server
 COPY tsconfig.json ./
 
 # Build SDK and server
-RUN npm run build --workspace=sdk
-RUN npm run build --workspace=server
+RUN pnpm --filter sdk run build
+RUN pnpm --filter @tokenisation/server run build
 
 # Prune dev dependencies
-RUN npm prune --production --workspace=sdk --workspace=server
+RUN pnpm prune --prod
 
 # ============================================================================
 # Stage 2: Production
@@ -73,15 +73,15 @@ FROM node:20-alpine AS development
 
 WORKDIR /app
 
-# Install development tools
-RUN apk add --no-cache python3 make g++ git
+# Install development tools and enable corepack for pnpm
+RUN apk add --no-cache python3 make g++ git && corepack enable
 
-# Copy package files and install all dependencies
-COPY package*.json ./
-COPY sdk/package*.json ./sdk/
-COPY server/package*.json ./server/
+# Copy package files and workspace config
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY sdk/package.json ./sdk/
+COPY server/package.json ./server/
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -93,4 +93,4 @@ ENV NODE_ENV=development
 EXPOSE 3000 9229
 
 # Start with hot reload
-CMD ["npm", "run", "dev", "--workspace=server"]
+CMD ["pnpm", "--filter", "@tokenisation/server", "run", "dev"]

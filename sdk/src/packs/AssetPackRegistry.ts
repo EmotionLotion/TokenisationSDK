@@ -228,6 +228,8 @@ export interface AssetPack {
   description: string;
   /** Version */
   version: string;
+  /** Optional state machine config ID (from StateMachineRegistry) */
+  stateMachineId?: string;
 
   /** Default asset descriptor values */
   defaults: {
@@ -998,25 +1000,20 @@ export class AssetPackRegistry {
 }
 
 // Import new jurisdiction-specific packs
-import { dubaiRealEstatePack, type AssetPackConfig } from './dubai-real-estate.pack.js';
+import {
+  dubaiRealEstatePack,
+  adgmRealEstatePack,
+  genericRealEstatePack,
+  type AssetPackConfig,
+} from './real-estate.pack.js';
 import { usSecurities506cPack, usSecurities506bPack } from './us-securities.pack.js';
-
-// Import hotel reservation pack
-import { HOTEL_RESERVATION_PACK } from './HotelReservation.js';
-
-// Import car rental pack
-import { CAR_RENTAL_PACK } from './CarRental.js';
-
-// Import concert ticket pack
-import { CONCERT_TICKET_PACK } from './ConcertTicket.js';
 
 // Register jurisdiction-specific packs
 AssetPackRegistry.register(dubaiRealEstatePack as AssetPack);
+AssetPackRegistry.register(adgmRealEstatePack as AssetPack);
+AssetPackRegistry.register(genericRealEstatePack as AssetPack);
 AssetPackRegistry.register(usSecurities506cPack as AssetPack);
 AssetPackRegistry.register(usSecurities506bPack as AssetPack);
-AssetPackRegistry.register(HOTEL_RESERVATION_PACK as AssetPack);
-AssetPackRegistry.register(CAR_RENTAL_PACK as AssetPack);
-AssetPackRegistry.register(CONCERT_TICKET_PACK as AssetPack);
 
 // Export individual packs for direct access
 export {
@@ -1026,11 +1023,10 @@ export {
   CORPORATE_BOND,
   ART_COLLECTIBLE,
   dubaiRealEstatePack,
+  adgmRealEstatePack,
+  genericRealEstatePack,
   usSecurities506cPack,
   usSecurities506bPack,
-  HOTEL_RESERVATION_PACK,
-  CAR_RENTAL_PACK,
-  CONCERT_TICKET_PACK,
 };
 
 // Export types

@@ -9,6 +9,7 @@
     "start": "npm run server"
   },
   "dependencies": {
+    "@tokenisation/sdk": "workspace:*",
     "cors": "^2.8.5",
     "express": "^4.18.2"
   },

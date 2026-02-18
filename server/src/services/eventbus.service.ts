@@ -199,10 +199,9 @@ async function processEvent(event: EventMessage): Promise<void> {
   // Broadcast event to SSE connections (Gap 1: Real-time events)
   try {
     sseService.broadcast(event.orgId, {
-      topic: event.topic,
-      payload: event.payload,
+      type: event.topic,
+      data: event.payload,
       id: event.id,
-      timestamp: new Date().toISOString(),
     });
   } catch (sseError) {
     logger.warn('SSE broadcast failed (non-critical)', { error: sseError as Error });

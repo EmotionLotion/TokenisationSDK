@@ -38,28 +38,6 @@ export { AssetsModule } from './assets.js';
 export { EventsModule } from './events.js';
 export { WebhooksModule } from './webhooks.js';
 export { AuditModule } from './audit.js';
-export { TicketsClient } from './TicketsClient.js';
-export { ResaleModule } from './ResaleModule.js';
-export type {
-  ResaleListParams,
-  ResaleOffer,
-  ResalePurchaseInput,
-  ResalePurchaseResult,
-  ResaleOfferInput,
-} from './ResaleModule.js';
-export type {
-  Ticket,
-  IssueTicketInput,
-  TransferTicketInput,
-  TicketTransferRequest,
-  TicketEvent as TicketAuditEvent,
-  MetadataVersion as ApiMetadataVersion,
-  UpdateMetadataInput,
-  ReconciliationReport as ApiReconciliationReport,
-  ListTicketsParams,
-  TicketStatus as ApiTicketStatus,
-  TicketClass as ApiTicketClass,
-} from './TicketsClient.js';
 
 // Thin API Client Modules (Production-ready, server-backed)
 export { GovernanceModule } from './GovernanceClient.js';
@@ -133,6 +111,18 @@ export type {
   PropertyType,
   OwnershipType,
 } from './DLDClient.js';
+
+// Investor Tier Module
+export { InvestorTierModule } from './InvestorTierModule.js';
+export type { InvestorPlan, TierEligibilityResult, TierViolation, InvestorTier, InvestorTierInfo } from './InvestorTierModule.js';
+
+// Exit Window Module
+export { ExitWindowModule } from './ExitWindowModule.js';
+export type { ExitWindow, ExitWindowSchedule, RedemptionRequest } from './ExitWindowModule.js';
+
+// Secondary Market Module (replaces airline-scoped ResaleModule)
+export { SecondaryMarketModule } from './SecondaryMarketModule.js';
+export type { SecondaryListing, CreateListingInput, PurchaseResult } from './SecondaryMarketModule.js';
 
 // Validation utilities
 export {

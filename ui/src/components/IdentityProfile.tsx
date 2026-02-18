@@ -7,7 +7,7 @@
  * - Wallet addresses and linked accounts
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   User, Shield, Key, CheckCircle2, XCircle, Clock, ExternalLink,
   Copy, ChevronDown, ChevronUp, Lock, Unlock, Eye, EyeOff, Plus,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useParties } from '../contexts/SDKContext';
+import { config } from '../config';
 
 // ============================================================================
 // TYPES
@@ -157,9 +158,27 @@ const MOCK_PERMISSIONS: AppPermission[] = [
 export function IdentityProfile() {
   const { session, party } = useAuth();
   const { parties } = useParties();
+  const [credentials, setCredentials] = useState(MOCK_CREDENTIALS);
+  const [permissions, setPermissions] = useState(MOCK_PERMISSIONS);
   const [expandedCredential, setExpandedCredential] = useState<string | null>(null);
   const [showRevokedApps, setShowRevokedApps] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+
+  useEffect(() => {
+    if (!config.useApiBackend) return;
+    fetch(`${config.apiUrl}/identities/me/credentials`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setCredentials(json.data);
+      })
+      .catch(() => { /* fallback to mock data */ });
+    fetch(`${config.apiUrl}/identities/me/permissions`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setPermissions(json.data);
+      })
+      .catch(() => { /* fallback to mock data */ });
+  }, []);
 
   const walletAddress = session?.address || '0x0000...0000';
   const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
@@ -188,8 +207,8 @@ export function IdentityProfile() {
     }
   };
 
-  const activePermissions = MOCK_PERMISSIONS.filter(p => p.isActive);
-  const revokedPermissions = MOCK_PERMISSIONS.filter(p => !p.isActive);
+  const activePermissions = permissions.filter(p => p.isActive);
+  const revokedPermissions = permissions.filter(p => !p.isActive);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -237,7 +256,7 @@ export function IdentityProfile() {
             {/* Stats */}
             <div className="flex items-center gap-6 mt-4">
               <div>
-                <p className="text-2xl font-bold text-white">{MOCK_CREDENTIALS.filter(c => c.status === 'VALID').length}</p>
+                <p className="text-2xl font-bold text-white">{credentials.filter(c => c.status === 'VALID').length}</p>
                 <p className="text-xs text-gray-500">Active Credentials</p>
               </div>
               <div className="w-px h-10 bg-white/10" />
@@ -270,7 +289,7 @@ export function IdentityProfile() {
           </div>
 
           <div className="space-y-3">
-            {MOCK_CREDENTIALS.map((cred) => (
+            {credentials.map((cred) => (
               <div
                 key={cred.id}
                 className="border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-colors"

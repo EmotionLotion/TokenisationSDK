@@ -1,4 +1,7 @@
 /**
+ * @deprecated Use SecondaryMarketModule for asset-agnostic P2P secondary trading.
+ * This module is airline-ticket-scoped and maintained only for backward compatibility.
+ *
  * ResaleModule - Unified facade for ticket resale operations.
  *
  * Replaces the 4-step manual flow (requestTransfer → approveTransfer →

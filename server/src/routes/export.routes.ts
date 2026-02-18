@@ -85,9 +85,10 @@ router.get('/cap-table/:tokenId', apiKeyMiddleware, async (req: Request, res: Re
     }
 
     const tokenId = req.params.tokenId;
-    const capTable = await ledgerService.getCapTable(tokenId, orgId);
+    const capTable = await ledgerService.getCapTableSnapshot(tokenId, orgId);
 
-    const rows = (capTable.holders ?? capTable.positions ?? []).map((holder: Record<string, unknown>) => ({
+    const snapshotData = capTable.snapshot as any;
+    const rows = (snapshotData?.holders ?? snapshotData?.positions ?? []).map((holder: Record<string, unknown>) => ({
       address: holder.walletAddress ?? holder.address ?? '',
       investorId: holder.investorId ?? '',
       name: holder.name ?? '',
@@ -126,7 +127,7 @@ router.get('/audit', apiKeyMiddleware, async (req: Request, res: Response, next:
       limit: 10000,
     });
 
-    const rows = (Array.isArray(entries) ? entries : []).map((entry: Record<string, unknown>) => ({
+    const rows = (Array.isArray(entries) ? entries : []).map((entry: any) => ({
       id: entry.id ?? '',
       timestamp: entry.timestamp ?? entry.createdAt ?? '',
       action: entry.action ?? '',
@@ -164,13 +165,14 @@ router.get('/transactions/:tokenId', apiKeyMiddleware, async (req: Request, res:
     const tokenId = req.params.tokenId;
     const { startDate, endDate } = req.query;
 
-    const events = await ledgerService.getLedgerEvents(tokenId, orgId, {
+    const events = await ledgerService.listLedgerEvents(orgId, {
+      tokenId,
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
       limit: 10000,
     });
 
-    const rows = (Array.isArray(events) ? events : []).map((evt: Record<string, unknown>) => ({
+    const rows = (Array.isArray(events) ? events : []).map((evt: any) => ({
       id: evt.id ?? '',
       timestamp: evt.createdAt ?? '',
       eventType: evt.eventType ?? '',

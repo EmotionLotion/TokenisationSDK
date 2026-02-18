@@ -536,6 +536,12 @@ contract RealToken is ERC20, Ownable, Pausable, ReentrancyGuard, IToken {
     }
 
     // ============================================================================
+    // Events (compliance notifications)
+    // ============================================================================
+
+    event ComplianceNotificationFailed(string operation, address indexed from, address indexed to, uint256 amount, bytes reason);
+
+    // ============================================================================
     // Internal Functions
     // ============================================================================
 
@@ -579,7 +585,9 @@ contract RealToken is ERC20, Ownable, Pausable, ReentrancyGuard, IToken {
      */
     function _notifyComplianceMint(address to, uint256 amount) internal {
         if (_compliance != address(0)) {
-            try ICompliance(_compliance).created(to, amount) {} catch {}
+            try ICompliance(_compliance).created(to, amount) {} catch (bytes memory reason) {
+                emit ComplianceNotificationFailed("mint", address(0), to, amount, reason);
+            }
         }
     }
 
@@ -588,7 +596,9 @@ contract RealToken is ERC20, Ownable, Pausable, ReentrancyGuard, IToken {
      */
     function _notifyComplianceBurn(address from, uint256 amount) internal {
         if (_compliance != address(0)) {
-            try ICompliance(_compliance).destroyed(from, amount) {} catch {}
+            try ICompliance(_compliance).destroyed(from, amount) {} catch (bytes memory reason) {
+                emit ComplianceNotificationFailed("burn", from, address(0), amount, reason);
+            }
         }
     }
 
@@ -597,7 +607,9 @@ contract RealToken is ERC20, Ownable, Pausable, ReentrancyGuard, IToken {
      */
     function _notifyComplianceTransfer(address from, address to, uint256 amount) internal {
         if (_compliance != address(0)) {
-            try ICompliance(_compliance).transferred(from, to, amount) {} catch {}
+            try ICompliance(_compliance).transferred(from, to, amount) {} catch (bytes memory reason) {
+                emit ComplianceNotificationFailed("transfer", from, to, amount, reason);
+            }
         }
     }
 }

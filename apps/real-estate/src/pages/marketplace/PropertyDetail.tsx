@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Building2,
@@ -7,6 +8,14 @@ import {
   Coins,
   TrendingUp,
   ChevronLeft,
+  BarChart3,
+  FolderOpen,
+  Users,
+  ArrowLeftRight,
+  Landmark,
+  ClipboardList,
+  MapPinned,
+  Eye,
 } from 'lucide-react';
 import { useAsset } from '@tokenisation/sdk-react';
 import { StatusBadge } from '@tokenisation/ui-kit';
@@ -18,6 +27,30 @@ import {
 } from '../../data/dubai-properties';
 import { useSDKWithFallback } from '../../hooks/useSDKWithFallback';
 import { assetToDubaiProperty, toStatusBadgeVariant } from '../../utils/mappers';
+
+// Tab components
+import { RentalYieldChart } from '../../components/RentalYieldChart';
+import { NAVHistory } from '../../components/NAVHistory';
+import { DocumentViewer } from '../../components/DocumentViewer';
+import { CapTableView } from '../../components/CapTableView';
+import { SecondaryMarket } from '../../components/SecondaryMarket';
+import { SPVDetails } from '../../components/SPVDetails';
+import { AuditTimeline } from '../../components/AuditTimeline';
+import { PropertyMap } from '../../components/PropertyMap';
+import { AnimatedTabContent } from '../../components/AnimatedTabContent';
+
+const TABS = [
+  { id: 'overview', label: 'Overview', icon: Eye },
+  { id: 'financials', label: 'Financials', icon: BarChart3 },
+  { id: 'documents', label: 'Documents', icon: FolderOpen },
+  { id: 'cap-table', label: 'Cap Table', icon: Users },
+  { id: 'secondary', label: 'Secondary Market', icon: ArrowLeftRight },
+  { id: 'spv', label: 'SPV Structure', icon: Landmark },
+  { id: 'audit', label: 'Audit Trail', icon: ClipboardList },
+  { id: 'location', label: 'Location', icon: MapPinned },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
 
 function DetailRow({ label, value }: { label: string; value: string | number }) {
   return (
@@ -31,6 +64,7 @@ function DetailRow({ label, value }: { label: string; value: string | number }) 
 export function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const { getAsset } = useAsset();
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   const mockProperty = DUBAI_PROPERTIES.find((p) => p.id === id) || null;
 
@@ -65,6 +99,12 @@ export function PropertyDetail() {
 
   const isInvestable = property.status === 'live' || property.status === 'distributing';
   const statusLabel = property.status.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const fundingPct = property.tokensSold != null && property.totalTokens > 0
+    ? Math.min(100, Math.round((property.tokensSold / property.totalTokens) * 100))
+    : null;
+  const fundedAED = property.tokensSold != null ? property.tokensSold * property.tokenPriceAED : 0;
+  const goalAED = property.fundingGoalAED ?? property.valuationAED;
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -115,6 +155,24 @@ export function PropertyDetail() {
               <p className="text-gray-400 mt-4 max-w-2xl leading-relaxed">
                 {property.description}
               </p>
+
+              {/* Funding progress bar */}
+              {fundingPct !== null && (
+                <div className="mt-5 max-w-xl">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-semibold text-white">{fundingPct}% Funded</span>
+                    <span className="text-xs text-gray-400">
+                      {formatAED(fundedAED)} of {formatAED(goalAED)}
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-amber-400 transition-all duration-1000 ease-out"
+                      style={{ width: `${fundingPct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* CTA */}
@@ -138,85 +196,169 @@ export function PropertyDetail() {
         </div>
       </div>
 
+      {/* Tab Bar */}
+      <div className="flex flex-wrap gap-2 mb-8">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                isActive
+                  ? 'bg-primary/15 text-primary border-primary/30'
+                  : 'bg-white/5 text-gray-400 border-white/10 hover:text-white hover:border-white/20'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Main Details */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Investment Highlights */}
-          <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-primary" />
-              </div>
-              <h2 className="text-lg font-semibold text-white">Investment Highlights</h2>
-            </div>
-            <div className="space-y-3">
-              {property.highlights.map((highlight, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
-                  <span className="text-gray-300 text-sm leading-relaxed">{highlight}</span>
-                </div>
-              ))}
-            </div>
-          </section>
+        {/* Left Column - Tab Content */}
+        <div className="lg:col-span-2">
+          <AnimatedTabContent activeTab={activeTab}>
+            {activeTab === 'overview' && (
+              <div className="space-y-8">
+                {/* Investment Highlights */}
+                <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-white">Investment Highlights</h2>
+                  </div>
+                  <div className="space-y-3">
+                    {property.highlights.map((highlight, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
+                        <span className="text-gray-300 text-sm leading-relaxed">{highlight}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
-          {/* Financial Details */}
-          <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 bg-accent/10 rounded-lg flex items-center justify-center">
-                <Coins className="w-5 h-5 text-accent" />
-              </div>
-              <h2 className="text-lg font-semibold text-white">Financial Details</h2>
-            </div>
+                {/* Financial Details */}
+                <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-9 h-9 bg-accent/10 rounded-lg flex items-center justify-center">
+                      <Coins className="w-5 h-5 text-accent" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-white">Financial Details</h2>
+                  </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Valuation */}
-              <div className="space-y-1">
-                <DetailRow label="Valuation (AED)" value={formatAED(property.valuationAED)} />
-                <DetailRow label="Valuation (USD)" value={formatUSD(property.valuationUSD)} />
-                <DetailRow label="Valuation Date" value={property.valuationDate} />
-                <DetailRow label="Valued By" value={property.valuedBy} />
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Valuation */}
+                    <div className="space-y-1">
+                      <DetailRow label="Valuation (AED)" value={formatAED(property.valuationAED)} />
+                      <DetailRow label="Valuation (USD)" value={formatUSD(property.valuationUSD)} />
+                      <DetailRow label="Valuation Date" value={property.valuationDate} />
+                      <DetailRow label="Valued By" value={property.valuedBy} />
+                    </div>
 
-              {/* Income */}
-              <div className="space-y-1">
-                <DetailRow
-                  label="Annual Rental Income"
-                  value={formatAED(property.annualRentalIncomeAED)}
+                    {/* Income */}
+                    <div className="space-y-1">
+                      <DetailRow
+                        label="Annual Rental Income"
+                        value={formatAED(property.annualRentalIncomeAED)}
+                      />
+                      <DetailRow label="Gross Yield" value={`${property.grossYield}%`} />
+                      <DetailRow label="Net Yield" value={`${property.netYield}%`} />
+                      <DetailRow label="Occupancy Rate" value={`${property.occupancyRate}%`} />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Developer & Property Info */}
+                <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-9 h-9 bg-secondary/10 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-secondary" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-white">Property Details</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1">
+                      <DetailRow label="Developer" value={property.developer} />
+                      <DetailRow label="Year Built" value={property.yearBuilt} />
+                      <DetailRow label="Total Area" value={`${property.totalArea.toLocaleString()} sqft`} />
+                      {property.floors && <DetailRow label="Floors" value={property.floors} />}
+                    </div>
+                    <div className="space-y-1">
+                      {property.units && <DetailRow label="Units" value={property.units} />}
+                      <DetailRow label="District" value={property.district} />
+                      <DetailRow label="Property Type" value={property.propertyType.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} />
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {activeTab === 'financials' && (
+              <div className="space-y-8">
+                <RentalYieldChart
+                  propertyId={property.id}
+                  propertyName={property.name}
+                  grossYield={property.grossYield}
+                  netYield={property.netYield}
                 />
-                <DetailRow label="Gross Yield" value={`${property.grossYield}%`} />
-                <DetailRow label="Net Yield" value={`${property.netYield}%`} />
-                <DetailRow label="Occupancy Rate" value={`${property.occupancyRate}%`} />
+                <NAVHistory
+                  propertyId={property.id}
+                  propertyName={property.name}
+                  currentNAV={property.valuationAED}
+                />
               </div>
-            </div>
-          </section>
+            )}
 
-          {/* Developer & Property Info */}
-          <section className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 bg-secondary/10 rounded-lg flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-secondary" />
-              </div>
-              <h2 className="text-lg font-semibold text-white">Property Details</h2>
-            </div>
+            {activeTab === 'documents' && (
+              <DocumentViewer
+                propertyId={property.id}
+                propertyName={property.name}
+              />
+            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1">
-                <DetailRow label="Developer" value={property.developer} />
-                <DetailRow label="Year Built" value={property.yearBuilt} />
-                <DetailRow label="Total Area" value={`${property.totalArea.toLocaleString()} sqft`} />
-                {property.floors && <DetailRow label="Floors" value={property.floors} />}
-              </div>
-              <div className="space-y-1">
-                {property.units && <DetailRow label="Units" value={property.units} />}
-                <DetailRow label="District" value={property.district} />
-                <DetailRow label="Property Type" value={property.propertyType.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} />
-              </div>
-            </div>
-          </section>
+            {activeTab === 'cap-table' && (
+              <CapTableView
+                propertyId={property.id}
+                propertyName={property.name}
+                totalTokens={property.totalTokens}
+              />
+            )}
+
+            {activeTab === 'secondary' && (
+              <SecondaryMarket
+                propertyId={property.id}
+                propertyName={property.name}
+              />
+            )}
+
+            {activeTab === 'spv' && (
+              <SPVDetails
+                propertyName={property.name}
+                propertyId={property.id}
+              />
+            )}
+
+            {activeTab === 'audit' && (
+              <AuditTimeline propertyId={property.id} />
+            )}
+
+            {activeTab === 'location' && (
+              <PropertyMap
+                address={property.location}
+                district={property.district}
+              />
+            )}
+          </AnimatedTabContent>
         </div>
 
-        {/* Right Column - Sidebar */}
+        {/* Right Column - Sidebar (always visible) */}
         <div className="space-y-6">
           {/* Token Info */}
           <section className="bg-white/5 border border-white/10 rounded-2xl p-6">

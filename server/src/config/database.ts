@@ -117,6 +117,8 @@ export const {
   vestingSchedules, vestingMilestones, vestingReleases,
   // State Transitions & Compliance
   stateTransitions, complianceReceipts, complianceAuditLog, policyRulesets,
+  // Real Estate: Investor Tiers, Exit Windows, Secondary Market
+  investorPlans, investorTierAssignments, exitWindowSchedules, exitWindows, exitRedemptions, secondaryListings,
 } = schema;
 
 // Export schema for query builder access
@@ -1923,10 +1925,219 @@ export function initializeSqliteSchema(): void {
   `);
 
   // ========================================================================
+  // SECTION 23: GPU Compute Tokenization
+  // ========================================================================
+  sqliteDb.exec(`
+    CREATE TABLE IF NOT EXISTS gpu_nodes (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      gpu_model TEXT NOT NULL,
+      gpu_count INTEGER NOT NULL,
+      vram_per_gpu_gb INTEGER NOT NULL,
+      total_vram_gb INTEGER NOT NULL,
+      interconnect TEXT NOT NULL,
+      cpu_model TEXT,
+      ram_gb INTEGER,
+      storage_tb INTEGER,
+      network_bandwidth_gbps INTEGER,
+      datacenter_name TEXT NOT NULL,
+      datacenter_tier INTEGER NOT NULL,
+      datacenter_location TEXT NOT NULL,
+      datacenter_certifications TEXT,
+      power_cost_per_kwh TEXT,
+      tdp_watts INTEGER,
+      benchmark_score INTEGER,
+      acquisition_cost_usd TEXT NOT NULL,
+      acquisition_date TEXT NOT NULL,
+      estimated_useful_life_months INTEGER NOT NULL,
+      depreciated_value_usd TEXT,
+      status TEXT NOT NULL DEFAULT 'registered',
+      verified INTEGER DEFAULT 0,
+      verified_at TEXT,
+      last_verification_check TEXT,
+      vast_machine_id TEXT,
+      token_id TEXT,
+      on_chain_token_id TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_gpu_nodes_org ON gpu_nodes(org_id);
+    CREATE INDEX IF NOT EXISTS idx_gpu_nodes_status ON gpu_nodes(status);
+    CREATE INDEX IF NOT EXISTS idx_gpu_nodes_gpu_model ON gpu_nodes(gpu_model);
+    CREATE INDEX IF NOT EXISTS idx_gpu_nodes_dc_tier ON gpu_nodes(datacenter_tier);
+
+    CREATE TABLE IF NOT EXISTS gpu_node_metrics (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      node_id TEXT NOT NULL,
+      utilization_percent TEXT,
+      gpu_temp_celsius INTEGER,
+      mem_used_gb TEXT,
+      mem_total_gb TEXT,
+      is_online INTEGER DEFAULT 1,
+      spot_price_per_hour TEXT,
+      recorded_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_gpu_node_metrics_node ON gpu_node_metrics(node_id);
+
+    CREATE TABLE IF NOT EXISTS gpu_revenue_periods (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      gross_revenue_usd TEXT NOT NULL,
+      electricity_cost_usd TEXT NOT NULL,
+      platform_fee_usd TEXT,
+      maintenance_reserve_usd TEXT,
+      insurance_cost_usd TEXT,
+      net_revenue_usd TEXT,
+      hours_rented TEXT,
+      avg_utilization_percent TEXT,
+      distributed INTEGER DEFAULT 0,
+      distributed_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_gpu_revenue_org ON gpu_revenue_periods(org_id);
+    CREATE INDEX IF NOT EXISTS idx_gpu_revenue_node ON gpu_revenue_periods(node_id);
+
+    CREATE TABLE IF NOT EXISTS gpu_distributions (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      revenue_period_id TEXT NOT NULL,
+      total_distributed TEXT NOT NULL,
+      token_holder_count INTEGER,
+      distribution_method TEXT NOT NULL DEFAULT 'pro_rata',
+      tx_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_gpu_dist_org ON gpu_distributions(org_id);
+    CREATE INDEX IF NOT EXISTS idx_gpu_dist_node ON gpu_distributions(node_id);
+
+    CREATE TABLE IF NOT EXISTS compute_listings (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))),
+      org_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      token_symbol TEXT NOT NULL,
+      token_name TEXT NOT NULL,
+      total_supply TEXT NOT NULL,
+      price_per_token TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      annualized_yield_percent TEXT,
+      total_raised_usd TEXT DEFAULT '0',
+      investor_count INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      listed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_compute_listings_org ON compute_listings(org_id);
+    CREATE INDEX IF NOT EXISTS idx_compute_listings_active ON compute_listings(is_active);
+  `);
+
+  // ========================================================================
   // Seed data: dev org + test API key
   // ========================================================================
   sqliteDb.exec(`
     INSERT OR IGNORE INTO orgs (id, name, slug, status) VALUES ('dev-org', 'Development Organization', 'dev-org', 'active');
+  `);
+
+  // ========================================================================
+  // SECTION 24: Real Estate — Investor Tiers, Exit Windows, Secondary Market
+  // ========================================================================
+  sqliteDb.exec(`
+    CREATE TABLE IF NOT EXISTS investor_plans (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      name TEXT NOT NULL,
+      min_investment TEXT NOT NULL,
+      max_investment TEXT NOT NULL,
+      max_holding_percent TEXT NOT NULL,
+      management_fee_percent TEXT NOT NULL,
+      performance_fee_percent TEXT NOT NULL,
+      lockup_days INTEGER NOT NULL,
+      accreditation_required INTEGER NOT NULL DEFAULT 0,
+      accreditation_types TEXT DEFAULT '[]',
+      currency TEXT NOT NULL DEFAULT 'AED',
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_investor_plans_asset ON investor_plans(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_investor_plans_tier ON investor_plans(tier);
+
+    CREATE TABLE IF NOT EXISTS investor_tier_assignments (
+      id TEXT PRIMARY KEY,
+      investor_id TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      accreditation_status TEXT NOT NULL DEFAULT 'none',
+      total_invested TEXT NOT NULL DEFAULT '0',
+      verified_at TEXT,
+      accreditation_docs TEXT DEFAULT '[]',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_investor_tier_investor ON investor_tier_assignments(investor_id);
+
+    CREATE TABLE IF NOT EXISTS exit_window_schedules (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      frequency TEXT NOT NULL,
+      window_duration_days INTEGER NOT NULL,
+      max_redemption_percent TEXT NOT NULL,
+      notice_period_days INTEGER NOT NULL,
+      next_window_opens TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_exit_schedules_asset ON exit_window_schedules(asset_id);
+
+    CREATE TABLE IF NOT EXISTS exit_windows (
+      id TEXT PRIMARY KEY,
+      schedule_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL,
+      opens_at TEXT NOT NULL,
+      closes_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      max_redemption_percent TEXT NOT NULL,
+      total_redeemed TEXT NOT NULL DEFAULT '0',
+      total_requested TEXT NOT NULL DEFAULT '0',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_exit_windows_asset ON exit_windows(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_exit_windows_schedule ON exit_windows(schedule_id);
+    CREATE INDEX IF NOT EXISTS idx_exit_windows_status ON exit_windows(status);
+
+    CREATE TABLE IF NOT EXISTS exit_redemptions (
+      id TEXT PRIMARY KEY,
+      window_id TEXT NOT NULL,
+      investor_id TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_exit_redemptions_window ON exit_redemptions(window_id);
+    CREATE INDEX IF NOT EXISTS idx_exit_redemptions_investor ON exit_redemptions(investor_id);
+
+    CREATE TABLE IF NOT EXISTS secondary_listings (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      seller_id TEXT NOT NULL,
+      seller_wallet TEXT NOT NULL,
+      token_amount TEXT NOT NULL,
+      price_per_token TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'AED',
+      status TEXT NOT NULL DEFAULT 'active',
+      buyer_id TEXT,
+      listed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      sold_at TEXT,
+      expires_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_secondary_listings_asset ON secondary_listings(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_secondary_listings_seller ON secondary_listings(seller_id);
+    CREATE INDEX IF NOT EXISTS idx_secondary_listings_status ON secondary_listings(status);
   `);
 
   logger.info('SQLite schema initialized (all tables created)');

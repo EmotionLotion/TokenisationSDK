@@ -282,6 +282,7 @@ export class TokenisationSDK {
 
   // Configuration
   private config: SDKConfig;
+  private _debugMode = false;
 
   // Public interfaces
   public readonly assets: AssetManager;
@@ -950,6 +951,45 @@ export class TokenisationSDK {
     options?: { id?: string; priority?: HookPriority; description?: string }
   ): string {
     return this._hookManager.register(event, timing, handler, options);
+  }
+
+  // --------------------------------------------------------------------------
+  // Debug & Health
+  // --------------------------------------------------------------------------
+
+  /** Enable or disable verbose debug mode. When enabled, all operations log to console with full trace IDs. */
+  debug(enabled: boolean = true): void {
+    this._debugMode = enabled;
+    if (enabled) {
+      console.log('[TokenisationSDK] Debug mode ENABLED — all operations will be logged with trace IDs');
+    }
+  }
+
+  /** Check if debug mode is active */
+  get isDebugMode(): boolean {
+    return this._debugMode;
+  }
+
+  /** Ping the SDK to verify it's healthy and responsive */
+  async ping(): Promise<{ ok: boolean; version: string; environment: string; latencyMs: number; components: Record<string, boolean> }> {
+    const start = Date.now();
+    const components: Record<string, boolean> = {
+      lifecycle: !!this.lifecycleEngine,
+      plugins: !!this.pluginRegistry,
+      events: !!this.eventStore,
+      compliance: !!this._complianceEngine,
+    };
+    if (this.chainService) {
+      components.chain = true;
+    }
+    const latencyMs = Date.now() - start;
+    return {
+      ok: true,
+      version: '1.0.0',
+      environment: this.config?.production ? 'live' : 'test',
+      latencyMs,
+      components,
+    };
   }
 }
 

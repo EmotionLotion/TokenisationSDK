@@ -16,11 +16,14 @@
 import { build } from 'esbuild';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const SDK_ROOT = path.resolve(__dirname, '..');
 const ENTRY = path.join(SDK_ROOT, 'src', 'index.ts');
 const DIST = path.join(SDK_ROOT, 'dist');
@@ -51,6 +54,45 @@ const sharedOptions = {
     'pino',
     'zod',
   ],
+  plugins: [
+    {
+      name: 'stub-abi-loader',
+      setup(b) {
+        // Replace ABI loader files that use createRequire + JSON files
+        // with inline empty stubs for the CJS bundle
+        b.onLoad({ filter: /contracts\/abis\/index\.ts$/ }, () => {
+          return {
+            contents: `
+              export const abis = {
+                ComplianceToken: [],
+                IdentityRegistry: [],
+                DividendDistributor: [],
+                ModularCompliance: [],
+                ClaimTopicsRegistry: [],
+                TrustedIssuersRegistry: [],
+                OracleRegistry: [],
+                ChainlinkPriceFeed: [],
+                TokenFactory: [],
+              };
+              export default abis;
+            `,
+            loader: 'ts',
+          };
+        });
+        // Stub deployment services that also use createRequire
+        b.onLoad({ filter: /(DeploymentService|ProductionDeploymentService)\.ts$/ }, async (args) => {
+          const origFs = await import('fs');
+          let contents = origFs.readFileSync(args.path, 'utf-8');
+          // Replace createRequire pattern with a no-op
+          contents = contents.replace(
+            /import\s*{\s*createRequire\s*}\s*from\s*['"]node:module['"];?\s*const\s+require\s*=\s*createRequire\([^)]+\);?/g,
+            '// createRequire stubbed for CJS bundle\nconst require = (p: string) => ({});'
+          );
+          return { contents, loader: 'ts' };
+        });
+      },
+    },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -75,6 +117,13 @@ async function main(): Promise<void> {
     ...sharedOptions,
     outfile: CJS_OUT,
     format: 'cjs',
+    // Polyfill import.meta.url for CJS: esbuild replaces it with a banner-injected shim
+    banner: {
+      js: 'const import_meta_url = typeof document === "undefined" ? require("url").pathToFileURL(__filename).href : undefined;',
+    },
+    define: {
+      'import.meta.url': 'import_meta_url',
+    },
   });
   console.log(`  -> ${path.relative(SDK_ROOT, CJS_OUT)}`);
 

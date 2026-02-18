@@ -15,6 +15,10 @@ import {
   PartyType,
   PartyRole,
   TransferabilityMode,
+  ProofOfReservePlugin,
+  ReserveStatus,
+  ChainlinkAutomationPlugin,
+  TriggerType,
 } from '@tokenisation/sdk';
 
 async function main() {
@@ -181,6 +185,65 @@ async function main() {
   // STEP 5: Summary Dashboard
   // --------------------------------------------------------------------------
 
+  // --------------------------------------------------------------------------
+  // STEP 5b: Proof of Reserve — verify platform backs AHOY points
+  // --------------------------------------------------------------------------
+  console.log('\n🏦 Proof of Reserve — Verifying AHOY Point Backing...\n');
+
+  const por = new ProofOfReservePlugin({
+    chainId: 84532,
+    rpcUrl: 'https://sepolia.base.org',
+    checkerAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const reserveCheck = await por.checkReserve('0x0000000000000000000000000000000000000001');
+
+  if (reserveCheck.success) {
+    const reserve = reserveCheck.data;
+    console.log(`  ✅ Reserve status: ${ReserveStatus[reserve.status]}`);
+    console.log(`     Reserve amount: ${reserve.reserveAmount}`);
+    console.log(`     Circulating supply: ${reserve.circulatingSupply}`);
+    console.log(`     Collateralization: ${reserve.currentRatio}`);
+    console.log(`     Mint allowed: ${reserve.mintAllowed}`);
+  } else {
+    console.log(`  ⚠️  PoR simulated: ${reserveCheck.error}`);
+    console.log(`     In production, verifies platform treasury backs all AHOY points`);
+    console.log(`     Prevents over-issuance and ensures points have real value`);
+  }
+
+  // --------------------------------------------------------------------------
+  // STEP 5c: Automation — auto-tier-upgrade at threshold
+  // --------------------------------------------------------------------------
+  console.log('\n⚡ Chainlink Automation — Auto Tier Upgrade...\n');
+
+  const automation = new ChainlinkAutomationPlugin({
+    chainId: 84532,
+    rpcUrl: 'https://sepolia.base.org',
+  });
+
+  const tierUpkeep = await automation.registerUpkeep({
+    name: `Auto-Tier-Upgrade: ${user.name}`,
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    triggerType: TriggerType.CONDITIONAL,
+    gasLimit: 300_000,
+    checkData: '0x',
+    amount: '1000000000000000000',
+  });
+
+  if (tierUpkeep.success) {
+    console.log(`  ✅ Upkeep registered: ${tierUpkeep.data.name}`);
+    console.log(`     Upkeep ID: ${tierUpkeep.data.id}`);
+    console.log(`     Trigger: CONDITIONAL (balance >= 15,000 → upgrade to GOLD)`);
+    console.log(`     Execution: Decentralized — no cron server needed`);
+  } else {
+    console.log(`  ⚠️  Upkeep simulated: ${tierUpkeep.error}`);
+    console.log(`     In production, automatically upgrades tier when balance threshold met`);
+    console.log(`     Trigger: balance >= 15,000 AHOY → GOLD tier`);
+  }
+
+  por.destroy();
+  automation.destroy();
+
   const finalBalance = await sdk.tokens.getBalance(ahoyToken.id, user.id);
 
   console.log(`
@@ -224,6 +287,8 @@ async function main() {
   • Points are BURNED when redeemed (for benefits)
   • Whitelist transferability (prevents black market)
   • Tier system based on balance thresholds
+  • ProofOfReserve verifies platform backs all points
+  • ChainlinkAutomation auto-upgrades tiers at thresholds
 
   This is exactly how the AHOY Platform works!
 

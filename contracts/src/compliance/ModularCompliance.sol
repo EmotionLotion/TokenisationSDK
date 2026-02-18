@@ -35,6 +35,7 @@ contract ModularCompliance is Ownable {
     event ModuleAdded(address indexed module, string name);
     event ModuleRemoved(address indexed module);
     event ModuleInteraction(address indexed module, address from, address to, uint256 value);
+    event ModuleCallbackFailed(address indexed module, string operation, bytes reason);
     event TokenBound(address indexed token);
     event TokenUnbound(address indexed token);
 
@@ -192,7 +193,7 @@ contract ModularCompliance is Ownable {
         uint256 value
     ) external view returns (bool) {
         if (isPaused) {
-            return true; // Allow transfers when paused (emergency mode)
+            return false; // Deny transfers when paused — compliance cannot be bypassed
         }
 
         // Check all modules
@@ -222,7 +223,9 @@ contract ModularCompliance is Ownable {
         for (uint256 i = 0; i < _modules.length; i++) {
             address module = _modules[i];
             if (_moduleInfo[module].isActive) {
-                try IComplianceModule(module).moduleMint(to, value) {} catch {}
+                try IComplianceModule(module).moduleMint(to, value) {} catch (bytes memory reason) {
+                    emit ModuleCallbackFailed(module, "mint", reason);
+                }
             }
         }
     }
@@ -236,7 +239,9 @@ contract ModularCompliance is Ownable {
         for (uint256 i = 0; i < _modules.length; i++) {
             address module = _modules[i];
             if (_moduleInfo[module].isActive) {
-                try IComplianceModule(module).moduleBurn(from, value) {} catch {}
+                try IComplianceModule(module).moduleBurn(from, value) {} catch (bytes memory reason) {
+                    emit ModuleCallbackFailed(module, "burn", reason);
+                }
             }
         }
     }
@@ -255,8 +260,11 @@ contract ModularCompliance is Ownable {
         for (uint256 i = 0; i < _modules.length; i++) {
             address module = _modules[i];
             if (_moduleInfo[module].isActive) {
-                try IComplianceModule(module).moduleTransfer(from, to, value) {} catch {}
-                emit ModuleInteraction(module, from, to, value);
+                try IComplianceModule(module).moduleTransfer(from, to, value) {
+                    emit ModuleInteraction(module, from, to, value);
+                } catch (bytes memory reason) {
+                    emit ModuleCallbackFailed(module, "transfer", reason);
+                }
             }
         }
     }
@@ -329,7 +337,7 @@ contract ModularCompliance is Ownable {
         uint256 value
     ) external view returns (bool compliant, address failedModule) {
         if (isPaused) {
-            return (true, address(0));
+            return (false, address(0)); // Deny transfers when paused — compliance cannot be bypassed
         }
 
         for (uint256 i = 0; i < _modules.length; i++) {

@@ -34,18 +34,5 @@ export { AssetWizard } from './AssetWizard.js';
 export { PropertyMap } from './verticals/real_estate/PropertyMap.js';
 export { NavHistoryChart } from './verticals/real_estate/NavHistoryChart.js';
 
-// Airline
-export { FlightSelector } from './verticals/airline/FlightSelector.js';
-export { BoardingPass } from './verticals/airline/BoardingPass.js';
-
-// Concert
-export { SeatSelectionMap } from './verticals/concert/SeatSelectionMap.js';
-
-// Car Rental
-export { RentalCalendar } from './verticals/car_rental/RentalCalendar.js';
-
-// Hotel
-export { RoomSelector } from './verticals/hotel/RoomSelector.js';
-
 // Theme configuration
 export { defaultTheme, type TokenisationTheme } from './theme.js';

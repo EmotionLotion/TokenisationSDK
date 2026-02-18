@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Coins, Shield, CheckCircle, CreditCard, Wallet } from 'lucide-react';
-import { useAsset, useCompliance, useTransfer } from '@tokenisation/sdk-react';
+import { Coins, Shield, CheckCircle, CreditCard, Wallet, UserCheck } from 'lucide-react';
+import { useAsset, useCompliance, useTransfer, useInvestorTier } from '@tokenisation/sdk-react';
+import { AddToCartButton } from '../../components/AddToCartButton';
 import {
   DUBAI_PROPERTIES,
   formatAED,
@@ -123,6 +124,8 @@ export function InvestFlow() {
   const { getAsset } = useAsset();
   const { checkTransfer } = useCompliance();
   const { create: createTransfer } = useTransfer();
+
+  const { plans: tierPlans, currentTier, loading: tierLoading } = useInvestorTier(propertyId);
 
   const mockProperty = DUBAI_PROPERTIES.find((p) => p.id === propertyId) || null;
 
@@ -284,6 +287,53 @@ export function InvestFlow() {
         {/* Compliance Pre-Flight */}
         <CompliancePreFlight checks={checks} allPassed={allChecksPassed} />
 
+        {/* Your Investment Tier */}
+        {(() => {
+          const tier = currentTier || 'retail';
+          const activePlan = tierPlans.find(p => p.tier === tier && p.active);
+          const maxInvestment = activePlan?.maxInvestment ?? 500000;
+          const maxHoldingPercent = activePlan?.maxHoldingPercent ?? 10;
+          const lockupDays = activePlan?.lockupDays ?? 90;
+          const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+          return (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 bg-purple-500/10 rounded-lg flex items-center justify-center">
+                  <UserCheck className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">Your Investment Tier</h3>
+                  <p className="text-xs text-gray-500">VARA-regulated investor classification</p>
+                </div>
+                {tierLoading && (
+                  <div className="ml-auto w-4 h-4 rounded-full border-2 border-gray-600 border-t-primary animate-spin" />
+                )}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white/[0.02] rounded-lg px-4 py-3">
+                  <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Current Tier</p>
+                  <p className="text-sm font-bold text-primary">{tierLabel}</p>
+                </div>
+                <div className="bg-white/[0.02] rounded-lg px-4 py-3">
+                  <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Max Investment</p>
+                  <p className="text-sm font-bold text-white">{formatAED(maxInvestment)}</p>
+                </div>
+                <div className="bg-white/[0.02] rounded-lg px-4 py-3">
+                  <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Max Holding</p>
+                  <p className="text-sm font-bold text-white">{maxHoldingPercent}%</p>
+                </div>
+                <div className="bg-white/[0.02] rounded-lg px-4 py-3">
+                  <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Lockup Period</p>
+                  <p className="text-sm font-bold text-white">{lockupDays} days</p>
+                </div>
+              </div>
+              <p className="text-gray-500 text-xs mt-3">
+                Tier limits are enforced per VARA regulations. Upgrade to Qualified Investor for higher limits.
+              </p>
+            </div>
+          );
+        })()}
+
         {/* Token Amount */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-5">
@@ -400,18 +450,29 @@ export function InvestFlow() {
           </div>
         </div>
 
-        {/* Confirm Button */}
-        <button
-          onClick={handleConfirm}
-          disabled={!canConfirm || investMutation.loading}
-          className="w-full px-8 py-4 bg-primary text-black font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-lg"
-        >
-          {investMutation.loading
-            ? 'Processing...'
-            : allChecksPassed
-              ? `Confirm Investment - ${parsedAmount > 0 ? formatAED(totalCostAED) : 'Enter Amount'}`
-              : 'Running Compliance Checks...'}
-        </button>
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <button
+            onClick={handleConfirm}
+            disabled={!canConfirm || investMutation.loading}
+            className="flex-1 px-8 py-4 bg-primary text-black font-bold rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-lg"
+          >
+            {investMutation.loading
+              ? 'Processing...'
+              : allChecksPassed
+                ? `Confirm Investment - ${parsedAmount > 0 ? formatAED(totalCostAED) : 'Enter Amount'}`
+                : 'Running Compliance Checks...'}
+          </button>
+          {property && (
+            <AddToCartButton
+              propertyId={property.id}
+              propertyName={property.name}
+              tokenSymbol={property.tokenSymbol}
+              tokenPriceAED={property.tokenPriceAED}
+              minTokens={minTokens}
+            />
+          )}
+        </div>
 
         <p className="text-center text-xs text-gray-600">
           By confirming, you agree to the Token Subscription Agreement and acknowledge you

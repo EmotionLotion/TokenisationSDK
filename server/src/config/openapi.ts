@@ -1,4 +1,5 @@
 import swaggerJsdoc from 'swagger-jsdoc';
+import { paths, additionalTags } from './openapi-paths.js';
 
 // Server URL configuration from environment
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api/v1';
@@ -493,9 +494,13 @@ Common HTTP status codes:
       },
     },
     security: [{ ApiKeyAuth: [] }],
+    paths,
   },
   apis: ['./src/routes/*.ts'],
 };
+
+// Merge additional tags from openapi-paths.ts
+(options.definition as any).tags.push(...additionalTags);
 
 export const swaggerSpec = swaggerJsdoc(options);
 

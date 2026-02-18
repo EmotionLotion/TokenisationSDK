@@ -10,12 +10,6 @@
 import React, { useMemo } from 'react';
 import {
   Building2,
-  Leaf,
-  Ticket,
-  Music,
-  Star,
-  Gem,
-  Briefcase,
   Sparkles,
   Globe,
   Clock,
@@ -60,12 +54,6 @@ export interface GenericAssetCardProps {
 
 const templateIcons: Record<TemplateType, React.ElementType> = {
   real_estate: Building2,
-  carbon_credit: Leaf,
-  ticket: Ticket,
-  royalty: Music,
-  loyalty: Star,
-  commodity: Gem,
-  equity: Briefcase,
   custom: Sparkles,
 };
 
@@ -79,12 +67,6 @@ function getTemplateIcon(type: TemplateType): React.ElementType {
 
 const templateColors: Record<TemplateType, string> = {
   real_estate: '#3B82F6',
-  carbon_credit: '#22C55E',
-  ticket: '#A855F7',
-  royalty: '#F59E0B',
-  loyalty: '#EC4899',
-  commodity: '#F97316',
-  equity: '#6366F1',
   custom: '#64748B',
 };
 
@@ -347,51 +329,6 @@ function DetailedAssetCard({
             label: 'Annual Yield',
             value: `${asset.metadata.annualYield}%`,
           });
-        }
-        break;
-
-      case 'carbon_credit':
-        if (asset.metadata.vintage) {
-          fields.push({ label: 'Vintage', value: String(asset.metadata.vintage) });
-        }
-        if (asset.metadata.registryName) {
-          fields.push({ label: 'Registry', value: String(asset.metadata.registryName) });
-        }
-        break;
-
-      case 'ticket':
-        if (asset.metadata.eventDate) {
-          fields.push({
-            label: 'Event Date',
-            value: new Date(String(asset.metadata.eventDate)).toLocaleDateString(),
-          });
-        }
-        if (asset.metadata.venue) {
-          fields.push({ label: 'Venue', value: String(asset.metadata.venue) });
-        }
-        break;
-
-      case 'royalty':
-        if (asset.metadata.royaltyPercentage) {
-          fields.push({
-            label: 'Royalty',
-            value: `${asset.metadata.royaltyPercentage}%`,
-          });
-        }
-        if (asset.metadata.distributionFrequency) {
-          fields.push({
-            label: 'Payouts',
-            value: String(asset.metadata.distributionFrequency),
-          });
-        }
-        break;
-
-      case 'commodity':
-        if (asset.metadata.commodityType) {
-          fields.push({ label: 'Type', value: String(asset.metadata.commodityType) });
-        }
-        if (asset.metadata.unitWeight) {
-          fields.push({ label: 'Unit', value: String(asset.metadata.unitWeight) });
         }
         break;
 

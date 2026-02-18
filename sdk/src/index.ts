@@ -246,6 +246,27 @@ export * from './contracts/index.js';
 // Reference Packs
 export * from './packs/index.js';
 
+// Real Estate Lifecycle (explicit re-exports for convenience)
+export {
+  REAL_ESTATE_LIFECYCLE,
+  RealEstateLifecycleStates,
+  mapCoreStateToRealEstate,
+  mapRealEstateToCoreState,
+  mapStakeStageToState,
+  mapStateToStakeStage,
+} from './packs/real-estate-lifecycle.js';
+export type { RealEstateLifecycleState } from './packs/real-estate-lifecycle.js';
+
+// Sprint 2: Investor Tier Module
+export { InvestorTierModule } from './modules/InvestorTierModule.js';
+export type { InvestorPlan, TierEligibilityResult, TierViolation, InvestorTier, InvestorTierInfo } from './modules/InvestorTierModule.js';
+
+// Sprint 3: Exit Window + Secondary Market Modules
+export { ExitWindowModule } from './modules/ExitWindowModule.js';
+export type { ExitWindow, ExitWindowSchedule, RedemptionRequest } from './modules/ExitWindowModule.js';
+export { SecondaryMarketModule } from './modules/SecondaryMarketModule.js';
+export type { SecondaryListing, CreateListingInput, PurchaseResult } from './modules/SecondaryMarketModule.js';
+
 // Pre-built UI Components (Stripe Elements style)
 export * from './components/index.js';
 
@@ -270,8 +291,6 @@ export * from './identity/index.js';
 
 // Cross-Pack Orchestration (Handoff, Identity, Audit)
 export {
-  // Autonomous Handoff
-  FlightLandingOracle,
   CrossPackEventBus,
   SagaOrchestrator,
   SagaExecutionStatus,
@@ -286,10 +305,6 @@ export {
 } from './orchestration/index.js';
 
 export type {
-  // Handoff types
-  FlightLandingData,
-  FlightLandingStatus,
-  LandingVerificationResult,
   CrossPackEvent,
   CrossPackEventFilter,
   CrossPackEventHandler,

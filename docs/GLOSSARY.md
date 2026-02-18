@@ -1,423 +1,110 @@
+---
+sidebar_position: 5
+title: Glossary
+---
+
 # Glossary
 
-Technical terms and definitions used throughout the Tokenisation SDK.
+A reference of key terms and concepts used throughout the AHOY Tokenisation Platform.
 
 ---
-
-## A
 
 ### Accredited Investor
-A person or entity that meets certain wealth or income thresholds, allowing them to invest in securities not registered with regulators. In the US, this typically means:
-- Net worth > $1 million (excluding primary residence), OR
-- Income > $200K/year ($300K joint) for past 2 years
 
-### AML (Anti-Money Laundering)
-Regulations and procedures to prevent criminals from disguising illegally obtained funds as legitimate income. Includes transaction monitoring, suspicious activity reporting, and sanctions screening.
+An individual or entity that meets specific financial thresholds (net worth, income, or professional certification) as defined by a regulatory authority, granting access to securities offerings not available to the general public.
 
-### API Key
-A secret token used to authenticate requests to the SDK server. Format: `sk_live_xxx` (production) or `sk_test_xxx` (testing).
+### Cap Table
 
-```typescript
-const client = new ApiClient({
-  apiKey: 'sk_live_your-api-key'
-});
-```
+A record of all token holders and their respective balances for a given asset. The platform maintains both an on-chain cap table (derived from token balances) and an off-chain cap table (synced via the indexer) for reporting and compliance.
 
-### Asset
-The underlying real-world item being tokenized (building, artwork, security, etc.). In the SDK, an Asset is a database record that describes what's being tokenized.
+### Clawback
 
----
-
-## B
-
-### Blockchain
-A distributed ledger that records transactions across many computers. Key properties: immutable, transparent, decentralized. The SDK supports Ethereum, Polygon, Base, and Arbitrum.
-
-### Burn
-Permanently destroy tokens, removing them from circulation. Used when underlying asset is sold, redeemed, or no longer exists.
-
----
-
-## C
-
-### Cap Table (Capitalization Table)
-A record of all token holders and their ownership percentages.
-
-```typescript
-const capTable = await client.tokens.getCapTable(tokenId);
-// Returns: { totalSupply, holders: [{ address, balance, percentage }] }
-```
-
-### Chain ID
-A unique identifier for each blockchain network:
-
-| Network | Chain ID |
-|---------|----------|
-| Ethereum Mainnet | 1 |
-| Polygon | 137 |
-| Base | 8453 |
-| Arbitrum | 42161 |
-| Sepolia (testnet) | 11155111 |
-| Base Sepolia | 84532 |
-
-### Claim
-A verifiable statement about an identity (e.g., "this address passed KYC"). In ERC-3643, claims are issued by trusted parties and stored on-chain.
-
-### Compliance
-The process of ensuring token operations follow regulatory requirements. Includes KYC verification, transfer restrictions, jurisdiction rules, and holder limits.
+A forced transfer of tokens from an investor's wallet back to the issuer or a designated address. Clawbacks are used in regulatory enforcement, court orders, or contractual obligation scenarios. Requires `FORCE_TRANSFER` privileges and produces a detailed audit entry.
 
 ### Compliance Module
-A smart contract component that enforces specific rules:
 
-| Module | Purpose |
-|--------|---------|
-| `IDENTITY_REQUIRED` | Recipient must be in identity registry |
-| `COUNTRY_WHITELIST` | Only allow specific countries |
-| `COUNTRY_BLACKLIST` | Block specific countries |
-| `MAX_HOLDERS` | Limit total number of token holders |
-| `MAX_BALANCE` | Limit tokens per holder |
-| `TIME_LOCK` | Prevent transfers until date |
+A pluggable smart contract (in ERC-3643) or server-side rule that evaluates whether a token transfer is permitted. Modules include jurisdiction restrictions, holder count limits, lockup periods, and KYC requirements. Multiple modules are composed together -- a single rejection blocks the transfer.
 
-### Custodian
-A regulated entity that holds assets on behalf of investors. Can be self-custody (investor holds keys) or third-party custody.
+### Corporate Action
 
----
+An event initiated by the token issuer that affects all holders, such as a stock split, dividend distribution, forced freeze, or token burn. Corporate actions are executed as batch operations and recorded in the audit trail.
 
-## D
+### Distribution
 
-### Decimals
-The number of decimal places a token supports. Standard is 18 decimals, meaning 1 token = 1000000000000000000 (10^18) base units.
+A payment of dividends, rental income, yield, or other cash flows to token holders. Distributions are calculated pro-rata based on a cap table snapshot at a specific date and time.
 
-```
-1 token with 18 decimals = "1000000000000000000"
-0.5 tokens = "500000000000000000"
-```
+### DLD (Dubai Land Department)
 
-### Deploy
-The process of publishing a smart contract to the blockchain. Once deployed, the contract has a permanent address.
+The government authority responsible for real estate registration in Dubai, UAE. The platform includes a DLD integration module for property tokenisation workflows that require title deed verification and registration.
 
-### Drizzle ORM
-The database toolkit used by the SDK server. Provides type-safe database queries with PostgreSQL and SQLite support.
+### ERC-3643
 
----
-
-## E
-
-### EOA (Externally Owned Account)
-A standard Ethereum wallet controlled by a private key (as opposed to a smart contract wallet). Most common wallet type.
+An Ethereum token standard (also known as T-REX) designed for security tokens. ERC-3643 adds an on-chain Identity Registry, Identity Registry Storage, and Modular Compliance layer on top of the ERC-20 interface. Every `transfer` call passes through compliance checks before execution.
 
 ### ERC-20
-The standard interface for fungible tokens on Ethereum. All tokens of the same type are identical and interchangeable.
+
+The standard interface for fungible tokens on Ethereum. Defines `transfer`, `approve`, `transferFrom`, `balanceOf`, and `allowance` functions.
 
 ### ERC-721
-The standard for non-fungible tokens (NFTs). Each token is unique with its own token ID.
+
+The standard interface for non-fungible tokens (NFTs) on Ethereum. Each token has a unique ID. Used in the platform for airline tickets, concert tickets, hotel reservations, and car rentals.
 
 ### ERC-1155
-Multi-token standard supporting both fungible and non-fungible tokens in one contract.
 
-### ERC-3643 (T-REX)
-The standard for compliant security tokens. Adds identity verification and transfer restrictions to ERC-20.
+A multi-token standard that supports both fungible and non-fungible tokens in a single contract. Enables batch transfers and is used for GPU compute allocations and mixed asset portfolios.
 
-Key components:
-- **Token**: The actual token contract
-- **Identity Registry**: Maps addresses to verified identities
-- **Compliance Module**: Enforces transfer rules
-- **Trusted Issuers Registry**: Who can issue identity claims
+### Finality
 
-### ERC-4626
-Tokenized vault standard. Represents shares in a yield-generating vault.
+The point at which a blockchain transaction is considered irreversible. Finality varies by chain: Ethereum achieves finality after approximately 2 epochs (~13 minutes), Polygon after 256 blocks, and local Hardhat/Anvil chains achieve instant finality.
 
----
+### Force Transfer
 
-## F
-
-### Foundry
-The smart contract development framework used for this project. Includes `forge` (testing), `anvil` (local blockchain), and `cast` (CLI tools).
-
-### Freeze
-Permanently halt all token operations. More severe than pause — typically used for regulatory action or legal disputes.
-
----
-
-## G
-
-### Gas
-The fee paid to execute blockchain transactions. Measured in gwei (10^-9 ETH). Higher gas = faster confirmation.
-
-### Governance
-The system for making decisions about upgrades and changes. This SDK uses multi-sig + timelock governance via `TokenGovernor`.
-
-### Grace Period
-The time window after a timelock expires during which a proposal can be executed. Default: 7 days.
-
----
-
-## H
-
-### Hash
-A fixed-length string generated from input data. Used for transaction IDs, content verification, and cryptographic operations.
-
-### Holder
-An address that owns tokens. The cap table lists all holders.
-
----
-
-## I
-
-### Idempotency
-The property that an operation produces the same result whether executed once or multiple times. Critical for financial operations.
-
-```typescript
-// Safe: same key = same result
-await client.tokens.issue(tokenId, {
-  amount: "1000",
-  idempotencyKey: "issue-123"  // Prevents duplicates
-});
-```
-
-### Idempotency Key
-A unique string that identifies an operation. If the same key is used twice, the second request returns the original result instead of executing again.
+A transfer initiated by a privileged actor (issuer, regulator, or court-appointed agent) that bypasses normal compliance checks. Force transfers are logged with elevated audit detail and require explicit justification. See also: **Clawback**.
 
 ### Identity Registry
-A smart contract that maps blockchain addresses to verified identities. Required for ERC-3643 compliance.
 
-### Implementation Contract
-In the proxy pattern, the contract containing the actual logic. Can be upgraded without changing the proxy address.
+An on-chain smart contract (part of ERC-3643) that maps Ethereum addresses to verified identities. Only addresses registered in the Identity Registry can send or receive security tokens. The platform automatically registers addresses when KYC verification is approved.
 
-### Investor
-A person or entity that holds or will hold tokens. Must complete KYC before receiving tokens.
+### Investor Tier
 
-### Issuance
-The process of creating new tokens and assigning them to an investor. Also called "minting."
-
----
-
-## J
-
-### JSON Web Token (JWT)
-A token format used for authentication. The SDK server issues JWTs after login, which are included in subsequent requests.
-
-### Jurisdiction
-The legal territory whose laws apply. Affects which compliance rules are enforced and what investor types are allowed.
-
----
-
-## K
+A classification level assigned to an investor based on their accreditation status, jurisdiction, and verification level. Tiers (RETAIL, ACCREDITED, QUALIFIED, INSTITUTIONAL) determine which assets an investor may access and what transfer limits apply.
 
 ### KYC (Know Your Customer)
-The process of verifying a customer's identity before allowing them to transact. Required by financial regulations worldwide.
 
-KYC status values:
-- `pending` — Not yet verified
-- `in_progress` — Verification underway
-- `approved` — Successfully verified
-- `rejected` — Failed verification
-- `expired` — Verification needs renewal
+The process of verifying an investor's identity, jurisdiction, and suitability. The platform integrates with external KYC providers and supports mock KYC for sandbox environments. Successful KYC triggers on-chain identity registration.
 
----
+### Lockup Period
 
-## L
+A time window after token issuance during which the holder cannot transfer their tokens. Lockup periods are enforced both on-chain (via the compliance module) and off-chain (via the transfer saga). Common in real estate and fund tokenisation.
 
-### Lifecycle State
-The current status of an asset in its state machine:
+### Modular Compliance
 
-```
-draft → pending_verification → verified → active → [suspended|redeemed|expired] → burned
-```
+The compliance architecture of ERC-3643 tokens, where individual compliance rules are implemented as separate, composable smart contracts. The platform ships with modules for jurisdiction restrictions, holder limits, lockup periods, and more. Custom modules can be deployed.
 
-### Liquidity
-How easily an asset can be bought or sold. Tokenization improves liquidity by enabling 24/7 trading and fractional ownership.
+### NAV (Net Asset Value)
 
----
-
-## M
-
-### Mainnet
-The production blockchain network where real value is transacted (vs testnet for development).
-
-### Mint
-Create new tokens. Same as issuance.
-
-### Multi-Sig (Multi-Signature)
-A security mechanism requiring multiple parties to approve an action. The SDK's `TokenGovernor` requires 2+ signatures for upgrades.
-
----
-
-## N
-
-### Nonce
-A number used once to prevent replay attacks. In SIWE authentication, the server provides a nonce that the user signs.
-
----
-
-## O
-
-### On-Chain
-Data or operations that exist/occur on the blockchain (vs off-chain which is stored in traditional databases).
-
-### Oracle
-A service that provides external data to smart contracts. Used for price feeds, random numbers, and real-world event verification.
-
----
-
-## P
-
-### Pause
-Temporarily halt token transfers. Can be undone with unpause. Less severe than freeze.
-
-### Policy
-A set of compliance rules that govern token operations. Includes rules for transfers, issuance, and redemption.
-
-### Private Key
-A secret cryptographic key that controls a blockchain wallet. Never share or expose private keys.
-
-### Project
-A container that groups related tokenization work. Can contain multiple assets and tokens.
-
-### Proxy Contract
-A contract that delegates calls to an implementation contract. Enables upgrades without changing the user-facing address.
-
----
-
-## Q
-
-### Quorum
-The minimum number of approvals required for a multi-sig action. Default: 2 signers.
-
----
-
-## R
-
-### Rate Limiting
-Restricting how many API requests a client can make in a time period. Prevents abuse and ensures fair access.
-
-The SDK server uses Redis for distributed rate limiting in production.
-
-### Redemption
-The process of exchanging tokens for the underlying asset or its value. Opposite of issuance.
+The calculated value of an asset, typically expressed per-token. NAV is updated periodically via valuation oracles or manual admin entry. Used for redemption pricing, reporting, and investor dashboards.
 
 ### Right Type
-What legal right the token represents:
 
-| Type | Meaning |
-|------|---------|
-| `OWNERSHIP` | Title to property |
-| `EQUITY` | Shares in entity |
-| `DEBT` | Loan or bond |
-| `REVENUE` | Income stream |
-| `ACCESS` | Usage permission |
-| `COMMODITY` | Physical goods |
-
-### RPC (Remote Procedure Call)
-The interface for communicating with blockchain nodes. RPC URLs are configured per chain.
-
----
-
-## S
-
-### Sanctions Screening
-Checking if an address or person appears on government sanctions lists (OFAC, UN, EU, etc.).
+The category of real-world right that an asset represents. The platform defines four right types: `OWNERSHIP` (fractional ownership), `ACCESS` (time-bound access), `BEHAVIOR` (reputation credentials), and `VERIFICATION` (attestations).
 
 ### Security Token
-A token that represents a regulated security (stock, bond, fund share). Subject to securities laws.
+
+A digital token that represents ownership in a real-world asset and is subject to securities regulation. Unlike utility tokens, security tokens must comply with investor protection laws including KYC/AML, transfer restrictions, and reporting requirements.
 
 ### Settlement
-The final completion of a transfer, including any off-chain reconciliation.
 
-### SIWE (Sign-In With Ethereum)
-An authentication standard where users prove wallet ownership by signing a message. No password required.
+The final step in a transfer where on-chain balances are confirmed and off-chain records are updated. Settlement occurs after transaction confirmation and finality. The platform reconciles on-chain and off-chain state automatically.
 
-### Smart Contract
-Self-executing code deployed on a blockchain. Once deployed, runs exactly as programmed.
+### T-REX (Token for Regulated EXchanges)
 
-### Soulbound Token
-A non-transferable token permanently bound to an address. Used for credentials, certifications, and identity.
+The protocol name for ERC-3643. Developed by Tokeny, T-REX provides the smart contract framework for compliant security tokens including identity management and transfer validation.
 
-### SPV (Special Purpose Vehicle)
-A legal entity created to hold a specific asset. Common in real estate tokenization.
+### VARA (Virtual Assets Regulatory Authority)
 
----
+The regulatory body in Dubai, UAE, responsible for overseeing virtual asset service providers and token offerings. The platform includes VARA-specific compliance modules and condition evaluators for UAE-based tokenisation.
 
-## T
+### Vesting
 
-### Testnet
-A blockchain network for development and testing. Uses fake tokens with no real value.
-
-### Timelock
-A delay between proposing and executing an action. Gives stakeholders time to review and potentially veto. Default: 2 days.
-
-### Token
-A digital asset on a blockchain. Can represent ownership, access rights, or other value.
-
-### Tranche
-A portion of tokens with specific characteristics (e.g., different lockup periods or rights).
-
-### Transaction Hash (txHash)
-A unique identifier for a blockchain transaction. Used to track and verify transactions.
-
-### Transfer
-Movement of tokens from one address to another. In the SDK, transfers go through compliance checks before execution.
-
-### T-REX
-See ERC-3643.
-
----
-
-## U
-
-### UUPS (Universal Upgradeable Proxy Standard)
-A proxy pattern where upgrade logic lives in the implementation contract. More gas-efficient than transparent proxy.
-
-```
-┌──────────────┐        ┌─────────────────────┐
-│ ERC1967Proxy │───────▶│ Implementation (V1) │
-│ (fixed addr) │        └─────────────────────┘
-└──────────────┘                  │
-                                  │ upgrade
-                                  ▼
-                        ┌─────────────────────┐
-                        │ Implementation (V2) │
-                        └─────────────────────┘
-```
-
----
-
-## V
-
-### Verification
-Confirming the authenticity or validity of something (identity, document, transaction).
-
-### Vault
-A smart contract that holds assets and issues shares. See ERC-4626.
-
----
-
-## W
-
-### Wallet
-Software or hardware that stores private keys and enables blockchain transactions. Types:
-- **EOA**: Standard private key wallet
-- **Multi-sig**: Requires multiple signatures
-- **Smart Account**: Contract-based wallet with custom logic
-
-### Wei
-The smallest unit of Ether. 1 ETH = 10^18 wei.
-
-### Whitelist
-A list of approved addresses or entities. Used in `WHITELIST_ONLY` transfer mode.
-
----
-
-## Z
-
-### Zod
-A TypeScript validation library used by the SDK for input validation. Ensures data matches expected schemas before processing.
-
-```typescript
-// SDK validates all inputs automatically
-const token = await client.tokens.create({
-  name: "My Token",    // Must be string
-  symbol: "MTK",       // 3-5 characters
-  chainId: 8453        // Must be valid chain ID
-});
-```
+A schedule that gradually releases tokens to a holder over time. Vesting is used for team allocations, advisor shares, and milestone-based releases. The platform supports cliff vesting, linear vesting, and custom schedules.

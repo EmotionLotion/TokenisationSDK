@@ -1,0 +1,278 @@
+version: "3.8"
+
+# =============================================================================
+# AHOY Tokenisation SDK - Hosted Sandbox Environment
+# =============================================================================
+# This compose file deploys a publicly accessible sandbox environment
+# that integration partners can use without running Docker locally.
+#
+# Deployment:
+#   docker-compose -f docker-compose.sandbox.yml up -d
+#
+# Endpoints:
+#   API:     https://sandbox.api.ahoy.fund/v1
+#   Docs:    https://sandbox.api.ahoy.fund/api/docs
+#   OpenAPI: https://sandbox.api.ahoy.fund/api/openapi.json
+#   Chain:   wss://sandbox.rpc.ahoy.fund (WebSocket)
+#   UI:      https://sandbox.ahoy.fund
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Caddy Reverse Proxy (TLS termination + routing)
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: ahoy-sandbox-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # Sandbox Ethereum Node (Anvil - persistent state)
+  # ---------------------------------------------------------------------------
+  chain:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: ahoy-sandbox-chain
+    restart: unless-stopped
+    command: >
+      anvil
+      --host 0.0.0.0
+      --port 8545
+      --chain-id 31337
+      --accounts 20
+      --balance 100000
+      --block-time 2
+      --gas-limit 30000000
+      --state /data/anvil-state.json
+      --dump-state /data/anvil-state.json
+    volumes:
+      - chain_data:/data
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: ahoy-sandbox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ahoy_sandbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ahoy_sandbox
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ahoy_sandbox} -d ahoy_sandbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ahoy-sandbox-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # AHOY API Server (Sandbox Mode)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+      target: production
+    container_name: ahoy-sandbox-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: sandbox
+      PORT: 3001
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ahoy_sandbox}:${POSTGRES_PASSWORD}@postgres:5432/ahoy_sandbox
+      DB_MODE: postgres
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+
+      # Chain
+      RPC_URL: http://chain:8545
+      CHAIN_ID: 31337
+
+      # Auth
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY_PREFIX: ak_sandbox_
+      AUTH_DEV_MODE: "false"
+
+      # Sandbox features
+      ENABLE_MOCK_KYC: "true"
+      ENABLE_SANDBOX: "true"
+      SANDBOX_RESET_ENABLED: "true"
+      SANDBOX_RATE_LIMIT: 200
+
+      # Logging
+      LOG_LEVEL: info
+      LOG_REQUEST_BODY: "false"
+
+      # CORS - allow all origins in sandbox
+      CORS_ORIGIN: "*"
+
+      # Verticals
+      ENABLED_VERTICALS: real-estate,airline,hotel,car-rental,concert
+
+      # Sandbox API keys (pre-provisioned for partners)
+      SANDBOX_DEFAULT_ORG: ahoy-sandbox-org
+      SANDBOX_DEFAULT_API_KEY: ${SANDBOX_API_KEY:-ak_sandbox_demo_key_12345}
+
+      # Telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chain:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # Contract Deployer (runs once, redeploys on restart)
+  # ---------------------------------------------------------------------------
+  deployer:
+    build:
+      context: ../../contracts
+      dockerfile: Dockerfile
+    container_name: ahoy-sandbox-deployer
+    environment:
+      RPC_URL: http://chain:8545
+      CHAIN_ID: 31337
+      DEPLOYER_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    depends_on:
+      chain:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Deploying sandbox contracts...' &&
+        sleep 5 &&
+        forge script script/Deploy.s.sol --rpc-url $$RPC_URL --broadcast --private-key $$DEPLOYER_PRIVATE_KEY &&
+        echo 'Sandbox contracts deployed successfully!'
+      "
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # Sandbox Seeder (pre-populates demo data)
+  # ---------------------------------------------------------------------------
+  seeder:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+    container_name: ahoy-sandbox-seeder
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ahoy_sandbox}:${POSTGRES_PASSWORD}@postgres:5432/ahoy_sandbox
+      DB_MODE: postgres
+      SANDBOX_API_KEY: ${SANDBOX_API_KEY:-ak_sandbox_demo_key_12345}
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "dist/scripts/seed-sandbox.js"]
+    restart: "no"
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # Sandbox UI Dashboard
+  # ---------------------------------------------------------------------------
+  ui:
+    build:
+      context: ../../ui
+      dockerfile: Dockerfile
+    container_name: ahoy-sandbox-ui
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: https://sandbox.api.ahoy.fund
+      VITE_CHAIN_ID: 31337
+      VITE_SANDBOX_MODE: "true"
+    depends_on:
+      - api
+    networks:
+      - sandbox-network
+
+  # ---------------------------------------------------------------------------
+  # Sandbox Health Monitor
+  # ---------------------------------------------------------------------------
+  healthcheck:
+    image: curlimages/curl:latest
+    container_name: ahoy-sandbox-healthcheck
+    restart: unless-stopped
+    command: >
+      sh -c "
+        while true; do
+          STATUS=$$(curl -s -o /dev/null -w '%{http_code}' http://api:3001/health)
+          if [ \"$$STATUS\" != '200' ]; then
+            echo \"[ALERT] API health check failed: HTTP $$STATUS\"
+          fi
+          sleep 60
+        done
+      "
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - sandbox-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  sandbox-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes (persistent across restarts)
+# =============================================================================
+volumes:
+  postgres_data:
+  redis_data:
+  chain_data:
+  caddy_data:
+  caddy_config:

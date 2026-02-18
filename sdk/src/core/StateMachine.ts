@@ -672,3 +672,6 @@ export class StateMachineRegistry {
 
 // Export singleton accessor
 export const stateMachineRegistry = StateMachineRegistry.getInstance();
+
+// Register domain-specific lifecycles (side-effect imports)
+import '../packs/real-estate-lifecycle.js';

@@ -89,7 +89,7 @@ export function TransactionHistory({
         try {
             // Get events from the API
             const eventsResponse = await api.events.list({ assetId });
-            const allEvents = eventsResponse.events || [];
+            const allEvents = eventsResponse.data || [];
 
             const txs: Transaction[] = allEvents
                 .slice(-limit)

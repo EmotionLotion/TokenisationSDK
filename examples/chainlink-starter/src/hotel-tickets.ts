@@ -18,6 +18,9 @@ import {
   OracleFailSafeMode,
   ComplianceEngine,
   createChainlinkWiredSDK,
+  DecoPlugin,
+  DecoProofType,
+  ChainlinkAcePlugin,
 } from '@tokenisation/sdk';
 
 import {
@@ -183,6 +186,75 @@ export async function hotelTicketsDemo() {
   ═══════════════════════════════════════════════════════════
   `);
 
+  // --- DECO: Privacy-preserving age/residency proof ---
+  logStep(5, 'DECO proof — guest age and residency verification');
+
+  const deco = new DecoPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    verifierAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const residencyProof = await deco.createProof({
+    proofType: DecoProofType.RESIDENCY_PROOF,
+    dataSource: {
+      url: 'https://identity.provider/api/v1/residency',
+      method: 'GET',
+      jsonPath: '$.countryOfResidence',
+    },
+    claim: {
+      field: 'countryOfResidence',
+      operator: 'in',
+      threshold: ['ES', 'FR', 'DE', 'IT', 'GB', 'AE'],
+    },
+    metadata: {
+      purpose: 'Hotel residency verification for rate eligibility',
+      guestId: guest.id,
+      reservationId: reservation.id,
+    },
+  });
+
+  if (residencyProof.success) {
+    logSuccess(`DECO proof created: ${residencyProof.data.proofId}`);
+    logInfo('Proof type', 'RESIDENCY_PROOF');
+    logInfo('Claim', 'Residence in approved country (address not revealed)');
+  } else {
+    logWarning(`DECO proof simulated: ${residencyProof.error}`);
+    logInfo('Purpose', 'Prove guest residency for rate eligibility without revealing address');
+  }
+
+  // --- ACE: Automated compliance attestation ---
+  logStep(6, 'ACE automated compliance attestation for reservation');
+
+  const ace = new ChainlinkAcePlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    routerAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const attestation = await ace.createAttestation({
+    assetId: reservation.id,
+    actorId: hotel.id,
+    action: 'RESERVATION_COMPLIANCE',
+    context: {
+      guestJurisdiction: 'ES',
+      kycVerified: true,
+      complianceDecision: complianceResult.decision.result,
+      receiptId: complianceResult.receipt.id,
+    },
+  });
+
+  if (attestation.success) {
+    logSuccess(`ACE attestation: ${attestation.data.attestationId}`);
+    logInfo('Status', attestation.data.status);
+    logInfo('On-chain', 'Compliance attestation recorded');
+  } else {
+    logWarning(`ACE simulated: ${attestation.error}`);
+    logInfo('Purpose', 'Immutable on-chain compliance attestation for audit trail');
+  }
+
+  deco.destroy();
+  ace.destroy();
   chainlink.stop();
-  logSuccess('Demo 4 complete — Hotel Tickets with Compliance-Gated Mint\n');
+  logSuccess('Demo 4 complete — Hotel Tickets with Compliance + DECO + ACE\n');
 }

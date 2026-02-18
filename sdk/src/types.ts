@@ -10,8 +10,8 @@ export interface TokenizationSDKConfig {
   apiKey: string;
   /** Base URL for the API (default: https://api.tokenisation.io) */
   baseUrl?: string;
-  /** Environment: 'test' | 'live' */
-  environment?: 'test' | 'live';
+  /** Environment: 'test' | 'sandbox' | 'staging' | 'live' */
+  environment?: 'test' | 'sandbox' | 'staging' | 'live';
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
   /** Retry configuration */
@@ -22,6 +22,20 @@ export interface TokenizationSDKConfig {
   };
   /** Custom headers to include in all requests (useful for dev mode bypass) */
   defaultHeaders?: Record<string, string>;
+}
+
+/** Pre-configured environment presets */
+export const ENVIRONMENT_PRESETS: Record<string, { baseUrl: string; environment: TokenizationSDKConfig['environment'] }> = {
+  sandbox: { baseUrl: 'https://sandbox.api.tokenisation.io', environment: 'sandbox' },
+  staging: { baseUrl: 'https://staging.api.tokenisation.io', environment: 'staging' },
+  production: { baseUrl: 'https://api.tokenisation.io', environment: 'live' },
+  test: { baseUrl: 'http://localhost:3001/api/v1', environment: 'test' },
+};
+
+/** Create SDK config from environment name */
+export function configFromEnvironment(env: keyof typeof ENVIRONMENT_PRESETS, apiKey: string, overrides?: Partial<TokenizationSDKConfig>): TokenizationSDKConfig {
+  const preset = ENVIRONMENT_PRESETS[env];
+  return { apiKey, baseUrl: preset.baseUrl, environment: preset.environment, ...overrides };
 }
 
 /**

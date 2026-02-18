@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { Tag, DollarSign, ArrowLeftRight, ShieldCheck } from 'lucide-react';
-import { useResale } from '@tokenisation/sdk-react';
+import { Tag, DollarSign, ArrowLeftRight, ShieldCheck, Clock, CalendarCheck } from 'lucide-react';
+import { useSecondaryMarket, useExitWindow } from '@tokenisation/sdk-react';
 import { useSDKWithFallback, useSDKMutationWithFallback } from '../hooks/useSDKWithFallback';
 
 interface SecondaryMarketProps {
@@ -91,27 +91,23 @@ export function SecondaryMarket({ propertyId, propertyName }: SecondaryMarketPro
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [submittingListing, setSubmittingListing] = useState(false);
 
-  const resale = useResale();
+  const secondaryMarket = useSecondaryMarket(propertyId);
+  const exitWindow = useExitWindow(propertyId);
 
   // --- Fetch listings via SDK with fallback ---
   const sdkCall = useCallback(async () => {
-    const sdkListings = await resale.getListings({ ticketId: propertyId });
-    if (!sdkListings || sdkListings.length === 0) return null;
-    return sdkListings.map((listing: Record<string, unknown>, index: number): Listing => ({
-      id: (listing.id as string) ?? `lst-${index}`,
-      seller: (listing.seller as string) ?? (listing.sellerName as string) ?? 'Unknown',
-      sellerAddress: abbreviateAddress((listing.sellerAddress as string) ?? (listing.address as string) ?? '0x0000...0000'),
-      tokens: (listing.tokens as number) ?? (listing.quantity as number) ?? 0,
-      askPriceAED: (listing.askPriceAED as number) ?? (listing.price as number) ?? 0,
-      royaltyPercent: (listing.royaltyPercent as number) ?? 1.5,
-      listedDate: typeof listing.listedDate === 'string'
-        ? listing.listedDate
-        : typeof listing.createdAt === 'string'
-          ? (listing.createdAt as string).split('T')[0]
-          : new Date().toISOString().split('T')[0],
-      verified: (listing.verified as boolean) ?? false,
+    if (!secondaryMarket.listings || secondaryMarket.listings.length === 0) return null;
+    return secondaryMarket.listings.map((listing, index): Listing => ({
+      id: listing.id ?? `lst-${index}`,
+      seller: listing.sellerId ?? 'Unknown',
+      sellerAddress: abbreviateAddress(listing.sellerWallet ?? '0x0000...0000'),
+      tokens: listing.tokenAmount ?? 0,
+      askPriceAED: listing.pricePerToken ?? 0,
+      royaltyPercent: 1.5,
+      listedDate: listing.createdAt ? listing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+      verified: listing.status === 'active',
     }));
-  }, [resale, propertyId]);
+  }, [secondaryMarket.listings]);
 
   const { data: listings, refresh: refreshListings } = useSDKWithFallback<Listing[]>(
     sdkCall,
@@ -122,10 +118,9 @@ export function SecondaryMarket({ propertyId, propertyName }: SecondaryMarketPro
   // --- Buy mutation ---
   const buyMutation = useSDKMutationWithFallback(
     useCallback(async (listingId: string) => {
-      return await resale.buyTicket(listingId);
-    }, [resale]),
+      return await secondaryMarket.purchase(listingId, 'investor-wallet');
+    }, [secondaryMarket]),
     useCallback(async (_listingId: string) => {
-      // Simulate a buy with a short delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
       return { success: true, simulated: true };
     }, []),
@@ -134,10 +129,13 @@ export function SecondaryMarket({ propertyId, propertyName }: SecondaryMarketPro
   // --- List-for-sale mutation ---
   const listForSaleMutation = useSDKMutationWithFallback(
     useCallback(async (params: { ticketId: string; tokens: number; askPriceAED: number }) => {
-      return await resale.listForSale(params);
-    }, [resale]),
+      return await secondaryMarket.createListing({
+        tokenAmount: params.tokens,
+        pricePerToken: params.askPriceAED,
+        sellerWallet: 'seller-wallet',
+      });
+    }, [secondaryMarket]),
     useCallback(async (_params: { ticketId: string; tokens: number; askPriceAED: number }) => {
-      // Simulate listing creation with a short delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
       return { success: true, simulated: true };
     }, []),
@@ -343,6 +341,55 @@ export function SecondaryMarket({ propertyId, propertyName }: SecondaryMarketPro
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Exit Windows */}
+      <div className="px-6 py-5 border-t border-white/10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <Clock className="w-4 h-4 text-blue-400" />
+          </div>
+          <div>
+            <h4 className="text-white font-semibold text-sm">Exit Windows</h4>
+            <p className="text-gray-500 text-xs">Scheduled redemption periods for token holders</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-white/[0.02] border border-white/5 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarCheck className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-gray-400 text-xs">Current Window</span>
+            </div>
+            <p className="text-white text-sm font-medium">
+              {exitWindow.currentWindow ? 'Open' : 'Closed'}
+            </p>
+            {exitWindow.currentWindow && (
+              <p className="text-gray-500 text-xs mt-0.5">
+                Closes: {new Date(exitWindow.currentWindow.closesAt).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          <div className="bg-white/[0.02] border border-white/5 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-gray-400 text-xs">Next Window</span>
+            </div>
+            <p className="text-white text-sm font-medium">
+              {exitWindow.nextWindow
+                ? new Date(exitWindow.nextWindow.opensAt).toLocaleDateString()
+                : 'Q2 2026'}
+            </p>
+          </div>
+          <div className="bg-white/[0.02] border border-white/5 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Tag className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-gray-400 text-xs">Frequency</span>
+            </div>
+            <p className="text-white text-sm font-medium">
+              {exitWindow.schedule?.frequency ?? 'Quarterly'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Footer Note */}

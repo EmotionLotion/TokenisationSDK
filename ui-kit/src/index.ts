@@ -216,9 +216,6 @@ export type { ComplianceStepperProps, StepConfig } from './components/Compliance
 export { PersonaSwitcher as PersonaSwitcherComponent } from './components/PersonaSwitcher';
 export type { PersonaSwitcherProps, Persona } from './components/PersonaSwitcher';
 
-export { TicketCard } from './components/TicketCard';
-export type { TicketCardProps } from './components/TicketCard';
-
 // ============================================
 // Components - Investment & Portfolio
 // ============================================
@@ -230,6 +227,12 @@ export type { InvestmentChartProps } from './components/InvestmentChart';
 // ============================================
 export { FeeEstimate } from './components/FeeEstimate';
 export type { FeeEstimateProps, FeeEstimateData } from './components/FeeEstimate';
+
+// ============================================
+// Components - Transfer Restriction Explainer
+// ============================================
+export { TransferRestrictionExplainer } from './components/TransferRestrictionExplainer';
+export type { TransferRestrictionExplainerProps, RestrictionReason } from './components/TransferRestrictionExplainer';
 
 export { StatusBadge as StateBadge } from './generic';
 
@@ -263,3 +266,144 @@ export { analytics, trackEvent, setUser, setBackend, setupAutoTracking } from '.
 // Web Components / Embed (Gap 21)
 // ============================================
 export { registerElements } from './embed/TokenisationElement';
+
+// ============================================
+// Components - Identity & Onboarding
+// ============================================
+export { IdentityStatus } from './components/IdentityStatus';
+export type { IdentityStatusProps } from './components/IdentityStatus';
+
+// ============================================
+// Components - Wallet & Ownership
+// ============================================
+export { LockedBalance } from './components/LockedBalance';
+export type { LockedBalanceProps } from './components/LockedBalance';
+
+export { PendingTransfers } from './components/PendingTransfers';
+export type { PendingTransfersProps, PendingTransfer } from './components/PendingTransfers';
+
+// ============================================
+// Components - Transaction Preflight
+// ============================================
+export { PreflightCheck } from './components/PreflightCheck';
+export type { PreflightCheckProps, PreflightCheckItem } from './components/PreflightCheck';
+
+// ============================================
+// Components - Compliance
+// ============================================
+export { RestrictionList } from './components/RestrictionList';
+export type { RestrictionListProps, Restriction } from './components/RestrictionList';
+
+export { PolicySummary } from './components/PolicySummary';
+export type { PolicySummaryProps, Policy } from './components/PolicySummary';
+
+// ============================================
+// Components - Payments
+// ============================================
+export { PaymentIntent } from './components/PaymentIntent';
+export type { PaymentIntentProps } from './components/PaymentIntent';
+
+export { PaymentStatus } from './components/PaymentStatus';
+export type { PaymentStatusProps, PaymentRecord } from './components/PaymentStatus';
+
+export { RefundStatus } from './components/RefundStatus';
+export type { RefundStatusProps, RefundRecord } from './components/RefundStatus';
+
+// ============================================
+// Components - Admin / Operator
+// ============================================
+export { AssetAdmin } from './components/AssetAdmin';
+export type { AssetAdminProps, AssetAdminData } from './components/AssetAdmin';
+
+export { InvestorList } from './components/InvestorList';
+export type { InvestorListProps, InvestorRecord } from './components/InvestorList';
+
+// ============================================
+// Components - Real Estate Vertical
+// ============================================
+export { PropertyCard } from './components/PropertyCard';
+export type { PropertyCardProps } from './components/PropertyCard';
+
+export { SPVOverview } from './components/SPVOverview';
+export type { SPVOverviewProps } from './components/SPVOverview';
+
+export { RedemptionWindow } from './components/RedemptionWindow';
+export type { RedemptionWindowProps } from './components/RedemptionWindow';
+
+// ============================================
+// Accessibility Utilities (WCAG AA)
+// ============================================
+export {
+  trapFocus,
+  focusAndAnnounce,
+  announce,
+  isActivationKey,
+  createListKeyHandler,
+  generateId,
+  relativeLuminance,
+  contrastRatio,
+  meetsContrastAA,
+  meetsContrastAALarge,
+  matchesBreakpoint,
+  mediaQuery,
+  prefersReducedMotion,
+  statusBadgeAria,
+  progressAria,
+  listAria,
+  alertAria,
+  BREAKPOINTS,
+} from './core/Accessibility';
+
+// ============================================
+// Components - Identity & Onboarding (Partial fixes)
+// ============================================
+export { StartVerification } from './components/StartVerification';
+export type { StartVerificationProps } from './components/StartVerification';
+
+export { Reverify } from './components/Reverify';
+export type { ReverifyProps } from './components/Reverify';
+
+export { EntityOnboarding } from './components/EntityOnboarding';
+export type { EntityOnboardingProps } from './components/EntityOnboarding';
+
+// ============================================
+// Components - Actions (Partial fixes)
+// ============================================
+export { ActionButton } from './components/ActionButton';
+export type { ActionButtonProps } from './components/ActionButton';
+
+export { DistributionPreview } from './components/DistributionPreview';
+export type { DistributionPreviewProps } from './components/DistributionPreview';
+
+// ============================================
+// Components - Asset Detail & History (Partial fixes)
+// ============================================
+export { AssetDetailView } from './components/AssetDetailView';
+export type { AssetDetailViewProps } from './components/AssetDetailView';
+
+export { DistributionHistory } from './components/DistributionHistory';
+export type { DistributionHistoryProps } from './components/DistributionHistory';
+
+export { TransferRequest } from './components/TransferRequest';
+export type { TransferRequestProps } from './components/TransferRequest';
+
+export { TransferEligibility } from './components/TransferEligibility';
+export type { TransferEligibilityProps } from './components/TransferEligibility';
+
+// ============================================
+// Components - Accreditation (Gap fix)
+// ============================================
+export { AccreditationQuestionnaire } from './components/AccreditationQuestionnaire';
+export type { AccreditationQuestionnaireProps, AccreditationResult } from './components/AccreditationQuestionnaire';
+
+// ============================================
+// Components - Jurisdiction Gate (Gap fix)
+// ============================================
+export { JurisdictionGate } from './components/JurisdictionGate';
+export type { JurisdictionGateProps } from './components/JurisdictionGate';
+
+// ============================================
+// Components - Portfolio Dashboard (Gap fix)
+// ============================================
+export { PortfolioDashboard } from './components/PortfolioDashboard';
+export type { PortfolioDashboardProps, Holding } from './components/PortfolioDashboard';

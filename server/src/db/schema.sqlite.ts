@@ -835,6 +835,89 @@ export const buybackRequests = sqliteTable('buyback_requests', {
   updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// ============================================================================
+// Real Estate Phase 2: Investor Tiers, Exit Windows, Secondary Market
+// ============================================================================
+
+export const investorPlans = sqliteTable('investor_plans', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull(),
+  tier: text('tier').notNull(),
+  name: text('name').notNull(),
+  minInvestment: text('min_investment').notNull(),
+  maxInvestment: text('max_investment').notNull(),
+  maxHoldingPercent: text('max_holding_percent').notNull(),
+  managementFeePercent: text('management_fee_percent').notNull(),
+  performanceFeePercent: text('performance_fee_percent').notNull(),
+  lockupDays: integer('lockup_days').notNull(),
+  accreditationRequired: integer('accreditation_required').notNull().default(0),
+  accreditationTypes: text('accreditation_types').default('[]'),
+  currency: text('currency').notNull().default('AED'),
+  active: integer('active').notNull().default(1),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const investorTierAssignments = sqliteTable('investor_tier_assignments', {
+  id: text('id').primaryKey(),
+  investorId: text('investor_id').notNull(),
+  tier: text('tier').notNull(),
+  accreditationStatus: text('accreditation_status').notNull().default('none'),
+  totalInvested: text('total_invested').notNull().default('0'),
+  verifiedAt: text('verified_at'),
+  accreditationDocs: text('accreditation_docs').default('[]'),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const exitWindowSchedules = sqliteTable('exit_window_schedules', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull(),
+  frequency: text('frequency').notNull(),
+  windowDurationDays: integer('window_duration_days').notNull(),
+  maxRedemptionPercent: text('max_redemption_percent').notNull(),
+  noticePeriodDays: integer('notice_period_days').notNull(),
+  nextWindowOpens: text('next_window_opens').notNull(),
+  active: integer('active').notNull().default(1),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const exitWindows = sqliteTable('exit_windows', {
+  id: text('id').primaryKey(),
+  scheduleId: text('schedule_id').notNull(),
+  assetId: text('asset_id').notNull(),
+  opensAt: text('opens_at').notNull(),
+  closesAt: text('closes_at').notNull(),
+  status: text('status').notNull().default('scheduled'),
+  maxRedemptionPercent: text('max_redemption_percent').notNull(),
+  totalRedeemed: text('total_redeemed').notNull().default('0'),
+  totalRequested: text('total_requested').notNull().default('0'),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const exitRedemptions = sqliteTable('exit_redemptions', {
+  id: text('id').primaryKey(),
+  windowId: text('window_id').notNull(),
+  investorId: text('investor_id').notNull(),
+  amount: text('amount').notNull(),
+  status: text('status').notNull().default('pending'),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const secondaryListings = sqliteTable('secondary_listings', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull(),
+  sellerId: text('seller_id').notNull(),
+  sellerWallet: text('seller_wallet').notNull(),
+  tokenAmount: text('token_amount').notNull(),
+  pricePerToken: text('price_per_token').notNull(),
+  currency: text('currency').notNull().default('AED'),
+  status: text('status').notNull().default('active'),
+  buyerId: text('buyer_id'),
+  listedAt: text('listed_at').$defaultFn(() => new Date().toISOString()),
+  soldAt: text('sold_at'),
+  expiresAt: text('expires_at'),
+});
+
 // Type exports
 export type Party = typeof parties.$inferSelect;
 export type NewParty = typeof parties.$inferInsert;
@@ -886,3 +969,17 @@ export type Allocation = typeof allocations.$inferSelect;
 export type NewAllocation = typeof allocations.$inferInsert;
 export type BuybackRequest = typeof buybackRequests.$inferSelect;
 export type NewBuybackRequest = typeof buybackRequests.$inferInsert;
+
+// Real Estate Phase 2 Types
+export type InvestorPlanRow = typeof investorPlans.$inferSelect;
+export type NewInvestorPlanRow = typeof investorPlans.$inferInsert;
+export type InvestorTierAssignment = typeof investorTierAssignments.$inferSelect;
+export type NewInvestorTierAssignment = typeof investorTierAssignments.$inferInsert;
+export type ExitWindowScheduleRow = typeof exitWindowSchedules.$inferSelect;
+export type NewExitWindowScheduleRow = typeof exitWindowSchedules.$inferInsert;
+export type ExitWindowRow = typeof exitWindows.$inferSelect;
+export type NewExitWindowRow = typeof exitWindows.$inferInsert;
+export type ExitRedemptionRow = typeof exitRedemptions.$inferSelect;
+export type NewExitRedemptionRow = typeof exitRedemptions.$inferInsert;
+export type SecondaryListingRow = typeof secondaryListings.$inferSelect;
+export type NewSecondaryListingRow = typeof secondaryListings.$inferInsert;

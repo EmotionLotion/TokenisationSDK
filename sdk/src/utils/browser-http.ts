@@ -19,6 +19,8 @@ export interface BrowserHttpClientConfig {
   baseUrl: string;
   /** Optional publishable key for public endpoints */
   publishableKey?: string;
+  /** Optional API key for server-side auth (X-API-Key header) */
+  apiKey?: string;
   /** Callback to retrieve the current JWT access token */
   getAccessToken: () => string | null;
   /** Called on 401 responses */
@@ -83,6 +85,7 @@ export class BrowserHttpClient {
   private config: {
     baseUrl: string;
     publishableKey?: string;
+    apiKey?: string;
     getAccessToken: () => string | null;
     onAuthError?: () => void;
     orgId?: string;
@@ -98,6 +101,7 @@ export class BrowserHttpClient {
     this.config = {
       baseUrl: config.baseUrl,
       publishableKey: config.publishableKey,
+      apiKey: config.apiKey,
       getAccessToken: config.getAccessToken,
       onAuthError: config.onAuthError,
       orgId: config.orgId,
@@ -255,6 +259,11 @@ export class BrowserHttpClient {
     const token = this.config.getAccessToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // API key for server auth (dev mode bypass or production)
+    if (this.config.apiKey) {
+      headers['X-API-Key'] = this.config.apiKey;
     }
 
     // Publishable key for public endpoints

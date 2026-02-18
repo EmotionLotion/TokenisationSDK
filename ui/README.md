@@ -1,73 +1,94 @@
-# React + TypeScript + Vite
+# Tokenisation Admin Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React-based admin dashboard for managing tokenized assets, compliance policies, investor identities, and platform operations.
 
-Currently, two official plugins are available:
+## Quick Start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm dev
+# Dashboard runs at http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Requires the API server running at `http://localhost:3001`. See [`server/README.md`](../server/README.md).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Tech Stack
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- **React 18** + TypeScript
+- **Vite** for bundling and HMR
+- **Tailwind CSS** for styling
+- **Zustand** for state management
+
+## Pages
+
+| Page | Description |
+|------|-------------|
+| **Ahoy Dashboard** | Main overview with platform metrics and activity |
+| **Dashboard** | Asset listing with detail views and cap tables |
+| **Policy Studio** | Create and manage compliance policies |
+| **Identities** | Investor identity management and KYC status |
+| **Transactions** | Transaction history and transfer monitoring |
+| **Oracles** | Chainlink oracle feed status and configuration |
+| **Payouts** | Distribution scheduling and dividend management |
+| **Developers** | API keys, webhooks, and integration tools |
+| **Parties** | Party management with KYC verification |
+| **Demo Wizard** | Guided tokenization flow for demonstrations |
+| **Institutional Demo** | Institutional-grade compliance workflow |
+| **UI Kit Demo** | Component library showcase |
+
+## Vertical Demo Apps
+
+The dashboard includes 18 vertical-specific demo applications:
+
+- **RealEstateApp** — Property tokenization with DLD integration
+- **FlyPlusApp** / **AirlineApp** — Airline ticket NFT management
+- **HotelApp** — Hotel reservation tokenization
+- **CarRentalApp** — Car rental NFT lifecycle
+- **ConcertApp** — Concert ticket management
+- **EquityApp** — Securities tokenization
+- **DePINPage** — Decentralized physical infrastructure
+- **PredictionMarketsPage** — Prediction market tokens
+- **ProofOfFundsPage** — Reserve verification
+- And more (Comet, GTS, H2O, IITS, Nexus, Trouve, TravelShield, AMS, Showcase)
+
+## Project Structure
+
 ```
+ui/
+├── src/
+│   ├── App.tsx              # Main app with tab routing
+│   ├── components/          # Page components
+│   │   ├── AhoyDashboard.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── PolicyStudio.tsx
+│   │   ├── IdentitiesPage.tsx
+│   │   ├── TransactionsPage.tsx
+│   │   ├── OraclesPage.tsx
+│   │   ├── PayoutsPage.tsx
+│   │   ├── DevelopersPage.tsx
+│   │   ├── DemoWizard.tsx
+│   │   └── ...
+│   ├── pages/               # Vertical demo apps
+│   ├── store.ts             # Legacy Zustand store
+│   └── core/store.ts        # Canonical Zustand store
+├── vite.config.ts
+├── tailwind.config.js
+└── package.json
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:3001` | API server URL |
+
+## Build
+
+```bash
+pnpm build    # Production build to dist/
+pnpm preview  # Preview production build
+```
+
+## License
+
+MIT

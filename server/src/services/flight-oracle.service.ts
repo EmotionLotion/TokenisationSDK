@@ -170,6 +170,9 @@ export async function init(): Promise<void> {
       ON flight_status_cache (flight_number, departure_date)
   `);
 
+  // Refund table for automatic refund processing (D5)
+  await ensureRefundTables();
+
   _initialised = true;
   logger.info('FlightOracle: tables ready');
 }
@@ -398,10 +401,10 @@ export async function checkUpcomingFlights(): Promise<{ checked: number }> {
   for (const watch of watches) {
     try {
       await triggerCREFetch(
-        watch.flight_number ?? (watch as any).flightNumber,
-        watch.departure_date ?? (watch as any).departureDate,
-        watch.callback_url ?? (watch as any).callbackUrl ?? undefined,
-        watch.ticket_id ?? (watch as any).ticketId ?? undefined,
+        watch.flightNumber,
+        watch.departureDate,
+        watch.callbackUrl ?? undefined,
+        watch.ticketId ?? undefined,
       );
       checked++;
 
@@ -413,7 +416,7 @@ export async function checkUpcomingFlights(): Promise<{ checked: number }> {
     } catch (err) {
       logger.error('FlightOracle: failed to poll flight', {
         watchId: watch.id,
-        flightNumber: watch.flight_number,
+        flightNumber: watch.flightNumber,
         error: (err as Error).message,
       });
     }
@@ -718,6 +721,26 @@ async function handleFlightEvent(
       });
     }
   }
+
+  // Trigger automatic refunds for airline-initiated cancellations (D5)
+  if (status === 'cancelled') {
+    const orgIdMap: Record<string, boolean> = {};
+    for (const w of watches) {
+      const oid = (w as any).org_id ?? (w as any).orgId;
+      if (oid) orgIdMap[oid] = true;
+    }
+    for (const orgId of Object.keys(orgIdMap)) {
+      try {
+        await processAutomaticRefunds(flightNumber, departureDate, orgId);
+      } catch (err) {
+        logger.error('FlightOracle: automatic refund processing failed', {
+          flightNumber,
+          orgId,
+          error: (err as Error).message,
+        });
+      }
+    }
+  }
 }
 
 /**
@@ -734,5 +757,197 @@ function mapWatchRow(row: any): FlightWatch {
     ticketId: row.ticket_id ?? row.ticketId ?? null,
     callbackUrl: row.callback_url ?? row.callbackUrl ?? null,
     createdAt: row.created_at ?? row.createdAt,
+  };
+}
+
+// ============================================================================
+// Refund Processing (D5) — Automatic refunds on flight cancellation
+// ============================================================================
+
+export type RefundStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface TicketRefund {
+  id: string;
+  orgId: string;
+  ticketId: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  status: RefundStatus;
+  paymentMethod: string | null;
+  externalRefundId: string | null;
+  initiatedAt: string;
+  completedAt: string | null;
+}
+
+/**
+ * Ensure the ticket_refunds table exists.
+ */
+export async function ensureRefundTables(): Promise<void> {
+  await rawQuery(`
+    CREATE TABLE IF NOT EXISTS ticket_refunds (
+      id                 TEXT PRIMARY KEY,
+      org_id             TEXT NOT NULL,
+      ticket_id          TEXT NOT NULL,
+      amount             REAL NOT NULL,
+      currency           TEXT NOT NULL DEFAULT 'USD',
+      reason             TEXT NOT NULL,
+      status             TEXT NOT NULL DEFAULT 'PENDING',
+      payment_method     TEXT,
+      external_refund_id TEXT,
+      initiated_at       TEXT NOT NULL,
+      completed_at       TEXT
+    )
+  `);
+
+  await rawQuery(`
+    CREATE INDEX IF NOT EXISTS idx_tr_org_ticket
+      ON ticket_refunds (org_id, ticket_id)
+  `);
+
+  await rawQuery(`
+    CREATE INDEX IF NOT EXISTS idx_tr_status
+      ON ticket_refunds (org_id, status)
+  `);
+}
+
+/**
+ * Process automatic refunds for all tickets on a cancelled flight.
+ * Called after ticket statuses have been transitioned to CANCELLED.
+ * Airline-initiated cancellation = 100% refund.
+ */
+export async function processAutomaticRefunds(
+  flightNumber: string,
+  departureDate: string,
+  orgId: string,
+): Promise<{ refundsCreated: number }> {
+  await init();
+
+  // Find all cancelled tickets for this flight with a price paid
+  const tickets = await rawQuery<any>(
+    `SELECT t.id, t.price_paid, t.currency, t.payment_method
+     FROM airline_tickets t
+     WHERE t.org_id = ?
+       AND t.flight_number = ?
+       AND t.departure_date = ?
+       AND t.status = 'CANCELLED'
+       AND COALESCE(t.price_paid, 0) > 0`,
+    [orgId, flightNumber, departureDate],
+  ).catch(() => [] as any[]);
+
+  if (tickets.length === 0) {
+    logger.info('FlightOracle: no refundable tickets found', { flightNumber, departureDate, orgId });
+    return { refundsCreated: 0 };
+  }
+
+  let refundsCreated = 0;
+  const now = new Date().toISOString();
+
+  for (const ticket of tickets) {
+    const ticketId = ticket.id;
+    const pricePaid = ticket.price_paid ?? ticket.pricePaid ?? 0;
+    const currency = ticket.currency ?? 'USD';
+    const paymentMethod = ticket.payment_method ?? ticket.paymentMethod ?? null;
+
+    // Skip if a refund already exists for this ticket
+    const existing = await rawQuery<any>(
+      `SELECT id FROM ticket_refunds WHERE org_id = ? AND ticket_id = ? LIMIT 1`,
+      [orgId, ticketId],
+    );
+    if (existing.length > 0) {
+      logger.debug('FlightOracle: refund already exists for ticket', { ticketId });
+      continue;
+    }
+
+    // 100% refund for airline-initiated cancellation
+    const refundAmount = pricePaid;
+    const refundId = randomUUID();
+
+    await rawQuery(
+      `INSERT INTO ticket_refunds
+         (id, org_id, ticket_id, amount, currency, reason, status, payment_method, external_refund_id, initiated_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, NULL, ?, NULL)`,
+      [refundId, orgId, ticketId, refundAmount, currency, 'airline_cancellation', paymentMethod, now],
+    );
+
+    refundsCreated++;
+    logger.info('FlightOracle: refund created', {
+      refundId,
+      ticketId,
+      amount: refundAmount,
+      currency,
+    });
+  }
+
+  logger.info('FlightOracle: automatic refunds processed', {
+    flightNumber,
+    departureDate,
+    orgId,
+    refundsCreated,
+  });
+
+  return { refundsCreated };
+}
+
+/**
+ * Check the status of a specific refund.
+ */
+export async function getRefundStatus(
+  orgId: string,
+  refundId: string,
+): Promise<TicketRefund | null> {
+  await init();
+
+  const rows = await rawQuery<any>(
+    `SELECT * FROM ticket_refunds WHERE org_id = ? AND id = ? LIMIT 1`,
+    [orgId, refundId],
+  );
+
+  if (rows.length === 0) return null;
+
+  return mapRefundRow(rows[0]);
+}
+
+/**
+ * Mark a refund as completed with an external payment reference.
+ * Transitions status from PENDING/PROCESSING to COMPLETED.
+ */
+export async function processRefundSettlement(
+  orgId: string,
+  refundId: string,
+  externalId: string,
+): Promise<TicketRefund | null> {
+  await init();
+
+  const now = new Date().toISOString();
+
+  await rawQuery(
+    `UPDATE ticket_refunds
+     SET status = 'COMPLETED',
+         external_refund_id = ?,
+         completed_at = ?
+     WHERE org_id = ? AND id = ? AND status IN ('PENDING', 'PROCESSING')`,
+    [externalId, now, orgId, refundId],
+  );
+
+  return getRefundStatus(orgId, refundId);
+}
+
+/**
+ * Map a raw DB row to a TicketRefund object.
+ */
+function mapRefundRow(row: any): TicketRefund {
+  return {
+    id: row.id,
+    orgId: row.org_id ?? row.orgId,
+    ticketId: row.ticket_id ?? row.ticketId,
+    amount: row.amount,
+    currency: row.currency ?? 'USD',
+    reason: row.reason,
+    status: (row.status as RefundStatus) ?? 'PENDING',
+    paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
+    externalRefundId: row.external_refund_id ?? row.externalRefundId ?? null,
+    initiatedAt: row.initiated_at ?? row.initiatedAt,
+    completedAt: row.completed_at ?? row.completedAt ?? null,
   };
 }

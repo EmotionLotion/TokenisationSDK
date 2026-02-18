@@ -1,36 +1,48 @@
-import { useState, useEffect } from 'react';
-import { Terminal, X, ChevronRight, Copy, Check } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Terminal, ChevronRight, Copy, Check } from 'lucide-react';
 import { sdkStore } from '../store';
 
 export function SdkInsightPanel() {
     const [isOpen, setIsOpen] = useState(false);
     const [logs, setLogs] = useState<{ id: string; method: string; params: any; timestamp: string }[]>([]);
     const [showCopied, setShowCopied] = useState<string | null>(null);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const hasAutoOpenedRef = useRef(false);
+    const prevLogCountRef = useRef(0);
 
     useEffect(() => {
         const loadLogs = () => {
             const allLogs = sdkStore.getSdkLogs();
-            setLogs(allLogs);
-            // Auto-open on new log if it's recent
-            if (allLogs.length > 0) {
-                const uniqueId = allLogs[0].id;
-                // logic to peek could go here, but let's keep it manual or persistent for now
+            const newCount = allLogs.length - prevLogCountRef.current;
+
+            if (newCount > 0) {
+                // Auto-open once on first SDK event of session
+                if (!hasAutoOpenedRef.current && allLogs.length > 0) {
+                    setIsOpen(true);
+                    hasAutoOpenedRef.current = true;
+                    setUnreadCount(0);
+                } else if (!isOpen) {
+                    // Panel is collapsed: accumulate unread count
+                    setUnreadCount(prev => prev + newCount);
+                }
             }
+
+            prevLogCountRef.current = allLogs.length;
+            setLogs(allLogs);
         };
 
         loadLogs();
         const unsubscribe = sdkStore.subscribe(loadLogs);
         return () => unsubscribe();
-    }, []);
+    }, [isOpen]);
 
-    // Effect to auto-open on new logs (optional, might be annoying, let's just show a badge/pulse)
-    useEffect(() => {
-        if (logs.length > 0) {
-            setIsOpen(true);
-            const timer = setTimeout(() => setIsOpen(false), 5000); // Auto close after 5s
-            return () => clearTimeout(timer);
+    const handleToggle = () => {
+        const willOpen = !isOpen;
+        setIsOpen(willOpen);
+        if (willOpen) {
+            setUnreadCount(0);
         }
-    }, [logs.length]); // Dependencies could be better but this triggers on count change
+    };
 
     const copyToClipboard = (text: string, id: string) => {
         navigator.clipboard.writeText(text);
@@ -46,11 +58,16 @@ export function SdkInsightPanel() {
                 {/* Header */}
                 <div
                     className="flex items-center justify-between p-3 bg-white/5 cursor-pointer border-b border-white/10"
-                    onClick={() => setIsOpen(!isOpen)}
+                    onClick={handleToggle}
                 >
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center border border-white/10">
+                        <div className="relative w-8 h-8 rounded-lg bg-black flex items-center justify-center border border-white/10">
                             <Terminal className="w-4 h-4 text-green-400" />
+                            {!isOpen && unreadCount > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-[#F8B032] text-black text-[10px] font-bold rounded-full">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                            )}
                         </div>
                         <div>
                             <p className="text-sm font-bold text-white">SDK Insight</p>

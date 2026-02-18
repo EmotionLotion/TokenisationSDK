@@ -79,7 +79,7 @@ export function CapTable({
 
                 // Get all parties and their balances
                 const partiesResponse = await api.parties.list();
-                const parties = partiesResponse.parties || [];
+                const parties = partiesResponse.data || [];
                 const holderData: Holder[] = [];
 
                 for (const party of parties.slice(0, maxHolders * 2)) {

@@ -125,20 +125,6 @@ const translations: TranslationMap = {
     totalSupply: 'إجمالي العرض',
     export: 'تصدير جدول الرسملة',
   },
-
-  boarding: {
-    title: 'بطاقة الصعود',
-    flight: 'الرحلة',
-    gate: 'البوابة',
-    seat: 'المقعد',
-    class: 'الدرجة',
-    passenger: 'المسافر',
-    download: 'تحميل بطاقة الصعود',
-    departure: 'المغادرة',
-    arrival: 'الوصول',
-    boardingTime: 'وقت الصعود',
-    terminal: 'المبنى',
-  },
 };
 
 export default {

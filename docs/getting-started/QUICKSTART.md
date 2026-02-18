@@ -1,312 +1,221 @@
-# Tokenisation SDK - Quick Start Guide
-
-Get your first asset tokenized and transfer tokens in minutes.
-
+---
+sidebar_position: 2
+title: Quickstart
 ---
 
-## Prerequisites
+# 5-Minute Quickstart
 
-- Node.js 18+
-- npm 9+
-- Running API server (see below)
+This guide takes you from zero to a working tokenised asset in under five minutes. You will install the SDK, create an organisation, onboard an investor, create an asset, deploy a token, and execute a transfer.
 
----
-
-## 1. Start the API Server
+## Step 1: Install the SDK
 
 ```bash
-cd server
-cp .env.example .env  # Copy environment template
-npm run dev           # Starts on http://localhost:3001
+pnpm add @tokenisation/sdk
 ```
 
-The server uses SQLite by default for development - no database setup required.
+## Step 2: Create a Client
 
----
-
-## 2. Install the SDK
-
-```bash
-npm install @tokenisation/sdk
-```
-
----
-
-## 3. Initialize the API Client
+The `ApiClient` provides a Stripe-like interface for all platform operations. Initialise it with your API key:
 
 ```typescript
-import { ApiClient, RightType } from '@tokenisation/sdk';
+import { ApiClient } from '@tokenisation/sdk';
 
-// For development with AUTH_DEV_MODE=true
 const client = new ApiClient({
-  baseUrl: 'http://localhost:3001',
-  apiKey: 'sk_dev_test', // Any key works in dev mode
-});
-
-// For production
-const prodClient = new ApiClient({
-  apiKey: 'sk_live_your-actual-api-key',
-  baseUrl: 'https://api.your-platform.com',
+  apiKey: 'sk_test_xxxxx',        // Your API key
+  baseUrl: 'http://localhost:3001', // API server URL
 });
 ```
 
----
+:::tip
+In sandbox mode, use API keys prefixed with `sk_test_`. For production, use keys prefixed with `sk_live_`.
+:::
 
-## 4. Create a Project
+## Step 3: Create an Organisation and Project
 
-Projects organize your tokenization work:
+Every tokenised asset belongs to a project, which belongs to an organisation.
 
 ```typescript
+// Create a project
 const project = await client.projects.create({
-  name: 'Dubai Marina Real Estate Fund',
-  description: 'Tokenized luxury real estate portfolio',
-  jurisdiction: 'AE',
-  assetType: 'real_estate',
+  name: 'Marina Tower Fund',
+  jurisdiction: 'DUBAI',
+  assetType: 'REAL_ESTATE',
 });
 
 console.log('Project created:', project.id);
 ```
 
----
+## Step 4: Onboard an Investor
 
-## 5. Create an Asset
+Before an investor can hold tokens, they must be registered and pass compliance checks.
 
-Assets represent the underlying tokenizable item:
+```typescript
+const investor = await client.investors.create({
+  email: 'alice@example.com',
+  jurisdiction: 'AE',
+  type: 'INDIVIDUAL',
+});
+
+console.log('Investor created:', investor.id);
+
+// In sandbox mode with ENABLE_MOCK_KYC=true, KYC is auto-approved.
+// In production, the investor completes KYC via the KYC flow.
+```
+
+## Step 5: Create an Asset
+
+Assets represent the real-world item being tokenised -- a property, a ticket, a compute resource, and so on.
 
 ```typescript
 const asset = await client.assets.create({
-  name: 'Marina Heights - Unit 1501',
-  description: 'Luxury waterfront apartment',
-  rightType: RightType.OWNERSHIP,
+  name: 'Dubai Marina Apartment 42B',
+  rightType: 'OWNERSHIP',
   jurisdiction: {
     countryCode: 'AE',
-    regulatoryFramework: 'DIFC',
+    regulatoryFramework: 'VARA',
+    accreditedOnly: false,
+    blockedJurisdictions: ['US', 'KP'],
   },
-  projectId: project.id,
+  transferabilityRules: {
+    mode: 'COMPLIANCE_GATED',
+    requireKyc: true,
+    lockupPeriodSeconds: 0,
+  },
   metadata: {
-    propertyType: 'RESIDENTIAL',
-    bedrooms: 3,
-    sqft: 2500,
-    valuation: 5000000,
+    propertyType: 'residential',
+    area: 1200,
+    areaUnit: 'sqft',
   },
 });
 
-// Activate the asset
-await client.assets.activate(asset.id);
-console.log('Asset active:', asset.id);
+console.log('Asset created:', asset.id, 'State:', asset.state);
+// State: DRAFT
 ```
 
----
+## Step 6: Deploy a Token
 
-## 6. Onboard Investors
-
-Create investors and complete KYC:
+Create a security token backed by your asset and deploy it on-chain.
 
 ```typescript
-// Create an investor
-const investor = await client.investors.create({
-  email: 'investor@example.com',
-  name: 'John Doe',
-  jurisdiction: 'US',
-  type: 'individual',
-  accredited: true,
-});
-
-// Add their wallet
-const wallet = await client.investors.addWallet(investor.id, {
-  address: '0x1234567890abcdef1234567890abcdef12345678',
-  chainId: 8453, // Base
-  walletType: 'eoa',
-});
-
-// Complete KYC (in production, integrate with a KYC provider)
-await client.investors.approveKyc(investor.id, 'Manual verification');
-
-// Activate the investor
-await client.investors.activate(investor.id);
-console.log('Investor active:', investor.id);
-```
-
----
-
-## 7. Create and Deploy a Token
-
-```typescript
-// Create token definition
+// Create the token record
 const token = await client.tokens.create({
-  name: 'Marina Heights Token',
-  symbol: 'MHT',
-  decimals: 18,
-  maxSupply: '1000000000000000000000000', // 1M tokens
-  chainId: 8453, // Base
-  assetId: asset.id,
+  name: 'Marina Apartment Token',
+  symbol: 'MAT',
+  chainId: 137,          // Polygon mainnet (use 31337 for local Hardhat)
   projectId: project.id,
+  standard: 'ERC3643',   // T-REX compliant security token
+  maxSupply: '1000000',
 });
 
-// Deploy to blockchain (uses UUPS upgradeable proxy)
+// Deploy to the blockchain
 const deployed = await client.tokens.deploy(token.id);
-console.log('Token deployed:', deployed.contractAddress);
+
+console.log('Token deployed at:', deployed.contractAddress);
 ```
 
----
+## Step 7: Issue Tokens to the Investor
 
-## 8. Issue Tokens to Investors
+Once the token is deployed and the investor has passed KYC, you can issue tokens.
 
 ```typescript
-// IMPORTANT: idempotencyKey is REQUIRED to prevent duplicate issuances
-const issuance = await client.tokens.issue(token.id, {
-  investorId: investor.id,
-  walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
-  amount: '100000000000000000000', // 100 tokens
-  idempotencyKey: 'issue-investor1-batch1', // Must be unique
+const issuance = await client.transfers.create({
+  tokenId: token.id,
+  from: 'TREASURY',
+  to: investor.id,
+  amount: '5000',
+  type: 'ISSUANCE',
 });
 
-console.log('Issuance status:', issuance.status);
-// Status: pending → submitted → confirmed
+console.log('Issuance:', issuance.id, 'Status:', issuance.status);
 ```
 
----
+## Step 8: Execute a Transfer
 
-## 9. Transfer Tokens
+Transfer tokens between two verified investors. The compliance engine automatically validates KYC status, jurisdiction restrictions, lockup periods, and holder limits.
 
 ```typescript
-// Compliance checks happen automatically
-// IMPORTANT: idempotencyKey is REQUIRED
+// Create a second investor
+const bob = await client.investors.create({
+  email: 'bob@example.com',
+  jurisdiction: 'GB',
+  type: 'INDIVIDUAL',
+});
+
+// Transfer tokens from Alice to Bob
 const transfer = await client.transfers.create({
   tokenId: token.id,
-  fromWallet: '0x1234567890abcdef1234567890abcdef12345678',
-  toWallet: '0xabcdef1234567890abcdef1234567890abcdef12',
-  amount: '10000000000000000000', // 10 tokens
-  idempotencyKey: 'transfer-abc-123', // Must be unique
+  from: investor.id,
+  to: bob.id,
+  amount: '1000',
+  type: 'TRANSFER',
 });
 
-// Check transfer status
-const status = await client.transfers.getStatus(transfer.id);
-console.log('Transfer status:', status.status);
-console.log('Current step:', status.currentStep);
+console.log('Transfer:', transfer.id, 'Status:', transfer.status);
+// The transfer goes through the compliance saga:
+// INITIATED -> COMPLIANCE_CHECK -> APPROVED -> SUBMITTED -> CONFIRMED -> SETTLED
 ```
 
----
+## Full Example
 
-## 10. View Cap Table
-
-```typescript
-const capTable = await client.tokens.getCapTable(token.id);
-
-console.log('Total Supply:', capTable.totalSupply);
-console.log('Holders:');
-for (const holder of capTable.holders) {
-  console.log(`  ${holder.walletAddress}: ${holder.balance} (${holder.percentage}%)`);
-}
-```
-
----
-
-## Complete Example
+Here is the complete script:
 
 ```typescript
-import { ApiClient, RightType } from '@tokenisation/sdk';
+import { ApiClient } from '@tokenisation/sdk';
 
 async function main() {
   const client = new ApiClient({
+    apiKey: 'sk_test_xxxxx',
     baseUrl: 'http://localhost:3001',
-    apiKey: 'sk_dev_test',
   });
 
-  // Create project
+  // 1. Create project
   const project = await client.projects.create({
-    name: 'My First Tokenization',
-    jurisdiction: 'US',
+    name: 'Marina Tower Fund',
+    jurisdiction: 'DUBAI',
+    assetType: 'REAL_ESTATE',
   });
 
-  // Create asset
+  // 2. Onboard investors
+  const alice = await client.investors.create({
+    email: 'alice@example.com', jurisdiction: 'AE', type: 'INDIVIDUAL',
+  });
+  const bob = await client.investors.create({
+    email: 'bob@example.com', jurisdiction: 'GB', type: 'INDIVIDUAL',
+  });
+
+  // 3. Create asset
   const asset = await client.assets.create({
-    name: 'Test Asset',
-    rightType: RightType.OWNERSHIP,
-    jurisdiction: { countryCode: 'US' },
-    projectId: project.id,
+    name: 'Dubai Marina Apartment 42B',
+    rightType: 'OWNERSHIP',
+    jurisdiction: { countryCode: 'AE', blockedJurisdictions: ['US', 'KP'] },
+    transferabilityRules: { mode: 'COMPLIANCE_GATED', requireKyc: true },
   });
-  await client.assets.activate(asset.id);
 
-  // Create investor
-  const investor = await client.investors.create({
-    email: 'test@example.com',
-    jurisdiction: 'US',
-  });
-  await client.investors.addWallet(investor.id, {
-    address: '0x1234567890abcdef1234567890abcdef12345678',
-    chainId: 8453,
-  });
-  await client.investors.approveKyc(investor.id);
-  await client.investors.activate(investor.id);
-
-  // Create and deploy token
+  // 4. Deploy token
   const token = await client.tokens.create({
-    name: 'Test Token',
-    symbol: 'TST',
-    chainId: 8453,
-    assetId: asset.id,
+    name: 'Marina Apartment Token', symbol: 'MAT',
+    chainId: 31337, projectId: project.id, standard: 'ERC3643',
   });
   await client.tokens.deploy(token.id);
 
-  // Issue tokens
-  await client.tokens.issue(token.id, {
-    investorId: investor.id,
-    walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
-    amount: '1000000000000000000000',
-    idempotencyKey: `issue-${Date.now()}`,
+  // 5. Issue to Alice and transfer to Bob
+  await client.transfers.create({
+    tokenId: token.id, from: 'TREASURY', to: alice.id,
+    amount: '5000', type: 'ISSUANCE',
+  });
+  await client.transfers.create({
+    tokenId: token.id, from: alice.id, to: bob.id,
+    amount: '1000', type: 'TRANSFER',
   });
 
-  // Check cap table
-  const capTable = await client.tokens.getCapTable(token.id);
-  console.log('Cap table:', capTable);
+  console.log('Done! Alice holds 4000, Bob holds 1000.');
 }
 
 main().catch(console.error);
 ```
 
----
-
-## Asset Types (RightType)
-
-| Type | Use Case | Example |
-|------|----------|---------|
-| `OWNERSHIP` | Property, assets | Real estate, vehicles, art |
-| `ACCESS` | Permissions | Memberships, tickets, licenses |
-| `DEBT` | Loans, bonds | Corporate bonds, loan participations |
-| `EQUITY` | Shares, ownership stakes | Company shares, fund units |
-| `REVENUE` | Revenue sharing | Royalties, profit participations |
-| `COMMODITY` | Physical goods | Gold, oil, agricultural products |
-
----
-
-## Transfer Lifecycle
-
-```
-created → prechecked → approved → signing → submitted → confirmed → reconciled → settled
-```
-
-Compliance checks happen at the `prechecked` stage. If any check fails, the transfer is rejected.
-
----
-
-## Production Checklist
-
-Before going to production:
-
-- [ ] Set `AUTH_DEV_MODE=false` in server environment
-- [ ] Set `JWT_SECRET` to a cryptographically random 32+ character string
-- [ ] Configure `REDIS_URL` for distributed rate limiting
-- [ ] Set `NODE_ENV=production`
-- [ ] Configure proper RPC URLs for your target chains
-- [ ] Deploy contracts using multi-sig governance
-- [ ] Test compliance policies thoroughly
-
----
-
 ## Next Steps
 
-- Explore the [SDK modules](../../sdk/src/modules/) for full API details
-- Review [server configuration](../../server/.env.example) for all options
-- Check [contract deployment](../../contracts/script/DeployUpgradeable.s.sol) for blockchain setup
-- Set up [compliance policies](../../sdk/src/modules/compliance.ts) for your jurisdiction
+- [First Project Tutorial](./FIRST_PROJECT.md) -- A comprehensive walkthrough with documents, KYC, and dividends
+- [Core Concepts](../CONCEPTS.md) -- Understand the asset lifecycle, compliance engine, and transfer saga
+- [Architecture Overview](../architecture/OVERVIEW.md) -- How the platform is structured

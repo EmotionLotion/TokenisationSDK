@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as transferService from '../services/transfer.service.js';
 import * as relayerService from '../services/relayer.service.js';
+import * as batchTransferService from '../services/batch-transfer.service.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
 import { idempotencyMiddleware } from '../services/idempotency.service.js';
@@ -495,6 +496,38 @@ transferRouter.post('/estimate-gas', apiKeyMiddleware, async (req: ApiKeyRequest
       estimatedCost: gasEstimate.estimatedCost,
       estimatedCostUSD: gasEstimate.estimatedCostUSD,
     });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+    } else {
+      next(error);
+    }
+  }
+});
+
+// ============================================================================
+// Batch Transfer (must be BEFORE /:id catch-all)
+// ============================================================================
+
+const batchTransferSchema = z.object({
+  transfers: z.array(z.object({
+    tokenId: z.string().min(1),
+    fromWallet: z.string().min(1),
+    toWallet: z.string().min(1),
+    amount: z.string().min(1),
+    metadata: z.record(z.unknown()).optional(),
+  })).min(1).max(100),
+});
+
+transferRouter.post('/batch', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) {
+      throw new ValidationError('API key required');
+    }
+
+    const { transfers } = batchTransferSchema.parse(req.body);
+    const result = await batchTransferService.createBatchTransfer(req.apiKey.orgId, transfers);
+    res.status(201).json(result);
   } catch (error) {
     if (error instanceof z.ZodError) {
       next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));

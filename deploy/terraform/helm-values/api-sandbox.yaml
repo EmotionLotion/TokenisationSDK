@@ -1,0 +1,100 @@
+# =============================================================================
+# AHOY API Server - Sandbox Helm Values
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/emotionlotion/ahoy-api
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 3001
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization, X-API-Key, Idempotency-Key"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+  hosts:
+    - host: sandbox.api.ahoy.fund
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: sandbox-api-tls
+      hosts:
+        - sandbox.api.ahoy.fund
+
+env:
+  NODE_ENV: sandbox
+  PORT: "3001"
+  DB_MODE: postgres
+  AUTH_DEV_MODE: "false"
+  ENABLE_MOCK_KYC: "true"
+  ENABLE_SANDBOX: "true"
+  SANDBOX_RESET_ENABLED: "true"
+  LOG_LEVEL: info
+  CORS_ORIGIN: "*"
+  ENABLED_VERTICALS: "real-estate,airline,hotel,car-rental,concert"
+  API_KEY_PREFIX: "ak_sandbox_"
+
+envFrom:
+  - secretRef:
+      name: ahoy-sandbox-secrets
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3001
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 3001
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  failureThreshold: 3
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - port: 3001
+  egress:
+    - to: []  # Allow all egress in sandbox

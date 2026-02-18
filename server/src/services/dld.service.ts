@@ -356,14 +356,20 @@ export async function verifyTitleOnChain(id: string, orgId: string): Promise<OnC
     const donId = DON_IDS[chainId] || '';
     const deedNumber = title.externalTitleDeedId;
 
+    // Read DLD API configuration from environment (wired via bootstrap config)
+    const dldBaseUrl = process.env.DLD_BASE_URL || 'https://api.dld.gov.ae';
+    const dldApiKey = process.env.DLD_API_KEY || '';
+
     // DLD verification JavaScript source for Chainlink Functions
     const source = `
-      const [deedNumber] = args;
+      const [deedNumber, baseUrl, apiKey] = args;
       let deedData;
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) { headers['Authorization'] = 'Bearer ' + apiKey; }
         const response = await Functions.makeHttpRequest({
-          url: \`https://api.dld.gov.ae/v1/deeds/\${deedNumber}/verify\`,
-          headers: { 'Content-Type': 'application/json' }
+          url: \`\${baseUrl}/v1/deeds/\${deedNumber}/verify\`,
+          headers
         });
         deedData = response.error ? null : response.data;
       } catch (e) { deedData = null; }
@@ -388,7 +394,7 @@ export async function verifyTitleOnChain(id: string, orgId: string): Promise<OnC
       '0x',
       0,
       0n,
-      [deedNumber],
+      [deedNumber, dldBaseUrl, dldApiKey],
       [],
       BigInt(subscriptionId),
       300000,

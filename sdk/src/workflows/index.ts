@@ -24,3 +24,17 @@ export {
   // Errors
   FlowValidationError,
 } from './GoldenPath.js';
+
+export {
+  // Types
+  WorkflowStatus,
+  WorkflowType,
+  WorkflowHandle,
+  WorkflowStep,
+  WorkflowEventType,
+  WorkflowEvent,
+  SettlementReceipt,
+  OnChainAnchor,
+  // Implementation
+  WorkflowOrchestrator,
+} from './WorkflowOrchestrator.js';

@@ -3,8 +3,100 @@ import { db, events } from '../config/database.js';
 import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm';
 import { type AuthRequest } from '../middleware/auth.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import * as eventStreamService from '../services/event-stream.service.js';
+import { logger } from '../middleware/logger.js';
 
 export const eventRouter = Router();
+
+// ---------------------------------------------------------------------------
+// SSE Stream endpoint
+// ---------------------------------------------------------------------------
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+eventRouter.get('/stream', (req: AuthRequest, res, next) => {
+  try {
+    const orgId = req.user?.orgId || (req.headers['x-org-id'] as string);
+    if (!orgId) {
+      res.status(403).json({ error: 'orgId is required for event streaming' });
+      return;
+    }
+
+    // Parse optional filters from query params
+    const assetId = req.query.assetId as string | undefined;
+    const aggregateType = req.query.aggregateType as string | undefined;
+    const eventTypes = req.query.types
+      ? (req.query.types as string).split(',')
+      : undefined;
+
+    // Last-Event-Id for reconnection (sent by browser EventSource automatically)
+    const lastEventId =
+      (req.headers['last-event-id'] as string) || null;
+
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // Disable nginx buffering
+    });
+
+    // Send initial comment to confirm connection
+    res.write(': connected\n\n');
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, HEARTBEAT_INTERVAL_MS);
+
+    // Subscribe to event stream
+    const subscriptionId = eventStreamService.subscribe(
+      { orgId, assetId, aggregateType, eventTypes },
+      (event) => {
+        // SSE format: id, event type, data
+        res.write(`id: ${event.eventId}\n`);
+        res.write(`event: ${event.eventType}\n`);
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      },
+      (error) => {
+        logger.error(`[SSE] Stream error for ${subscriptionId}`, { error });
+        // Send error event to client
+        res.write(`event: error\ndata: ${JSON.stringify({ message: error.message })}\n\n`);
+      },
+      lastEventId,
+    );
+
+    // Replay missed events if reconnecting
+    if (lastEventId) {
+      eventStreamService
+        .replay(
+          { orgId, assetId, aggregateType, eventTypes },
+          lastEventId,
+        )
+        .then((missedEvents) => {
+          for (const event of missedEvents) {
+            res.write(`id: ${event.eventId}\n`);
+            res.write(`event: ${event.eventType}\n`);
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
+        })
+        .catch((err) => {
+          logger.error('[SSE] Replay failed', { error: err });
+        });
+    }
+
+    logger.info(`[SSE] Client connected: ${subscriptionId} (org: ${orgId})`);
+
+    // Clean up on disconnect
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      eventStreamService.unsubscribe(subscriptionId);
+      logger.info(`[SSE] Client disconnected: ${subscriptionId}`);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // List events
 eventRouter.get('/', async (req: AuthRequest, res, next) => {

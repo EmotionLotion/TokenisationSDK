@@ -12,25 +12,28 @@ export interface Flight {
 }
 
 export interface FlightSelectorProps {
+    flights?: Flight[];
     onSelect: (flight: Flight) => void;
     theme?: TokenisationTheme;
 }
 
-const MOCK_FLIGHTS: Flight[] = [
-    { id: '1', airline: 'Dubai Emirates', flightNumber: 'EK202', origin: 'DXB', destination: 'JFK', time: '08:30 AM', price: 'AED 4,500' },
-    { id: '2', airline: 'British Airways', flightNumber: 'BA105', origin: 'DXB', destination: 'LHR', time: '10:15 AM', price: 'AED 3,200' },
-    { id: '3', airline: 'Lufthansa', flightNumber: 'LH631', origin: 'DXB', destination: 'FRA', time: '02:45 PM', price: 'AED 2,800' },
-];
-
-export function FlightSelector({ onSelect, theme = defaultTheme }: FlightSelectorProps) {
+export function FlightSelector({ flights = [], onSelect, theme = defaultTheme }: FlightSelectorProps) {
     const styles = createStyles(theme);
     const [selectedId, setSelectedId] = useState<string>('');
+
+    if (flights.length === 0) {
+        return (
+            <div style={{ ...styles.card, maxWidth: '400px', textAlign: 'center', padding: theme.spacing.xl }}>
+                <div style={{ fontSize: '12px', color: theme.colors.textMuted }}>No flights available</div>
+            </div>
+        );
+    }
 
     return (
         <div style={{ ...styles.card, maxWidth: '400px' }}>
             <label style={styles.label}>Select Flight</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-                {MOCK_FLIGHTS.map((flight) => (
+                {flights.map((flight) => (
                     <div
                         key={flight.id}
                         onClick={() => {

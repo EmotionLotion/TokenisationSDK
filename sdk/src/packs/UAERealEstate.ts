@@ -4,12 +4,16 @@
  * Reference implementation for tokenizing UAE real estate assets.
  * Type: OWNERSHIP Right
  *
+ * This is a backward-compatible wrapper around the unified real-estate.pack.ts.
+ * For new implementations, prefer using dubaiRealEstatePack directly.
+ *
  * Flow: Define (Apartment) -> Verify (Deed) -> Mint (ERC-20 Share) -> Enforce (Whitelist) -> Distribute (Rent)
  */
 
 import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType } from '../SDK.js';
 import { EvidenceType, type RealEstateMetadata } from '../models/index.js';
 import { RuleConditionType } from '../services/ComplianceService.js';
+import { dubaiRealEstatePack } from './real-estate.pack.js';
 
 /**
  * UAE Real Estate Pack configuration
@@ -57,14 +61,41 @@ export interface UAERealEstateConfig {
  * UAE Real Estate Pack
  *
  * Demonstrates the full tokenization flow for UAE real estate.
+ * Uses the unified dubaiRealEstatePack internally for configuration.
+ *
+ * @deprecated For new implementations, use dubaiRealEstatePack from './real-estate.pack.js'
  */
 export class UAERealEstatePack {
   private sdk: TokenisationSDK;
   private config: UAERealEstateConfig;
 
+  /** Access the underlying pack configuration */
+  static readonly pack = dubaiRealEstatePack;
+
   constructor(sdk: TokenisationSDK, config: UAERealEstateConfig) {
     this.sdk = sdk;
     this.config = config;
+  }
+
+  /**
+   * Get the blocked jurisdictions from the unified pack
+   */
+  static getBlockedJurisdictions(): string[] {
+    return dubaiRealEstatePack.defaults.blockedJurisdictions;
+  }
+
+  /**
+   * Get compliance rules from the unified pack
+   */
+  static getComplianceRules() {
+    return dubaiRealEstatePack.complianceRules;
+  }
+
+  /**
+   * Get lifecycle rules from the unified pack
+   */
+  static getLifecycleRules() {
+    return dubaiRealEstatePack.lifecycleRules;
   }
 
   /**
@@ -113,6 +144,7 @@ export class UAERealEstatePack {
       valuationDate: this.config.valuation.date,
     };
 
+    // Use blocked jurisdictions from unified pack
     const asset = await this.sdk.assets.create({
       name: this.config.name,
       description: this.config.description,
@@ -121,7 +153,7 @@ export class UAERealEstatePack {
         countryCode: 'AE',
         regulatoryFramework: 'UAE_VARA',
         accreditedOnly: false,
-        blockedJurisdictions: ['KP', 'IR', 'CU', 'SY'],
+        blockedJurisdictions: dubaiRealEstatePack.defaults.blockedJurisdictions,
       },
       issuerId: issuer.id,
       typedMetadata: metadata,
@@ -159,7 +191,7 @@ export class UAERealEstatePack {
     // Step 7: Activate Asset
     await this.sdk.assets.activate(asset.id, issuer.id);
 
-    // Step 8: Register Compliance Rules
+    // Step 8: Register Compliance Rules (using pack configuration)
     this.sdk.compliance.registerRuleset({
       id: `uae-re-${asset.id.slice(0, 8)}`,
       name: `UAE Real Estate - ${this.config.name}`,
@@ -181,7 +213,7 @@ export class UAERealEstatePack {
         {
           type: RuleConditionType.JURISDICTION_BLACKLIST,
           enabled: true,
-          params: { jurisdictions: ['KP', 'IR', 'CU', 'SY'] },
+          params: { jurisdictions: dubaiRealEstatePack.defaults.blockedJurisdictions },
           severity: 'ERROR',
         },
       ],
@@ -201,6 +233,8 @@ export class UAERealEstatePack {
 
 /**
  * Quick start helper for UAE Real Estate tokenization
+ *
+ * @deprecated For new implementations, use dubaiRealEstatePack from './real-estate.pack.js'
  */
 export async function createUAERealEstateToken(
   sdk: TokenisationSDK,

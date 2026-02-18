@@ -18,6 +18,10 @@ import {
   ComplianceEngine,
   ComplianceAction,
   createChainlinkWiredSDK,
+  CCIDPlugin,
+  CCIDVertical,
+  OracleAggregator,
+  AggregationStrategy,
 } from '@tokenisation/sdk';
 
 import {
@@ -202,6 +206,58 @@ export async function concertTicketsDemo() {
   ═══════════════════════════════════════════════════════════
   `);
 
+  // --- CCID: Anti-scalping identity gate ---
+  logStep(6, 'CCID anti-scalping identity gate');
+
+  const ccid = new CCIDPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    registryAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const identityGate = await ccid.checkIdentity({
+    partyId: fan.id,
+    verticals: [CCIDVertical.ENTERTAINMENT],
+    requiredClearances: ['KYC_VERIFIED', 'UNIQUE_IDENTITY'],
+  });
+
+  if (identityGate.success) {
+    logSuccess(`CCID identity verified: ${identityGate.data.passportId}`);
+    logInfo('Verticals', identityGate.data.verticalsCleared.join(', '));
+    logInfo('Anti-scalping', 'One ticket per verified identity');
+  } else {
+    logWarning(`CCID simulated: ${identityGate.error}`);
+    logInfo('Purpose', 'Prevent ticket scalping via cross-vertical identity verification');
+  }
+
+  // --- OracleAggregator: Multi-source ticket price discovery ---
+  logStep(7, 'Multi-source ticket price discovery via OracleAggregator');
+
+  const aggregator = new OracleAggregator({
+    strategy: AggregationStrategy.MEDIAN,
+    sources: [
+      { name: 'Chainlink ETH/USD', type: 'chainlink', pair: 'ETH/USD', weight: 1 },
+      { name: 'StubHub Market', type: 'custom', endpoint: 'https://api.stubhub.com/v1/pricing', weight: 1 },
+      { name: 'Ticketmaster', type: 'custom', endpoint: 'https://api.ticketmaster.com/v1/pricing', weight: 1 },
+    ],
+    minSources: 2,
+    maxStalenessMs: 600_000,
+  });
+
+  const priceDiscovery = await aggregator.aggregatePrice('CRYPTO_MUSIC_FEST_VIP_2025');
+
+  if (priceDiscovery.success) {
+    logSuccess(`Market price: $${priceDiscovery.data.aggregatedValue}`);
+    logInfo('Strategy', 'MEDIAN');
+    logInfo('Sources', String(priceDiscovery.data.sourcesUsed));
+    logInfo('Fair value check', 'Ticket price within market range');
+  } else {
+    logWarning(`Price aggregation simulated: ${priceDiscovery.error}`);
+    logInfo('Purpose', 'Multi-source fair price discovery to prevent price manipulation');
+  }
+
+  ccid.destroy();
+  aggregator.destroy();
   chainlink.stop();
-  logSuccess('Demo 5 complete — Concert Tickets with Proof of Reserve\n');
+  logSuccess('Demo 5 complete — Concert Tickets with PoR + CCID + OracleAggregator\n');
 }

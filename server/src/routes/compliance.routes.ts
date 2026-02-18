@@ -1,8 +1,10 @@
 import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as complianceService from '../services/compliance.service.js';
+import { screenInvestorSanctions } from '../services/compliance.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { logger } from '../middleware/logger.js';
 
 export const complianceRouter = Router();
 
@@ -318,12 +320,19 @@ async function simulateTransferDecision(input: {
       where: eq(investors.id, fromInvestorId),
     });
     if (fromInvestor) {
+      let sanctionsResult: 'flagged' | 'clear' = 'clear';
+      try {
+        sanctionsResult = await screenInvestorSanctions(fromInvestorId);
+      } catch (err) {
+        logger.warn('Sanctions screening failed in route, defaulting to flagged', { error: err });
+        sanctionsResult = 'flagged';
+      }
       decisionInput.investor = {
         kycStatus: fromInvestor.status === 'active' ? 'approved' : 'pending',
         classification: fromInvestor.classification,
         jurisdiction: fromInvestor.jurisdiction,
         accreditedStatus: fromInvestor.accreditedStatus || 'unknown',
-        sanctions: 'clear',
+        sanctions: sanctionsResult,
       };
     }
   }

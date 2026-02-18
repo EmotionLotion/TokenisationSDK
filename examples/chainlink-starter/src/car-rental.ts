@@ -14,6 +14,10 @@ import {
   PartyRole,
   TransferabilityMode,
   createChainlinkWiredSDK,
+  OracleAggregator,
+  AggregationStrategy,
+  CCIDPlugin,
+  CCIDVertical,
 } from '@tokenisation/sdk';
 
 import {
@@ -175,6 +179,58 @@ export async function carRentalDemo() {
   ═══════════════════════════════════════════════════════════
   `);
 
+  // --- OracleAggregator: Multi-oracle vehicle valuation ---
+  logStep(5, 'Multi-oracle vehicle valuation via OracleAggregator');
+
+  const aggregator = new OracleAggregator({
+    strategy: AggregationStrategy.MEDIAN,
+    sources: [
+      { name: 'Chainlink ETH/USD', type: 'chainlink', pair: 'ETH/USD', weight: 1 },
+      { name: 'KBB Valuation', type: 'custom', endpoint: 'https://api.kbb.com/v1/value', weight: 1 },
+      { name: 'CarGurus Market', type: 'custom', endpoint: 'https://api.cargurus.com/v1/price', weight: 1 },
+    ],
+    minSources: 2,
+    maxStalenessMs: 300_000,
+  });
+
+  const valuation = await aggregator.aggregatePrice('TESLA_MODEL_Y_2024');
+
+  if (valuation.success) {
+    logSuccess(`Vehicle valuation: $${valuation.data.aggregatedValue}`);
+    logInfo('Strategy', 'MEDIAN');
+    logInfo('Sources responding', String(valuation.data.sourcesUsed));
+    logInfo('Confidence', valuation.data.confidence);
+  } else {
+    logWarning(`Aggregation simulated: ${valuation.error}`);
+    logInfo('Purpose', 'Multi-source price discovery for accurate vehicle valuation');
+  }
+
+  // --- CCID: Cross-vertical identity check ---
+  logStep(6, 'CCID cross-vertical identity check (hotel + airline clearance)');
+
+  const ccid = new CCIDPlugin({
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    rpcUrl: BASE_SEPOLIA_RPC_URL,
+    registryAddress: '0x0000000000000000000000000000000000000001',
+  });
+
+  const identityCheck = await ccid.checkIdentity({
+    partyId: renter.id,
+    verticals: [CCIDVertical.CAR_RENTAL, CCIDVertical.HOTEL, CCIDVertical.AIRLINE],
+    requiredClearances: ['KYC_VERIFIED', 'VALID_LICENSE'],
+  });
+
+  if (identityCheck.success) {
+    logSuccess(`CCID: ${identityCheck.data.verticalsCleared.length} vertical clearances`);
+    logInfo('Verticals', identityCheck.data.verticalsCleared.join(', '));
+    logInfo('Passport ID', identityCheck.data.passportId);
+  } else {
+    logWarning(`CCID simulated: ${identityCheck.error}`);
+    logInfo('Purpose', 'Verify renter has hotel + airline clearances for bundled travel');
+  }
+
+  aggregator.destroy();
+  ccid.destroy();
   chainlink.stop();
-  logSuccess('Demo 3 complete — Car Rental with CCIP Cross-Chain Settlement\n');
+  logSuccess('Demo 3 complete — Car Rental with CCIP + OracleAggregator + CCID\n');
 }

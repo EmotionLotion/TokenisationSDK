@@ -161,6 +161,70 @@ const CATALOG: CatalogEntry[] = [
   onComplete={(result) => console.log(result)}
 />`,
   },
+  {
+    name: 'DividendDashboard',
+    category: 'template',
+    description: 'Full dividend distribution management with schedules, history, yield stats, and payout execution.',
+    props: [
+      { name: 'assetId', type: 'string', required: true, description: 'Asset ID for dividend tracking' },
+      { name: 'assetName', type: 'string', required: true, description: 'Display name of the asset' },
+      { name: 'currency', type: 'string', required: false, description: 'Payment currency (default: "USDC")' },
+      { name: 'onDistribute', type: '(event) => void', required: false, description: 'Callback after distribution execution' },
+    ],
+    preview: () => (
+      <div className="max-w-sm space-y-2">
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-white/5 p-2 rounded"><span className="text-gray-500">Total Distributed</span><br/><span className="text-green-400 font-bold">USDC 157,500</span></div>
+          <div className="bg-white/5 p-2 rounded"><span className="text-gray-500">Current Yield</span><br/><span className="text-yellow-400 font-bold">7.5%</span></div>
+        </div>
+        <div className="bg-white/5 p-2 rounded flex items-center justify-between text-xs">
+          <div><span className="text-white font-medium">DIVIDEND</span> <span className="text-green-400 text-[10px] ml-1">Completed</span></div>
+          <span className="text-white font-bold">USDC 50,000</span>
+        </div>
+      </div>
+    ),
+    code: `import { DividendDashboard } from './components/blueprints/DividendDashboard';
+
+<DividendDashboard
+  assetId="asset-123"
+  assetName="Marina Tower Unit 1204"
+  currency="USDC"
+  onDistribute={(event) => console.log('Distributed:', event)}
+/>`,
+  },
+  {
+    name: 'DocumentVault',
+    category: 'template',
+    description: 'Secure document vault with category filtering, hash verification, and detail inspection for asset documents.',
+    props: [
+      { name: 'assetId', type: 'string', required: true, description: 'Asset ID for document lookup' },
+      { name: 'assetName', type: 'string', required: true, description: 'Display name of the asset' },
+      { name: 'onDocumentSelect', type: '(doc) => void', required: false, description: 'Callback when a document is selected' },
+    ],
+    preview: () => (
+      <div className="max-w-sm space-y-2">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-amber-400 text-sm">🔒</span>
+          <span className="text-sm font-bold text-white">Document Vault</span>
+          <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-bold">4/6</span>
+        </div>
+        <div className="bg-white/5 p-2 rounded flex items-center gap-2 text-xs">
+          <div className="w-7 h-7 rounded bg-red-500/20 flex items-center justify-center text-red-400 text-[10px] font-bold">PDF</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[11px] font-medium truncate">Property Title Deed</p>
+            <p className="text-gray-500 text-[10px]">2.3 MB · IPFS · Verified</p>
+          </div>
+        </div>
+      </div>
+    ),
+    code: `import { DocumentVault } from './components/blueprints/DocumentVault';
+
+<DocumentVault
+  assetId="asset-123"
+  assetName="Marina Tower Unit 1204"
+  onDocumentSelect={(doc) => console.log('Selected:', doc)}
+/>`,
+  },
 ];
 
 // ============================================================================

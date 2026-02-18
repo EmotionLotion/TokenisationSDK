@@ -1,0 +1,52 @@
+{
+  "name": "@tokenisation/sdk-playground",
+  "version": "1.0.0",
+  "description": "Zero-friction playground for the Tokenisation SDK - run a full real-estate tokenization demo with a single command",
+  "bin": {
+    "sdk-playground": "./dist/cli.js",
+    "tokenisation-playground": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:bundle": "npm run build && node scripts/bundle-ui.js",
+    "dev": "npx tsx src/cli.ts",
+    "prepublishOnly": "npm run build:bundle"
+  },
+  "keywords": [
+    "tokenization",
+    "rwa",
+    "real-estate",
+    "playground",
+    "demo",
+    "erc-3643",
+    "sdk"
+  ],
+  "author": "Tokenisation Team",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "express": "^4.18.2",
+    "open": "^10.0.0",
+    "ora": "^8.0.0",
+    "get-port": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EmotionLotion/TokenisationSDK.git",
+    "directory": "packages/sdk-playground"
+  }
+}

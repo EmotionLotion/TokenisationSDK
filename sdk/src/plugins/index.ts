@@ -60,6 +60,9 @@ export {
   type KYCVerificationResult,
 } from './compliance/index.js';
 
+// Event streaming plugins (SSE)
+export * from './events/index.js';
+
 // KYC plugins (Provider integration)
 export {
   KycPlugin,

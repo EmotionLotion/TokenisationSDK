@@ -13,3 +13,4 @@ export * from './TaxWithholdingService.js';
 export * from './DeploymentService.js';
 export * from './HealthCheck.js';
 export * from './ProductionDeploymentService.js';
+export * from './GasEstimator.js';

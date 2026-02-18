@@ -125,20 +125,6 @@ const translations: TranslationMap = {
     totalSupply: 'Total Supply',
     export: 'Export Cap Table',
   },
-
-  boarding: {
-    title: 'Boarding Pass',
-    flight: 'Flight',
-    gate: 'Gate',
-    seat: 'Seat',
-    class: 'Class',
-    passenger: 'Passenger',
-    download: 'Download Boarding Pass',
-    departure: 'Departure',
-    arrival: 'Arrival',
-    boardingTime: 'Boarding Time',
-    terminal: 'Terminal',
-  },
 };
 
 export default {

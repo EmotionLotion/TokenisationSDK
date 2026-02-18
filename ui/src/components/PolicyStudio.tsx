@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Shield, Plus, Trash2, Play, Check, X, AlertTriangle, ChevronDown,
   ChevronRight, Code, Eye, Copy, Save, History, Search, Filter,
   Users, Globe, Lock, Clock, Zap, ArrowRight, Info, Settings,
   FileText, CheckCircle, XCircle, AlertCircle, RefreshCw
 } from 'lucide-react';
+import { config } from '../config';
 
 // Policy DSL Types
 interface PolicyCondition {
@@ -168,6 +169,17 @@ interface PolicyStudioProps {
 export function PolicyStudio({ embedded = false }: PolicyStudioProps) {
   const [policies, setPolicies] = useState<Policy[]>(SAMPLE_POLICIES);
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
+
+  useEffect(() => {
+    if (!config.useApiBackend) return;
+    fetch(`${config.apiUrl}/compliance/policies`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setPolicies(json.data);
+        else if (Array.isArray(json)) setPolicies(json);
+      })
+      .catch(() => { /* fallback to sample data */ });
+  }, []);
   const [isEditing, setIsEditing] = useState(false);
   const [showDSLView, setShowDSLView] = useState(false);
   const [testResults, setTestResults] = useState<Map<string, { passed: boolean; reason?: string }>>(new Map());

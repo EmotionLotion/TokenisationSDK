@@ -7,13 +7,14 @@
  * - Configure BrowserEventStore or Chainlink inputs
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Radio, Plus, Settings, RefreshCw, AlertTriangle, CheckCircle2,
   XCircle, Clock, Activity, Wifi, WifiOff, Trash2, Edit2, Eye,
   Zap, Thermometer, Droplets, Gauge, MapPin, Plane, Truck,
   ChevronDown, ChevronUp, Play, Pause, ExternalLink
 } from 'lucide-react';
+import { config } from '../config';
 
 // ============================================================================
 // TYPES
@@ -222,6 +223,24 @@ const MOCK_THRESHOLDS: ThresholdRule[] = [
 export function OracleManager() {
   const [sources, setSources] = useState(MOCK_SOURCES);
   const [thresholds, setThresholds] = useState(MOCK_THRESHOLDS);
+
+  useEffect(() => {
+    if (!config.useApiBackend) return;
+    fetch(`${config.apiUrl}/datasources`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setSources(json.data);
+        else if (Array.isArray(json)) setSources(json);
+      })
+      .catch(() => { /* fallback to mock data */ });
+    fetch(`${config.apiUrl}/datasources/thresholds`)
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) setThresholds(json.data);
+        else if (Array.isArray(json)) setThresholds(json);
+      })
+      .catch(() => { /* fallback to mock data */ });
+  }, []);
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [showAddSource, setShowAddSource] = useState(false);
   const [showAddThreshold, setShowAddThreshold] = useState(false);

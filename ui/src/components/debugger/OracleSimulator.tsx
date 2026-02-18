@@ -24,7 +24,9 @@ export function OracleSimulator() {
       timestamp: new Date().toISOString(),
     };
     setEvents(prev => [evt, ...prev].slice(0, 50));
-    sdkStore.logSdkCall(`oracle.${type}`, payload);
+    // Use triggerOracleUpdate for asset-related events, fallback to logSdkCall
+    const assetId = (payload.assetId as string) || (payload.flightId as string) || 'default';
+    sdkStore.triggerOracleUpdate(assetId, { eventType: type, ...payload });
     setStatus(`Emitted: ${type}`);
     setTimeout(() => setStatus(''), 2000);
   };

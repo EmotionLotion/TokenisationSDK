@@ -126,7 +126,6 @@ interface LoyaltyTransaction {
   timestamp: string;
 }
 
-import { FlyPlusDemo } from './FlyPlusDemo';
 import { CometDemo } from './CometDemo';
 import { H2OTODemo } from './H2OTODemo';
 import { AMSDemo } from './AMSDemo';
@@ -200,7 +199,36 @@ export function AhoyDashboard() {
           </div>
           <span className="font-medium">Back to Ecosystem Hub</span>
         </button>
-        <FlyPlusDemo />
+        <div className="glass-card rounded-xl border border-white/10 p-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 bg-blue-500/10 rounded-xl flex items-center justify-center border border-blue-500/20">
+              <Plane className="w-7 h-7 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white">Fly+</h2>
+              <p className="text-gray-400">Premium Travel Experience</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="glass-card rounded-lg p-4 border border-white/5">
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Active Passes</p>
+              <p className="text-2xl font-bold text-white mt-1">45,230</p>
+            </div>
+            <div className="glass-card rounded-lg p-4 border border-white/5">
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Tier Distribution</p>
+              <p className="text-2xl font-bold text-white mt-1">15% Gold+</p>
+            </div>
+            <div className="glass-card rounded-lg p-4 border border-white/5">
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Monthly Usage</p>
+              <p className="text-2xl font-bold text-white mt-1">12,847</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {['Access NFT Pass', 'Remote Check-in', 'Door-to-Door Luggage', 'Lounge Access', 'Priority Boarding'].map(f => (
+              <span key={f} className="px-3 py-1.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs font-medium rounded-lg">{f}</span>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

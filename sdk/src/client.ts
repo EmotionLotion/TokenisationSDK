@@ -279,8 +279,6 @@ export {
   EscrowModule,
   CashFlowModule,
   DLDModule,
-  TicketsClient,
-  ResaleModule,
   LegalModule,
 } from './modules/index.js';
 

@@ -11,41 +11,37 @@ export interface Room {
 }
 
 export interface RoomSelectorProps {
+    rooms?: Room[];
+    dateRange?: { start: Date | null; end: Date | null };
     onSelect: (room: Room) => void;
     theme?: TokenisationTheme;
 }
 
-const MOCK_ROOMS: Room[] = [
-    {
-        id: '1',
-        name: 'Deluxe Ocean View',
-        type: 'deluxe',
-        pricePerNight: 'AED 1,200',
-        amenities: ['King Bed', 'Ocean View', 'Balcony', 'Free WiFi']
-    },
-    {
-        id: '2',
-        name: 'Executive Suite',
-        type: 'suite',
-        pricePerNight: 'AED 2,500',
-        amenities: ['Living Room', 'City View', 'Lounge Access', 'Breakfast']
-    },
-    {
-        id: '3',
-        name: 'Standard Twin',
-        type: 'standard',
-        pricePerNight: 'AED 800',
-        amenities: ['Twin Beds', 'Garden View', 'Shower']
-    }
-];
-
-export function RoomSelector({ onSelect, theme = defaultTheme }: RoomSelectorProps) {
+export function RoomSelector({ rooms = [], dateRange, onSelect, theme = defaultTheme }: RoomSelectorProps) {
     const styles = createStyles(theme);
     const [selectedId, setSelectedId] = useState<string>('');
 
+    const nightCount = dateRange?.start && dateRange?.end
+        ? Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+
+    if (rooms.length === 0) {
+        return (
+            <div style={{ ...styles.card, textAlign: 'center', padding: theme.spacing.xl }}>
+                <div style={{ fontSize: '12px', color: theme.colors.textMuted }}>No rooms available</div>
+            </div>
+        );
+    }
+
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: theme.spacing.md }}>
-            {MOCK_ROOMS.map((room) => (
+        <div>
+            {nightCount && (
+                <div style={{ marginBottom: theme.spacing.md, fontSize: '13px', color: theme.colors.textMuted }}>
+                    {dateRange!.start!.toLocaleDateString()} - {dateRange!.end!.toLocaleDateString()} ({nightCount} night{nightCount > 1 ? 's' : ''})
+                </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: theme.spacing.md }}>
+            {rooms.map((room) => (
                 <div
                     key={room.id}
                     onClick={() => {
@@ -63,17 +59,20 @@ export function RoomSelector({ onSelect, theme = defaultTheme }: RoomSelectorPro
                         transform: selectedId === room.id ? 'scale(1.02)' : 'scale(1)'
                     }}
                 >
-                    {/* Mock Image Placeholder */}
-                    <div style={{
-                        height: '140px',
-                        backgroundColor: '#CBD5E1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '32px'
-                    }}>
-                        {room.type === 'suite' ? '🏰' : room.type === 'deluxe' ? '🌅' : '🛏️'}
-                    </div>
+                    {room.image ? (
+                        <img src={room.image} alt={room.name} style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
+                    ) : (
+                        <div style={{
+                            height: '140px',
+                            backgroundColor: '#CBD5E1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '32px'
+                        }}>
+                            {room.type === 'suite' ? '🏰' : room.type === 'deluxe' ? '🌅' : '🛏️'}
+                        </div>
+                    )}
 
                     <div style={{ padding: theme.spacing.md }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -105,6 +104,7 @@ export function RoomSelector({ onSelect, theme = defaultTheme }: RoomSelectorPro
                     </div>
                 </div>
             ))}
+            </div>
         </div>
     );
 }

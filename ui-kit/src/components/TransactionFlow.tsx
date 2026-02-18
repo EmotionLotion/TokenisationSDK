@@ -49,7 +49,7 @@ export interface StepState {
   status: StepStatus;
   title: string;
   description: string;
-  data?: unknown;
+  data?: Record<string, any>;
   error?: Error;
 }
 
@@ -219,7 +219,7 @@ export function TransactionFlow({
   );
 
   const markCompleted = useCallback(
-    (index: number, data?: unknown) => {
+    (index: number, data?: Record<string, any>) => {
       updateStep(index, { status: 'completed', data });
     },
     [updateStep],
@@ -262,7 +262,7 @@ export function TransactionFlow({
           }),
         },
       );
-      markCompleted(idx, result.data);
+      markCompleted(idx, result.data as Record<string, any>);
       advanceTo(1);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -288,7 +288,7 @@ export function TransactionFlow({
           }),
         },
       );
-      markCompleted(idx, result.data);
+      markCompleted(idx, result.data as Record<string, any>);
       advanceTo(2);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -351,7 +351,7 @@ export function TransactionFlow({
                 timestamp: payload.timestamp || new Date().toISOString(),
                 ...payload,
               };
-              markCompleted(idx, result.data);
+              markCompleted(idx, result.data as Record<string, any>);
               advanceTo(4);
               updateStep(4, { status: 'completed', data: receipt });
               onComplete?.(receipt);
@@ -370,7 +370,7 @@ export function TransactionFlow({
             action,
             timestamp: new Date().toISOString(),
           };
-          markCompleted(idx, result.data);
+          markCompleted(idx, result.data as Record<string, any>);
           advanceTo(4);
           updateStep(4, { status: 'completed', data: receipt });
           onComplete?.(receipt);
@@ -384,7 +384,7 @@ export function TransactionFlow({
           timestamp: new Date().toISOString(),
           ...result.data,
         };
-        markCompleted(idx, result.data);
+        markCompleted(idx, result.data as Record<string, any>);
         advanceTo(4);
         updateStep(4, { status: 'completed', data: receipt });
         onComplete?.(receipt);

@@ -4,18 +4,19 @@
 
 FROM node:20-alpine AS base
 WORKDIR /app
+RUN corepack enable
 
 # Install dependencies
 FROM base AS deps
-COPY package*.json ./
-RUN npm ci --only=production
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
 
 # Build stage
 FROM base AS builder
-COPY package*.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # Production stage
 FROM base AS runner

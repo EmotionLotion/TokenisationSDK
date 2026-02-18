@@ -3,9 +3,19 @@
  *
  * The SDK Asset has a generic structure with typedMetadata for real estate,
  * while DubaiProperty is a flat, display-oriented type specific to this app.
+ *
+ * Phase 2: Mapper functions now delegate to the SDK's lossless bridge functions
+ * (mapCoreStateToRealEstate / mapRealEstateToCoreState / mapStateToStakeStage / mapStakeStageToState)
+ * instead of maintaining a local lossy mapping.
  */
 
 import type { DubaiProperty } from '../data/dubai-properties';
+import {
+  mapCoreStateToRealEstate,
+  mapRealEstateToCoreState,
+  mapStateToStakeStage,
+  mapStakeStageToState,
+} from '@tokenisation/sdk';
 
 // SDK Asset shape (subset of fields we use for mapping)
 interface SDKAssetForMapping {
@@ -40,44 +50,40 @@ interface SDKAssetForMapping {
 }
 
 /**
- * Map SDK lifecycle state to DubaiProperty status.
+ * Map SDK lifecycle state to DubaiProperty status via lossless bridge.
  */
 function mapStateToStatus(state: string): DubaiProperty['status'] {
-  const mapping: Record<string, DubaiProperty['status']> = {
-    DRAFT: 'sourcing',
-    PENDING_VERIFICATION: 'due-diligence',
-    VERIFIED: 'legal-structuring',
-    ACTIVE: 'live',
-    FROZEN: 'live',
-    SUSPENDED: 'live',
-    REDEEMED: 'distributing',
-    TERMINATED: 'distributing',
-    // API-level states (lowercase)
-    draft: 'sourcing',
-    pending_verification: 'due-diligence',
-    verified: 'legal-structuring',
-    tokenized: 'live',
-    frozen: 'live',
-    closed: 'distributing',
-  };
-  return mapping[state] || 'sourcing';
+  const reState = mapCoreStateToRealEstate(state);
+  const stage = mapStateToStakeStage(reState);
+  // Validate it's a known DubaiProperty status, fallback to 'sourcing'
+  const validStatuses: DubaiProperty['status'][] = [
+    'sourcing', 'due-diligence', 'legal-structuring', 'regulatory-approval',
+    'token-issuance', 'live', 'distributing', 'secondary-trading', 'frozen',
+  ];
+  return (validStatuses.includes(stage as DubaiProperty['status'])
+    ? stage as DubaiProperty['status']
+    : 'sourcing');
 }
 
 /**
- * Map DubaiProperty status to SDK lifecycle state.
+ * Map DubaiProperty status to SDK lifecycle state string via lossless bridge.
  */
 function mapStatusToState(status: DubaiProperty['status']): string {
-  const mapping: Record<DubaiProperty['status'], string> = {
-    sourcing: 'DRAFT',
-    'due-diligence': 'PENDING_VERIFICATION',
-    'legal-structuring': 'VERIFIED',
-    'regulatory-approval': 'VERIFIED',
-    'token-issuance': 'ACTIVE',
-    live: 'ACTIVE',
-    distributing: 'ACTIVE',
+  const reState = mapStakeStageToState(status);
+  const coreState = mapRealEstateToCoreState(reState);
+  // Return the enum key name
+  const stateNames: Record<number, string> = {
+    0: 'DRAFT', 1: 'PENDING_VERIFICATION', 2: 'VERIFIED', 3: 'ACTIVE',
+    4: 'FROZEN', 5: 'PARTIALLY_REDEEMED', 6: 'REDEEMED', 7: 'EXPIRED',
+    8: 'CLOSED', 9: 'BURNED',
   };
-  return mapping[status] || 'DRAFT';
+  return stateNames[coreState as number] || 'DRAFT';
 }
+
+/**
+ * @deprecated Use mapStateToStatus instead — delegates to SDK bridge functions.
+ */
+export { mapStateToStatus, mapStatusToState };
 
 /**
  * Map SDK property type to DubaiProperty property type.
@@ -148,6 +154,9 @@ export function assetToDubaiProperty(asset: SDKAssetForMapping): DubaiProperty {
 
     description: asset.description || '',
     highlights: (appMeta.highlights as string[]) || [],
+
+    tokensSold: (appMeta.tokensSold as number) ?? undefined,
+    fundingGoalAED: (appMeta.fundingGoalAED as number) ?? undefined,
   };
 }
 
@@ -200,7 +209,7 @@ export function toPropertyCardProps(property: DubaiProperty) {
     areaUnit: 'sq ft',
     yield: property.netYield,
     occupancy: property.occupancyRate,
-    tokenized: ['live', 'distributing', 'token-issuance'].includes(property.status),
+    tokenized: ['live', 'distributing', 'token-issuance', 'secondary-trading'].includes(property.status),
     status: property.status,
     imageUrl: property.imageUrl,
   };
@@ -218,9 +227,8 @@ export function toStatusBadgeVariant(status: DubaiProperty['status']): 'success'
     'token-issuance': 'info',
     live: 'success',
     distributing: 'success',
+    'secondary-trading': 'success',
+    frozen: 'error',
   };
   return mapping[status] || 'neutral';
 }
-
-// Re-export helper types
-export { mapStateToStatus, mapStatusToState };

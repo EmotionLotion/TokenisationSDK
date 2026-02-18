@@ -20,20 +20,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build SDK
-        run: npm run build --workspace=sdk
+        run: pnpm --filter sdk run build
 
       - name: Run SDK tests
-        run: npm run test --workspace=sdk -- --run
+        run: pnpm --filter sdk run test -- --run
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -41,6 +44,30 @@ jobs:
           files: ./sdk/coverage/lcov.info
           flags: sdk
           fail_ci_if_error: false
+
+  # ============================================================================
+  # Server Tests
+  # ============================================================================
+  server-test:
+    name: Server Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Server tests
+        run: pnpm --filter @tokenisation/server run test
 
   # ============================================================================
   # Smart Contract Tests
@@ -86,17 +113,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: npm run build --workspace=sdk
+      - name: Type check SDK
+        run: pnpm --filter sdk run build
+
+      - name: Type check Server
+        run: pnpm --filter @tokenisation/server run build
 
       - name: Lint Solidity
         working-directory: ./contracts
@@ -113,8 +146,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run npm audit
-        run: npm audit --audit-level=high || true
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Run pnpm audit
+        run: pnpm audit --audit-level=high || true
 
       - name: Install Slither
         run: pip3 install slither-analyzer
@@ -130,21 +172,24 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [sdk-test, contract-test, lint]
+    needs: [sdk-test, server-test, contract-test, lint]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build all packages
-        run: npm run build --workspaces --if-present
+        run: pnpm -r run build
 
       - name: Upload SDK artifact
         uses: actions/upload-artifact@v4
@@ -163,23 +208,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
       - name: Build
-        run: npm run build --workspaces --if-present
+        run: pnpm -r run build
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: pnpm run test:e2e
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -199,34 +247,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build SDK
-        run: npm run build --workspace=sdk
+        run: pnpm --filter sdk run build
 
       - name: Check SDK bundle size
         run: |
-          SDK_SIZE=$(du -sk sdk/dist/ | cut -f1)
-          echo "SDK dist size: ${SDK_SIZE}KB"
+          cd sdk && npx size-limit --json > size-report.json 2>&1 || true
           echo "## Readiness Scorecard" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| SDK Bundle Size | ${SDK_SIZE}KB |" >> $GITHUB_STEP_SUMMARY
+          npx size-limit 2>&1 | tee -a $GITHUB_STEP_SUMMARY || echo "| SDK Bundle Size | OVER BUDGET |" >> $GITHUB_STEP_SUMMARY
 
       - name: Run coverage
         run: |
-          npm run test --workspace=sdk -- --run --coverage || true
+          pnpm --filter sdk run test -- --run --coverage || true
           echo "| Coverage | See Codecov |" >> $GITHUB_STEP_SUMMARY
 
       - name: Security audit
         run: |
-          AUDIT=$(npm audit --audit-level=high 2>&1 || true)
+          AUDIT=$(pnpm audit --audit-level=high 2>&1 || true)
           VULNS=$(echo "$AUDIT" | grep -c "high\|critical" || echo "0")
           echo "| High/Critical Vulns | ${VULNS} |" >> $GITHUB_STEP_SUMMARY

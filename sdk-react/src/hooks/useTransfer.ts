@@ -82,7 +82,7 @@ export function useTransfer(): UseTransferReturn {
     (params: CreateTransferParams) =>
       wrapAsync(async () => {
         const result = await modules.transfers.create(params as any);
-        return (result as any).data;
+        return result as any;
       }),
     [modules.transfers, wrapAsync],
   );
@@ -100,7 +100,7 @@ export function useTransfer(): UseTransferReturn {
     (transferId: string) =>
       wrapAsync(async () => {
         const result = await modules.transfers.get(transferId);
-        return (result as any).data ?? null;
+        return (result as any) ?? null;
       }),
     [modules.transfers, wrapAsync],
   );
@@ -117,7 +117,7 @@ export function useTransfer(): UseTransferReturn {
     (transferId: string) =>
       wrapAsync(async () => {
         const result = await modules.transfers.retry(transferId);
-        return (result as any).data;
+        return result as any;
       }),
     [modules.transfers, wrapAsync],
   );
@@ -126,7 +126,7 @@ export function useTransfer(): UseTransferReturn {
     (params: CreateTransferParams) =>
       wrapAsync(async () => {
         const result = await (modules.transfers as any).validate(params);
-        return (result as any).data;
+        return result as any;
       }),
     [modules.transfers, wrapAsync],
   );
@@ -135,7 +135,7 @@ export function useTransfer(): UseTransferReturn {
     (params: CreateTransferParams) =>
       wrapAsync(async () => {
         const result = await (modules.transfers as any).preflight(params);
-        return (result as any).data;
+        return result as any;
       }),
     [modules.transfers, wrapAsync],
   );

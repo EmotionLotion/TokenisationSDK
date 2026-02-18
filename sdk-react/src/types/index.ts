@@ -203,6 +203,9 @@ export interface TokenisationConfig {
   /** Publishable key for org identification (pk_test_xxx / pk_live_xxx) */
   publishableKey?: string;
 
+  /** API key for server auth (sk_test_xxx / ak_xxx) — used in dev mode */
+  apiKey?: string;
+
   /** Called on 401 auth errors */
   onAuthError?: () => void;
 
@@ -506,8 +509,6 @@ import type {
   EscrowModule,
   CashFlowModule,
   DLDModule,
-  TicketsClient,
-  ResaleModule,
   LegalModule,
   EventsModule,
   WebhooksModule,
@@ -529,8 +530,6 @@ export interface SDKModules {
   escrow: EscrowModule;
   cashflow: CashFlowModule;
   dld: DLDModule;
-  tickets: TicketsClient;
-  resale: ResaleModule;
   legal: LegalModule;
   events: EventsModule;
   webhooks: WebhooksModule;

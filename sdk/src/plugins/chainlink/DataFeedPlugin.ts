@@ -61,6 +61,8 @@ export interface DataFeedPluginConfig {
   rpcUrl: string;
   customFeeds?: Record<string, string>;
   cacheTimeMs?: number;
+  /** Pairs to monitor — informational only, feeds are resolved from chainId */
+  pairs?: string[];
 }
 
 export interface PriceData {
@@ -179,6 +181,18 @@ export class DataFeedPlugin implements IOraclePlugin {
       });
     } catch (error) {
       return err(`Failed to fetch NAV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Convenience wrapper: returns a Result instead of throwing.
+   */
+  async getPrice(pair: string): Promise<Result<{ price: string; decimals: number }, string>> {
+    try {
+      const data = await this.getLatestPrice(pair);
+      return ok({ price: data.formattedPrice, decimals: data.decimals });
+    } catch (error) {
+      return err(`DataFeed price fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

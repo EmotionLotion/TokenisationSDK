@@ -269,7 +269,7 @@ schedulerRouter.post(
         return res.status(404).json({ error: 'Job not found' });
       }
 
-      const run = await schedulerService.triggerJob(req.params.id, `api:${req.apiKey.id}`);
+      const run = await schedulerService.triggerJob(req.params.id, `api:${req.apiKey.keyId}`);
       res.status(201).json(run);
     } catch (error) {
       next(error);

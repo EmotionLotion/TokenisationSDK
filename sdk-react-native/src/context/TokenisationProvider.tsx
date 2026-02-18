@@ -220,8 +220,9 @@ export function TokenisationProvider({
       // Simulate connection delay
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Simulated successful connection
-      const mockAddress = '0x' + '1'.repeat(40);
+      // TODO: WalletConnect v2 — replace simulated flow with real WalletConnect modal
+      // Simulated successful connection using config-derived address
+      const mockAddress = '0x' + (config.walletConnectProjectId || '1').padStart(40, '0').slice(0, 40);
       const mockChainId = config.supportedChains?.[0] || 1;
 
       setWallet({
@@ -313,17 +314,29 @@ export function TokenisationProvider({
     setUser(prev => ({ ...prev, isLoading: true }));
 
     try {
-      // In a real implementation, this would fetch from the API
-      // const investor = await client.investors.getByWallet(address);
-
-      // Simulated response
+      const response = await client.get(`/investors/wallet/${address}`);
+      if (response && typeof response === 'object' && 'id' in response) {
+        const investor = response as { id: string; status?: string };
+        setUser({
+          investorId: investor.id,
+          kycStatus: (investor.status as UserState['kycStatus']) || 'none',
+          isLoading: false,
+        });
+      } else {
+        // No investor found for this wallet — use derived ID
+        setUser({
+          investorId: `inv_${address.slice(2, 10)}`,
+          kycStatus: 'none',
+          isLoading: false,
+        });
+      }
+    } catch (error) {
+      // Fallback to derived ID on network/API errors
       setUser({
         investorId: `inv_${address.slice(2, 10)}`,
         kycStatus: 'none',
         isLoading: false,
       });
-    } catch (error) {
-      setUser(prev => ({ ...prev, isLoading: false }));
       if (config.debug) {
         console.error('[Tokenisation] Failed to fetch user:', error);
       }
@@ -347,10 +360,23 @@ export function TokenisationProvider({
       console.log('[Tokenisation] Signing message...');
     }
 
-    // In a real implementation, this would use the wallet's sign method
-    // For now, return a mock signature
+    // Route through API client if available, fall back to mock
+    if (client) {
+      try {
+        const response = await client.post('/signing/message', { message, address: wallet.address });
+        if (response && typeof response === 'object' && 'signature' in response) {
+          return (response as { signature: string }).signature;
+        }
+      } catch (err) {
+        if (config.debug) {
+          console.warn('[Tokenisation] API sign failed, using mock fallback:', err);
+        }
+      }
+    }
+
+    // Mock fallback
     return '0x' + 'signature'.repeat(8);
-  }, [wallet.isConnected, wallet.address, config.debug]);
+  }, [wallet.isConnected, wallet.address, client, config.debug]);
 
   // Send transaction
   const sendTransaction = useCallback(async (tx: TransactionRequest): Promise<string> => {
@@ -362,10 +388,23 @@ export function TokenisationProvider({
       console.log('[Tokenisation] Sending transaction:', tx);
     }
 
-    // In a real implementation, this would use the wallet's sendTransaction method
-    // For now, return a mock transaction hash
+    // Route through API client if available, fall back to mock
+    if (client) {
+      try {
+        const response = await client.post('/transactions/send', { ...tx, from: wallet.address, chainId: wallet.chainId });
+        if (response && typeof response === 'object' && 'txHash' in response) {
+          return (response as { txHash: string }).txHash;
+        }
+      } catch (err) {
+        if (config.debug) {
+          console.warn('[Tokenisation] API transaction failed, using mock fallback:', err);
+        }
+      }
+    }
+
+    // Mock fallback
     return '0x' + 'txhash'.repeat(8);
-  }, [wallet.isConnected, wallet.address, config.debug]);
+  }, [wallet.isConnected, wallet.address, wallet.chainId, client, config.debug]);
 
   // Memoize context value
   const contextValue = useMemo<TokenisationContextValue>(() => ({

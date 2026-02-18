@@ -10,10 +10,14 @@
         "sdk-react-native",
         "server",
         "packages/*",
+        "apps/*",
         "website"
     ],
     "scripts": {
-        "test:conformance": "npm run test --workspace=@tokenisation/conformance-suite",
+        "build": "pnpm -r run build",
+        "test": "pnpm -r run test",
+        "playground": "pnpm --filter @tokenisation/sdk-playground dev",
+        "test:conformance": "pnpm run test --filter @tokenisation/conformance-suite",
         "test:e2e": "playwright test",
         "changeset": "changeset",
         "version": "changeset version"

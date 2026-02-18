@@ -92,8 +92,6 @@ export {
   useCashFlow,
   useEscrow,
   useInvestor,
-  useTickets,
-  useResale,
   useDLD,
   useLegal,
   useWebhooks,
@@ -112,11 +110,6 @@ export {
   type EscrowData,
   type UseInvestorReturn,
   type InvestorData,
-  type UseTicketsReturn,
-  type TicketData,
-  type BoardingPassData,
-  type UseResaleReturn,
-  type ResaleListing,
   type UseDLDReturn,
   type TitleDeedData,
   type UseLegalReturn,
@@ -127,6 +120,17 @@ export {
   type WebhookDeliveryData,
   type UseProjectReturn,
   type ProjectData,
+  // Phase 2: Real Estate Hardening
+  useInvestorTier,
+  type UseInvestorTierReturn,
+  type InvestorPlan,
+  type TierEligibilityResult,
+  useExitWindow,
+  type UseExitWindowReturn,
+  useSecondaryMarket,
+  type UseSecondaryMarketReturn,
+  useResale,
+  type UseResaleReturn,
 } from './hooks/index.js';
 
 // Components

@@ -1,238 +1,174 @@
+---
+sidebar_position: 20
+title: FAQ
+---
+
 # Frequently Asked Questions
+
+Common questions about the AHOY Tokenisation Platform.
+
+---
 
 ## General
 
-### What is the Tokenisation SDK?
-A comprehensive TypeScript SDK for building compliant tokenized asset platforms. It provides Stripe-like APIs for asset tokenization, investor onboarding, KYC, token deployment, compliant transfers, and governance — all with built-in ERC-3643 compliance.
+### What is the AHOY Tokenisation Platform?
+
+AHOY is a comprehensive infrastructure platform for tokenising real-world assets (RWAs). It provides an API server, TypeScript SDK, React SDK, UI Kit, and Solidity smart contracts that handle the full lifecycle of tokenised assets -- from creation and compliance to on-chain deployment and secondary trading. Supported asset classes include real estate, airline tickets, hotel reservations, car rentals, concert tickets, GPU compute resources, prediction markets, and more.
+
+### What blockchain networks are supported?
+
+The platform supports any EVM-compatible chain. Out of the box, it is configured for Ethereum Mainnet (chain ID 1), Polygon (137), Base (8453), Arbitrum One (42161), and Hardhat/Anvil (31337) for local development. Chain selection is per-token, so a single project can have tokens on different networks.
 
 ### What token standards are supported?
-ERC-3643 (T-REX security tokens), ERC-20, ERC-721, ERC-1155, ERC-1410 (partitioned securities), ERC-4626 (tokenized vaults), and Soulbound tokens.
 
-### Which blockchains are supported?
-Ethereum Mainnet (Chain ID 1), Polygon (137), Base (8453), Arbitrum (42161), and testnets: Sepolia (11155111), Base Sepolia (84532), Arbitrum Sepolia (421614).
+The platform supports ERC-3643 (T-REX) for regulated security tokens, ERC-20 for fungible utility tokens, ERC-721 for non-fungible tokens (tickets, reservations), ERC-1155 for multi-token contracts, and ERC-1410 for partitioned security tokens. ERC-3643 is the recommended standard for assets that require regulatory compliance.
 
-### Is this production-ready?
-The SDK is ready for developer integration and POC deployments. Production mainnet deployment requires a professional smart contract security audit. See [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md) for details.
+### Is the platform suitable for production use?
 
-### What's the licensing?
-MIT License — free for commercial and non-commercial use.
+The platform is designed for production use with enterprise-grade security, compliance, and audit capabilities. However, ensure you have completed a security audit, configured proper authentication secrets, and tested your compliance policies before going live. See the [Security Audit Checklist](https://github.com/your-org/tokenisation-sdk/blob/main/SECURITY_AUDIT_CHECKLIST.md) for a comprehensive review guide.
 
-## Setup & Installation
+---
 
-### What are the prerequisites?
-- Node.js 18+
-- npm 9+
-- Foundry (for smart contract development only)
+## Setup and Installation
 
-### How do I set up the development environment?
+### What are the minimum system requirements?
+
+- Node.js 18 or later
+- pnpm 8 or later
+- Docker 24+ and Docker Compose 2.20+ (for the full stack)
+- 4 GB RAM minimum (8 GB recommended for running the full Docker stack)
+
+### How do I run the platform locally?
+
+The fastest path is Docker Compose:
+
 ```bash
-git clone https://github.com/EmotionLotion/TokenisationSDK.git
-cd TokenisationSDK
-npm install
-npm run build --workspace=sdk
-cp server/.env.example server/.env
-cd server && npm run dev
+docker-compose up -d
 ```
 
-### SQLite vs PostgreSQL — which should I use?
-SQLite is the default for development (zero setup required). PostgreSQL is required for production — it supports concurrent access, distributed systems, and row-level security for tenant isolation.
+This starts the API server, PostgreSQL, Redis, and a local Anvil (Foundry) blockchain node. Contracts are deployed automatically on startup. The API is available at `http://localhost:3001`. See the [Installation guide](./getting-started/INSTALLATION.md) for details.
 
-### How do I switch to PostgreSQL?
-1. Set `DB_MODE=postgresql` in your `.env` file
-2. Set `DATABASE_URL=postgres://user:pass@localhost:5432/tokenisation`
-3. Run `docker-compose up db` to start a local PostgreSQL instance
-4. Restart the server
+### Can I use npm or yarn instead of pnpm?
 
-## Authentication
+The monorepo is configured for pnpm workspaces. While you can install individual SDK packages with npm or yarn in your own project (`npm install @tokenisation/sdk`), contributing to the platform itself requires pnpm.
 
-### What authentication methods are supported?
-- **JWT tokens** — Primary auth for user sessions (1h expiry, refresh tokens)
-- **API Keys** — For server-to-server integration (`sk_test_*` / `sk_live_*`)
-- **OAuth2** — Client credentials flow for automated systems
-- **SIWE** — Sign-In With Ethereum for wallet-based auth
-- **Dev Mode** — Bypass auth in development (automatically disabled in production)
+---
 
-### How do I create an API key?
+## SDK and API
+
+### How do I authenticate API requests?
+
+The platform supports two authentication methods:
+
+1. **API Keys** -- Include your API key in the `Authorization` header: `Bearer sk_test_xxxxx`. Use `sk_test_` prefixed keys for sandbox and `sk_live_` prefixed keys for production.
+2. **JWT Tokens** -- Obtained via the `/auth/login` or `/auth/siwe` (Sign-In with Ethereum) endpoints. JWTs are used for user-facing applications.
+
 ```typescript
-// Via the IAM API
-const apiKey = await client.iam.createApiKey(orgId, {
-  name: 'Production Key',
-  scopes: ['admin'],
-  environment: 'live',
-});
-console.log('Key:', apiKey.key); // sk_live_xxx (shown only once)
-```
-
-### How does dev mode authentication work?
-When `AUTH_DEV_MODE=true` (development only), you can bypass auth with headers:
-```bash
-curl -H "X-Dev-Org-Id: dev-org-1" \
-     -H "X-Dev-Party-Id: dev-user-1" \
-     http://localhost:3001/api/v1/assets
-```
-This is IP-restricted (localhost only) and org-prefix restricted (dev-*, test-*, demo-* only). The server refuses to start with dev mode in production.
-
-## API Usage
-
-### How does idempotency work?
-Critical operations (issue, redeem, transfer) require an `idempotencyKey` to prevent duplicates:
-```typescript
-await client.tokens.issue(tokenId, {
-  investorId: '...',
-  amount: '1000',
-  idempotencyKey: 'issue-batch1-inv123', // unique per operation
+const client = new ApiClient({
+  apiKey: 'sk_test_xxxxx',
+  baseUrl: 'http://localhost:3001',
 });
 ```
-If you retry with the same key, you get the original response instead of a duplicate operation. Keys expire after 7 days.
 
-### How do I handle pagination?
+### What is the difference between `ApiClient` and `TokenisationSDK`?
+
+`ApiClient` is a high-level, Stripe-like HTTP client that communicates with the API server. It is the recommended interface for most applications. `TokenisationSDK` is a lower-level SDK that provides direct access to the lifecycle engine, policy evaluator, and chain service. Use `TokenisationSDK` when you need fine-grained control or are building server-side extensions.
+
+### How do I handle errors from the SDK?
+
+The SDK throws typed errors that extend `SDKError`. You can catch specific error types:
+
 ```typescript
-// Option 1: Simple list
-const page = await client.assets.list({ limit: 50, offset: 0 });
+import { ComplianceError, ValidationError, NetworkError } from '@tokenisation/sdk/errors';
 
-// Option 2: Async iterator
-import { paginate } from '@tokenisation/sdk';
-for await (const asset of paginate(cursor => client.assets.list({ cursor }))) {
-  console.log(asset.name);
-}
-
-// Option 3: Collect all
-import { collectAll } from '@tokenisation/sdk';
-const allAssets = await collectAll(cursor => client.assets.list({ cursor }));
-```
-
-### What error format does the API use?
-```json
-{
-  "error": {
-    "message": "Transfer validation failed: recipient not KYC verified",
-    "code": "COMPLIANCE_DENIED",
-    "traceId": "abc123",
-    "correlation_id": "req_abc123def456",
-    "explanation": {
-      "summary": "The recipient has not completed identity verification",
-      "suggestedActions": ["Complete KYC for recipient investor"],
-      "links": { "kyc_docs": "/docs/guides/COMPLIANCE_SETUP.md" }
-    }
+try {
+  await client.transfers.create({ ... });
+} catch (error) {
+  if (error instanceof ComplianceError) {
+    console.log('Transfer blocked by compliance:', error.message);
+  } else if (error instanceof ValidationError) {
+    console.log('Invalid input:', error.details);
+  } else if (error instanceof NetworkError) {
+    console.log('Blockchain network error:', error.message);
   }
 }
 ```
 
-### How do rate limits work?
-| Endpoint Type | Limit | Window |
-|--------------|-------|--------|
-| Standard API | 1000 req | 60s |
-| Auth endpoints | 20 req | 60s |
-| Transfers | 30 req | 60s |
-| Heavy operations | 100 req | 60s |
+### Does the SDK support pagination?
 
-Rate limit info is returned in response headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+Yes. All list endpoints return paginated responses. The SDK provides utility functions for iterating:
 
-## Compliance & KYC
-
-### How does compliance validation work?
-Every transfer is automatically validated against the token's compliance policy:
-1. Identity check — Is recipient in the identity registry?
-2. Country check — Is recipient's jurisdiction allowed?
-3. Investor type — Does recipient meet investor requirements?
-4. Balance limits — Would transfer exceed holder limits?
-5. Time locks — Is the lockup period complete?
-
-### Which KYC providers are supported?
-SumSub (default) and Onfido. Configure via `SUMSUB_APP_TOKEN` / `ONFIDO_API_TOKEN` environment variables.
-
-### Can I add custom compliance rules?
-Yes, the compliance engine is modular. Built-in rules: IDENTITY_REQUIRED, COUNTRY_WHITELIST, COUNTRY_BLACKLIST, ACCREDITED_ONLY, MAX_HOLDERS, MAX_BALANCE, TIME_LOCK. Custom rules can be added via the plugin system.
-
-## Smart Contracts
-
-### How do contract upgrades work?
-All token contracts use UUPS (Universal Upgradeable Proxy Standard). Upgrades require:
-1. Multi-sig proposal (2-of-N signers)
-2. 2-day timelock delay
-3. 7-day execution window
-
-### How do I deploy contracts?
-```bash
-cd contracts
-forge script script/DeployUpgradeable.s.sol \
-  --rpc-url $SEPOLIA_RPC_URL \
-  --broadcast --verify
-```
-
-## Chainlink Integration
-
-### What Chainlink services are supported?
-- **Price Feeds** — Live NAV calculation for real estate tokens
-- **Automation** — Scheduled compliance rechecks for ticket tokens
-- **CCIP** — Cross-chain token transfers and settlement
-- **Proof of Reserve** — Overcollateralization verification
-- **Functions** — Custom off-chain computation
-
-### How do I enable Chainlink price feeds?
 ```typescript
-import { OracleService } from '@tokenisation/sdk/plugins';
-const oracle = new OracleService({
-  chainId: 8453,
-  rpcUrl: process.env.BASE_RPC_URL,
-  stalePriceThreshold: 3600, // 1 hour
-});
-const price = await oracle.getPrice('ETH/USD');
+import { paginate, collectAll } from '@tokenisation/sdk';
+
+// Iterate page by page
+for await (const page of paginate((cursor) => client.assets.list({ cursor }))) {
+  console.log(page.data);
+}
+
+// Or collect everything
+const allAssets = await collectAll((cursor) => client.assets.list({ cursor }));
 ```
 
-## Troubleshooting
+---
 
-### Server won't start — "JWT_SECRET required"
-Set a secure JWT secret in your `.env` file (minimum 32 characters):
-```bash
-JWT_SECRET=$(openssl rand -base64 48)
-```
+## Compliance and KYC
 
-### Server won't start — "AUTH_DEV_MODE not allowed in production"
-Remove `AUTH_DEV_MODE=true` from your `.env` or set `NODE_ENV=development`.
+### How does the compliance engine work?
 
-### "Idempotency conflict" error on token issuance
-You're reusing an idempotency key that was already used with different parameters. Generate a unique key per operation:
-```typescript
-import { generateIdempotencyKey } from '@tokenisation/sdk';
-const key = generateIdempotencyKey(); // UUID-based
-```
+Every token transfer passes through the compliance engine, which evaluates a set of composable policies. Policies check KYC status, jurisdiction restrictions, lockup periods, holder limits, accreditation requirements, and sanctions lists. A single policy rejection blocks the entire transfer. Compliance decisions are recorded in the audit trail.
 
-### Transfer fails with "COMPLIANCE_DENIED"
-The recipient hasn't passed compliance checks. Verify:
-1. Recipient investor has KYC status = 'approved'
-2. Recipient's jurisdiction is in the token's country whitelist
-3. Transfer wouldn't exceed MAX_HOLDERS limit
-4. No active TIME_LOCK on the token
+### Can I test without real KYC verification?
 
-### Database migration errors
-```bash
-cd server
-npm run db:migrate   # Apply pending migrations
-npm run db:reset     # Reset database (development only)
-```
+Yes. Set `ENABLE_MOCK_KYC=true` in your environment variables. In mock mode, all investors are automatically KYC-approved. This is enabled by default in sandbox environments.
 
-### Redis connection refused
-Redis is optional for development (falls back to in-memory). For production:
-```bash
-docker-compose up redis
-# Then set REDIS_URL=redis://localhost:6379 in .env
-```
+### How do I add custom compliance rules?
 
-### Contract deployment fails — "insufficient funds"
-Ensure your deployer wallet has enough ETH/MATIC for gas. Testnet faucets:
-- Sepolia: https://sepoliafaucet.com
-- Base Sepolia: https://www.coinbase.com/faucets/base-ethereum-goerli-faucet
+You can create custom compliance modules both on-chain (Solidity contracts implementing the `IComplianceModule` interface) and off-chain (server-side policy evaluators). Register your custom module with the compliance service and it will be evaluated alongside built-in modules during every transfer.
 
-### "Module not found: @tokenisation/sdk"
-Build the SDK first:
-```bash
-npm run build --workspace=sdk
-```
+---
 
-## Community & Support
+## Tokens and Assets
 
-- **GitHub Issues**: [github.com/EmotionLotion/TokenisationSDK/issues](https://github.com/EmotionLotion/TokenisationSDK/issues)
-- **Documentation**: [docs/](../docs/) or [online docs](https://emotionlotion.github.io/TokenisationSDK/)
-- **Contributing**: See [CONTRIBUTING.md](../CONTRIBUTING.md)
-- **Security**: Report vulnerabilities per [SECURITY.md](../SECURITY.md)
+### What is the asset lifecycle?
+
+Assets progress through states: `DRAFT` -> `PENDING_VERIFICATION` -> `VERIFIED` -> `ACTIVE` -> `FROZEN` / `REDEEMED` / `EXPIRED` / `BURNED`. Only assets in the `ACTIVE` state can have tokens transferred. See [Core Concepts](./CONCEPTS.md) for a detailed state machine diagram.
+
+### Can I freeze or burn tokens after deployment?
+
+Yes. Assets in the `ACTIVE` state can be transitioned to `FROZEN` to temporarily halt all transfers, or individual tokens can be burned. Force transfers (clawbacks) are supported for regulatory scenarios. All these operations require appropriate permissions and are fully logged.
+
+### How are dividends distributed?
+
+The platform takes a cap table snapshot at a specified date and calculates pro-rata distributions based on each investor's token balance. Distributions can be paid via bank transfer, stablecoin, or other configured payment rails. Use the `client.cashflow.createDistribution()` method to initiate a distribution.
+
+---
+
+## Deployment and Operations
+
+### How do I deploy to production?
+
+1. Set up PostgreSQL and Redis instances (managed services recommended)
+2. Deploy the API server (Docker image or Node.js process)
+3. Configure production environment variables (especially `JWT_SECRET`, `DATABASE_URL`, `RPC_URL`)
+4. Deploy smart contracts to your target chain using Foundry
+5. Configure a reverse proxy (nginx, Cloudflare) with TLS termination
+6. Set up monitoring with OpenTelemetry-compatible backends
+
+### Does the platform support horizontal scaling?
+
+The API server is stateless and can be horizontally scaled behind a load balancer. Redis handles event bus communication and caching across instances. PostgreSQL should use a connection pooler (PgBouncer) for high-concurrency deployments.
+
+### How do I monitor the platform?
+
+The server exports OpenTelemetry traces and metrics via OTLP HTTP. Connect to any compatible backend: Jaeger, Grafana Tempo, Datadog, or New Relic. The `/metrics` endpoint exposes Prometheus-compatible metrics. The audit trail and event bus provide additional operational visibility.
+
+---
+
+## Further Reading
+
+- [Installation](./getting-started/INSTALLATION.md) -- Setup guide
+- [Quickstart](./getting-started/QUICKSTART.md) -- 5-minute tutorial
+- [Core Concepts](./CONCEPTS.md) -- Assets, tokens, compliance, transfers
+- [Architecture Overview](./architecture/OVERVIEW.md) -- System design and internals
+- [Glossary](./GLOSSARY.md) -- Platform terminology
