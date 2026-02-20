@@ -150,8 +150,8 @@ export class VerifyingPaymaster implements IPaymaster {
       return err(checkResult.error);
     }
 
-    if (!checkResult.value.approved) {
-      return err(`Sponsorship denied: ${checkResult.value.reason}`);
+    if (!checkResult.data.approved) {
+      return err(`Sponsorship denied: ${checkResult.data.reason}`);
     }
 
     // Get paymaster data
@@ -160,7 +160,7 @@ export class VerifyingPaymaster implements IPaymaster {
       return err(pmDataResult.error);
     }
 
-    const pmData = pmDataResult.value;
+    const pmData = pmDataResult.data;
 
     return ok({
       ...userOp,

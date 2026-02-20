@@ -1,6 +1,9 @@
 import { db, schema } from '../config/database.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { randomBytes, createHash } from 'crypto';
+import { AbiCoder } from 'ethers';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import * as auditService from './audit.service.js';
 import { withSerializableTransaction, withRetryableTransaction } from '../utils/transaction.js';
@@ -298,20 +301,71 @@ function buildERC3643DeploymentTx(token: any, input: DeployTokenInput) {
   };
 }
 
-function buildERC3643Bytecode(token: any): string {
-  // Placeholder for actual ERC-3643 bytecode construction
-  // In production, this would use ethers.js or similar to encode constructor args
+// Cache loaded contract artifacts
+const artifactCache = new Map<string, { abi: any[]; bytecode: string }>();
 
-  const constructorArgs = {
-    name: token.name,
-    symbol: token.symbol,
-    decimals: token.decimals,
-    totalSupply: token.totalSupply,
-    complianceModules: token.complianceModules,
+/**
+ * Load a compiled contract artifact from contracts/out/ (Foundry format).
+ * Exported for reuse by other services (e.g., NFT lifecycle contracts).
+ */
+export function loadContractArtifact(contractName: string): { abi: any[]; bytecode: string } {
+  const cached = artifactCache.get(contractName);
+  if (cached) return cached;
+
+  const artifactPath = resolve(
+    process.cwd(), '..', 'contracts', 'out',
+    `${contractName}.sol`, `${contractName}.json`
+  );
+
+  if (!existsSync(artifactPath)) {
+    throw new ValidationError(
+      `Contract artifact not found: ${contractName}. Run 'forge build' in contracts/.`
+    );
+  }
+
+  const raw = JSON.parse(readFileSync(artifactPath, 'utf-8'));
+  const artifact = {
+    abi: raw.abi,
+    bytecode: raw.bytecode.object, // Foundry format: bytecode.object contains the hex
   };
 
-  // Return placeholder bytecode (actual implementation would compile contract)
-  return `0x608060405234801561001057600080fd5b50${Buffer.from(JSON.stringify(constructorArgs)).toString('hex')}`;
+  artifactCache.set(contractName, artifact);
+  return artifact;
+}
+
+function buildERC3643Bytecode(token: any): string {
+  const { abi, bytecode } = loadContractArtifact('ComplianceToken');
+
+  // Encode constructor args using the ABI definition
+  const coder = new AbiCoder();
+  const constructorAbi = abi.find(
+    (entry: any) => entry.type === 'constructor'
+  );
+
+  if (!constructorAbi) {
+    // If no constructor, return raw bytecode
+    return bytecode;
+  }
+
+  const types = constructorAbi.inputs.map((input: any) => input.type);
+  const values: unknown[] = [];
+
+  for (const input of constructorAbi.inputs) {
+    switch (input.name) {
+      case '_name': values.push(token.name); break;
+      case '_symbol': values.push(token.symbol); break;
+      case '_identityRegistry':
+        values.push(token.identityRegistryAddress || '0x0000000000000000000000000000000000000000');
+        break;
+      default:
+        values.push('0x0000000000000000000000000000000000000000');
+    }
+  }
+
+  const encodedArgs = coder.encode(types, values);
+
+  // bytecode + encoded constructor args (strip 0x from encoded args)
+  return bytecode + encodedArgs.slice(2);
 }
 
 // ============================================================================

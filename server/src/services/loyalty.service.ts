@@ -193,6 +193,11 @@ export async function listPrograms(orgId: string): Promise<LoyaltyProgram[]> {
   return rows.map(mapProgram);
 }
 
+// Whitelist of allowed update field names for loyalty_programs (prevents SQL injection via object keys)
+const ALLOWED_PROGRAM_UPDATE_FIELDS = new Set([
+  'name', 'description', 'currency', 'tiers', 'earnRules', 'redeemRules', 'status',
+]);
+
 /** Update program fields. */
 export async function updateProgram(
   orgId: string, programId: string,
@@ -215,6 +220,9 @@ export async function updateProgram(
   };
 
   for (const [key, apply] of Object.entries(fieldMap)) {
+    if (!ALLOWED_PROGRAM_UPDATE_FIELDS.has(key)) {
+      throw new Error(`Invalid update field for loyalty program: ${key}`);
+    }
     if ((updates as any)[key] !== undefined) apply();
   }
   if (sets.length === 0) return existing;

@@ -392,9 +392,8 @@ export class GovernanceModule {
    */
   async undelegate(assetId: string, delegateId?: string): Promise<{ success: boolean }> {
     const validatedAssetId = validate(UUIDSchema, assetId);
-    const query = delegateId ? { delegateId } : undefined;
     const response = await this.http.delete<{ success: boolean }>(
-      `/api/v1/governance/${validatedAssetId}/delegations${query ? `?delegateId=${delegateId}` : ''}`
+      `/api/v1/governance/${validatedAssetId}/delegations${delegateId ? `?delegateId=${encodeURIComponent(delegateId)}` : ''}`
     );
     return response.data;
   }

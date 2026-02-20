@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as investorService from '../services/investor.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 import { logger } from '../middleware/logger.js';
 
 export const investorRouter = Router();
@@ -384,7 +385,7 @@ const manualKycRejectionSchema = z.object({
 // ============================================================================
 
 // Create investor
-investorRouter.post('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -407,7 +408,7 @@ investorRouter.post('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respo
 });
 
 // List investors
-investorRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -432,7 +433,7 @@ investorRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respon
 });
 
 // Get investor by ID
-investorRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -446,7 +447,7 @@ investorRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Res
 });
 
 // Get investor by external ID
-investorRouter.get('/external/:externalId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/external/:externalId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -463,7 +464,7 @@ investorRouter.get('/external/:externalId', apiKeyMiddleware, async (req: ApiKey
 });
 
 // Update investor
-investorRouter.patch('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.patch('/:id', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -483,7 +484,7 @@ investorRouter.patch('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: R
 });
 
 // Update investor status
-investorRouter.post('/:id/status', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/status', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -512,7 +513,7 @@ investorRouter.post('/:id/status', apiKeyMiddleware, async (req: ApiKeyRequest, 
 // ============================================================================
 
 // Create KYC session
-investorRouter.post('/:id/kyc', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/kyc', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -536,7 +537,7 @@ investorRouter.post('/:id/kyc', apiKeyMiddleware, async (req: ApiKeyRequest, res
 });
 
 // List KYC sessions
-investorRouter.get('/:id/kyc', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/:id/kyc', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -550,7 +551,7 @@ investorRouter.get('/:id/kyc', apiKeyMiddleware, async (req: ApiKeyRequest, res:
 });
 
 // Get KYC session
-investorRouter.get('/:id/kyc/:sessionId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/:id/kyc/:sessionId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -564,7 +565,7 @@ investorRouter.get('/:id/kyc/:sessionId', apiKeyMiddleware, async (req: ApiKeyRe
 });
 
 // Refresh KYC session status
-investorRouter.post('/:id/kyc/:sessionId/refresh', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/kyc/:sessionId/refresh', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -581,7 +582,7 @@ investorRouter.post('/:id/kyc/:sessionId/refresh', apiKeyMiddleware, async (req:
 });
 
 // Manual KYC approval
-investorRouter.post('/:id/kyc/approve', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/kyc/approve', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -607,7 +608,7 @@ investorRouter.post('/:id/kyc/approve', apiKeyMiddleware, async (req: ApiKeyRequ
 });
 
 // Manual KYC rejection
-investorRouter.post('/:id/kyc/reject', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/kyc/reject', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -636,7 +637,7 @@ investorRouter.post('/:id/kyc/reject', apiKeyMiddleware, async (req: ApiKeyReque
 // ============================================================================
 
 // Add wallet
-investorRouter.post('/:id/wallets', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/wallets', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -660,7 +661,7 @@ investorRouter.post('/:id/wallets', apiKeyMiddleware, async (req: ApiKeyRequest,
 });
 
 // List wallets
-investorRouter.get('/:id/wallets', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/:id/wallets', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -674,7 +675,7 @@ investorRouter.get('/:id/wallets', apiKeyMiddleware, async (req: ApiKeyRequest, 
 });
 
 // Get wallet
-investorRouter.get('/:id/wallets/:walletId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/:id/wallets/:walletId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -688,7 +689,7 @@ investorRouter.get('/:id/wallets/:walletId', apiKeyMiddleware, async (req: ApiKe
 });
 
 // Verify wallet
-investorRouter.post('/:id/wallets/:walletId/verify', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/wallets/:walletId/verify', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -708,7 +709,7 @@ investorRouter.post('/:id/wallets/:walletId/verify', apiKeyMiddleware, async (re
 });
 
 // Block wallet
-investorRouter.post('/:id/wallets/:walletId/block', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.post('/:id/wallets/:walletId/block', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -736,7 +737,7 @@ investorRouter.post('/:id/wallets/:walletId/block', apiKeyMiddleware, async (req
 // ============================================================================
 
 // Find investor by wallet address
-investorRouter.get('/lookup/wallet/:address', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/lookup/wallet/:address', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -763,7 +764,7 @@ investorRouter.get('/lookup/wallet/:address', apiKeyMiddleware, async (req: ApiK
 // ============================================================================
 
 // Check if investor is eligible to redeem tokens
-investorRouter.get('/:id/redemption-eligibility', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+investorRouter.get('/:id/redemption-eligibility', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

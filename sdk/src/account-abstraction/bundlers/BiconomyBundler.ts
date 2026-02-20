@@ -124,8 +124,8 @@ export class BiconomyBundler extends AbstractBundler {
       return super.getGasPrices();
     }
 
-    const maxFeePerGas = BigInt(result.value.maxFeePerGas);
-    const maxPriorityFeePerGas = BigInt(result.value.maxPriorityFeePerGas);
+    const maxFeePerGas = BigInt(result.data.maxFeePerGas);
+    const maxPriorityFeePerGas = BigInt(result.data.maxPriorityFeePerGas);
 
     return ok({
       standard: {

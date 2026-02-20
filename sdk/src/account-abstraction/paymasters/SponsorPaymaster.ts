@@ -144,8 +144,11 @@ export class SponsorPaymaster implements IPaymaster {
   ): Promise<Result<UnsignedUserOperation, string>> {
     // Check sponsorship first
     const checkResult = await this.checkSponsorship(userOp);
-    if (!checkResult.success || !checkResult.value.approved) {
-      return err(`Sponsorship denied: ${checkResult.value?.reason || checkResult.error}`);
+    if (!checkResult.success) {
+      return err(`Sponsorship denied: ${checkResult.error}`);
+    }
+    if (!checkResult.data.approved) {
+      return err(`Sponsorship denied: ${checkResult.data.reason || 'not approved'}`);
     }
 
     // Get paymaster data
@@ -159,10 +162,10 @@ export class SponsorPaymaster implements IPaymaster {
 
     return ok({
       ...userOp,
-      paymaster: pmDataResult.value.paymaster,
-      paymasterVerificationGasLimit: pmDataResult.value.paymasterVerificationGasLimit,
-      paymasterPostOpGasLimit: pmDataResult.value.paymasterPostOpGasLimit,
-      paymasterData: pmDataResult.value.paymasterData,
+      paymaster: pmDataResult.data.paymaster,
+      paymasterVerificationGasLimit: pmDataResult.data.paymasterVerificationGasLimit,
+      paymasterPostOpGasLimit: pmDataResult.data.paymasterPostOpGasLimit,
+      paymasterData: pmDataResult.data.paymasterData,
     });
   }
 

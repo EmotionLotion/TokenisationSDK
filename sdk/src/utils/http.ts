@@ -71,7 +71,7 @@ export class HttpClient {
           // Check if we should retry
           if (this.config.retry.retryOn.includes(response.status) && retries < this.config.retry.maxRetries) {
             retries++;
-            const delay = this.config.retry.retryDelay * Math.pow(2, retries - 1);
+            const delay = this.getRetryDelay(response, retries);
             await this.sleep(delay);
             continue;
           }
@@ -146,8 +146,8 @@ export class HttpClient {
     return this.request<T>({ method: 'PATCH', path, body });
   }
 
-  async delete<T>(path: string): Promise<ApiResponse<T>> {
-    return this.request<T>({ method: 'DELETE', path });
+  async delete<T>(path: string, query?: RequestOptions['query']): Promise<ApiResponse<T>> {
+    return this.request<T>({ method: 'DELETE', path, query });
   }
 
   /**
@@ -210,6 +210,26 @@ export class HttpClient {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  /**
+   * Calculate retry delay, respecting Retry-After header on 429/503.
+   */
+  private getRetryDelay(response: Response, retryCount: number): number {
+    const retryAfter = response.headers.get('Retry-After');
+    if (retryAfter && (response.status === 429 || response.status === 503)) {
+      const seconds = Number(retryAfter);
+      if (!Number.isNaN(seconds) && seconds > 0) {
+        return seconds * 1000;
+      }
+      // Try HTTP-date format
+      const date = Date.parse(retryAfter);
+      if (!Number.isNaN(date)) {
+        const delay = date - Date.now();
+        if (delay > 0) return delay;
+      }
+    }
+    return this.config.retry.retryDelay * Math.pow(2, retryCount - 1);
   }
 
   /**

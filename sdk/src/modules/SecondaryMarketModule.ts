@@ -6,6 +6,7 @@
  */
 
 import type { HttpClient } from '../utils/http.js';
+import { parseOrThrow, createListingInputSchema } from '../validation/real-estate.js';
 
 export interface SecondaryListing {
   id: string;
@@ -23,6 +24,7 @@ export interface SecondaryListing {
 export interface CreateListingInput {
   tokenAmount: number;
   pricePerToken: number;
+  sellerWallet: string;
   currency?: string;
   expiresAt?: string;
 }
@@ -51,9 +53,10 @@ export class SecondaryMarketModule {
   }
 
   async createListing(assetId: string, input: CreateListingInput): Promise<SecondaryListing> {
+    const validated = parseOrThrow(createListingInputSchema, input, 'CreateListing');
     const response = await this.http.post<{ data: SecondaryListing }>(
       `/api/v1/assets/${encodeURIComponent(assetId)}/listings`,
-      input,
+      validated,
     );
     return response.data.data;
   }

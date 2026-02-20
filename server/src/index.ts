@@ -15,6 +15,12 @@ import compression from 'compression';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/openapi.js';
 import { testConnection, getDbMode } from './config/database.js';
+
+// SECURITY: Block SQLite in production — it is not suitable for concurrent production workloads
+if (process.env.NODE_ENV === 'production' && getDbMode() === 'sqlite') {
+  console.error('FATAL: SQLite is not allowed in production. Set DB_MODE=postgresql with a proper DATABASE_URL.');
+  process.exit(1);
+}
 import { bootstrapRegistry, isBootstrapped } from './config/bootstrap.js';
 import { validateEnvironmentOrExit, getEnvironmentSummary } from './config/environment.js';
 import { authRouter } from './routes/auth.routes.js';
@@ -54,6 +60,7 @@ import { transitionRouter } from './routes/transition.routes.js';
 import { oauthRouter } from './routes/oauth.routes.js';
 import { ticketRouter } from './routes/ticket.routes.js';
 import { gasRouter } from './routes/gas.routes.js';
+import { storageRouter } from './routes/storage.routes.js';
 // Vertical routes
 import { hotelRouter } from './routes/hotel.routes.js';
 import { carRentalRouter } from './routes/car-rental.routes.js';
@@ -102,6 +109,9 @@ import { idempotencyMiddleware } from './middleware/idempotency.js';
 import { auditTrailMiddleware } from './middleware/auditTrail.js';
 import * as recoveryService from './services/recovery.service.js';
 import * as schedulerService from './services/scheduler.service.js';
+import { registerJobHandler } from './services/scheduler.service.js';
+import * as distributionService from './services/distribution.service.js';
+import * as vestingService from './services/vesting.service.js';
 import { sseService } from './services/sse.service.js';
 
 const app = express();
@@ -228,6 +238,7 @@ app.use('/api/v1/indexer', apiKeyMiddleware, tenantContextMiddleware, indexerRou
 app.use('/api/v1/eventbus', apiKeyMiddleware, tenantContextMiddleware, eventbusRouter);
 app.use('/api/v1/idempotency', apiKeyMiddleware, tenantContextMiddleware, idempotencyRouter);
 app.use('/api/v1/custody', apiKeyMiddleware, tenantContextMiddleware, custodyRouter);
+app.use('/api/v1/storage', apiKeyMiddleware, tenantContextMiddleware, storageRouter);
 
 // Reporting & Analytics
 app.use('/api/v1/ledger', apiKeyMiddleware, tenantContextMiddleware, ledgerRouter);
@@ -413,6 +424,65 @@ async function start() {
       } catch (error) {
         logger.error('Recovery service failed to start', { error: error as Error });
       }
+
+      // Register scheduler job handlers for domain services
+      registerJobHandler('distribution.execute', async (job) => {
+        const { distributionId, orgId } = job.payload as { distributionId: string; orgId: string };
+        const result = await distributionService.executeDistribution(distributionId, orgId || job.orgId);
+        return { distributionId, status: result.status, paidRecipients: result.paidRecipients };
+      });
+
+      registerJobHandler('vesting.release', async (job) => {
+        const { scheduleId, orgId } = job.payload as { scheduleId: string; orgId: string };
+        const result = await vestingService.releaseVestedTokens(scheduleId, orgId || job.orgId);
+        return { scheduleId, releaseId: result.id, amount: result.amount };
+      });
+
+      registerJobHandler('compliance.expiry', async (job) => {
+        const { db: dbInstance, schema: dbSchema } = await import('./config/database.js');
+        const { eq, and, sql } = await import('drizzle-orm');
+        const { orgId } = job.payload as { orgId: string };
+        const now = new Date();
+        const expired = await dbInstance.update(dbSchema.kycSessions)
+          .set({ status: 'expired', updatedAt: now })
+          .where(and(
+            eq(dbSchema.kycSessions.orgId, orgId || job.orgId),
+            sql`${dbSchema.kycSessions.expiresAt} < ${now}`,
+            eq(dbSchema.kycSessions.status, 'verified')
+          ))
+          .returning();
+        return { expiredCount: expired.length };
+      });
+
+      registerJobHandler('lockup.check', async (job) => {
+        const { db: dbInstance, schema: dbSchema } = await import('./config/database.js');
+        const { eq, and, sql } = await import('drizzle-orm');
+        const { orgId } = job.payload as { orgId: string };
+        const now = new Date();
+        const releasable = await dbInstance.select()
+          .from(dbSchema.vestingSchedules)
+          .where(and(
+            eq(dbSchema.vestingSchedules.orgId, orgId || job.orgId),
+            eq(dbSchema.vestingSchedules.status, 'active'),
+            sql`${dbSchema.vestingSchedules.cliffDate} <= ${now}`
+          ));
+        let released = 0;
+        for (const schedule of releasable) {
+          try {
+            await vestingService.releaseVestedTokens(schedule.id, schedule.orgId);
+            released++;
+          } catch { /* skip schedules with nothing to release */ }
+        }
+        return { checked: releasable.length, released };
+      });
+
+      registerJobHandler('reconciliation.run', async (job) => {
+        const reconciliationService = await import('./services/reconciliation.service.js');
+        const result = await reconciliationService.startReconciliation(
+          (job.payload as any)?.orgId || job.orgId
+        );
+        return result as unknown as Record<string, unknown>;
+      });
 
       // Start scheduled jobs service (Gap 13)
       try {

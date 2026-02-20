@@ -311,7 +311,6 @@ export class TokenisationSDK {
     this.eventStore = (config.eventStore as EventStore) || new EventStore();
     this.policyEvaluator = new PolicyEvaluator();
     this.lifecycleEngine = new LifecycleEngine(this.eventStore, this.policyEvaluator);
-    this.lifecycleEngine = new LifecycleEngine(this.eventStore, this.policyEvaluator);
     this.pluginRegistry = new PluginRegistry();
     this._providerRegistry = new ProviderRegistry();
 
@@ -667,7 +666,8 @@ export class TokenisationSDK {
           // Real Mint using ChainService
           const result = await this.chainService.writeContract(
             asset.tokenInfo.contractAddress as `0x${string}`,
-            [`function mint(address to, uint256 amount) external`], // TODO: Use real ABI
+            // ERC-3643 mint function - human-readable ABI format (parsed by ethers.js)
+            [`function mint(address to, uint256 amount) external`],
             'mint',
             [to, BigInt(amount)]
           );
@@ -721,7 +721,8 @@ export class TokenisationSDK {
           // Real Transfer using ChainService
           const result = await this.chainService.writeContract(
             asset.tokenInfo.contractAddress as `0x${string}`,
-            [`function transfer(address to, uint256 amount) external`], // TODO: Use real ABI
+            // ERC-20 transfer function - human-readable ABI format (parsed by ethers.js)
+            [`function transfer(address to, uint256 amount) external`],
             'transfer',
             [to, BigInt(amount)]
           );

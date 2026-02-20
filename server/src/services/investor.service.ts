@@ -247,7 +247,7 @@ export async function createInvestor(input: CreateInvestorInput) {
       taxResidency: input.taxResidency?.toUpperCase(),
       status: 'pending',
       kycStatus: 'not_started',
-      metadata: { ...input.metadata, profile: input.profile } || {},
+      metadata: { ...input.metadata, profile: input.profile },
     }).returning();
 
     // Emit event inside transaction to prevent orphaned records

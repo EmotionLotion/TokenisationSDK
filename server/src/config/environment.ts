@@ -275,6 +275,61 @@ const envDefinitions: EnvValidation[] = [
     description: 'S3 secret key',
     sensitive: true,
   },
+  {
+    name: 'SIGNER_KEYS',
+    required: false,
+    description: 'JSON array of signer keys: [{"address":"0x...","privateKey":"0x..."}]',
+    sensitive: true,
+  },
+  {
+    name: 'SIGNING_PROVIDER',
+    required: false,
+    validator: (value) => {
+      if (!value) return { valid: true }; // Optional — skip if not set
+      return validators.isOneOf(['ephemeral', 'file', 'kms'])(value);
+    },
+    description: 'Compliance signing provider: ephemeral, file, kms',
+  },
+  {
+    name: 'SIGNING_KEY_PATH',
+    required: (env) => env.SIGNING_PROVIDER === 'file',
+    description: 'Path to RSA PEM key file for compliance signing',
+    sensitive: true,
+  },
+  {
+    name: 'KMS_KEY_ID',
+    required: (env) => env.SIGNING_PROVIDER === 'kms',
+    description: 'AWS KMS key ID for compliance signing',
+    sensitive: true,
+  },
+  {
+    name: 'IPFS_ENABLED',
+    required: false,
+    validator: validators.isBool,
+    description: 'Enable IPFS storage via Pinata (true/false)',
+  },
+  {
+    name: 'PINATA_JWT',
+    required: (env) => env.IPFS_ENABLED === 'true',
+    description: 'Pinata JWT for IPFS pinning',
+    sensitive: true,
+  },
+  {
+    name: 'S3_ENABLED',
+    required: false,
+    validator: validators.isBool,
+    description: 'Enable S3 storage (true/false)',
+  },
+  {
+    name: 'AWS_SES_REGION',
+    required: false,
+    description: 'AWS SES region for email sending',
+  },
+  {
+    name: 'ENABLED_VERTICALS',
+    required: false,
+    description: 'Comma-separated enabled vertical modules',
+  },
 ];
 
 // ============================================================================

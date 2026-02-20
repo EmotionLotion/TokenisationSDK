@@ -130,16 +130,16 @@ export class PimlicoBundler extends AbstractBundler {
 
     return ok({
       standard: {
-        maxFeePerGas: BigInt(result.value.standard.maxFeePerGas),
-        maxPriorityFeePerGas: BigInt(result.value.standard.maxPriorityFeePerGas),
+        maxFeePerGas: BigInt(result.data.standard.maxFeePerGas),
+        maxPriorityFeePerGas: BigInt(result.data.standard.maxPriorityFeePerGas),
       },
       fast: {
-        maxFeePerGas: BigInt(result.value.fast.maxFeePerGas),
-        maxPriorityFeePerGas: BigInt(result.value.fast.maxPriorityFeePerGas),
+        maxFeePerGas: BigInt(result.data.fast.maxFeePerGas),
+        maxPriorityFeePerGas: BigInt(result.data.fast.maxPriorityFeePerGas),
       },
       instant: {
-        maxFeePerGas: BigInt(result.value.fast.maxFeePerGas) * 150n / 100n,
-        maxPriorityFeePerGas: BigInt(result.value.fast.maxPriorityFeePerGas) * 150n / 100n,
+        maxFeePerGas: BigInt(result.data.fast.maxFeePerGas) * 150n / 100n,
+        maxPriorityFeePerGas: BigInt(result.data.fast.maxPriorityFeePerGas) * 150n / 100n,
       },
     });
   }
@@ -177,10 +177,10 @@ export class PimlicoBundler extends AbstractBundler {
     }
 
     return ok({
-      paymaster: result.value.paymaster,
-      paymasterData: result.value.paymasterData,
-      paymasterVerificationGasLimit: BigInt(result.value.paymasterVerificationGasLimit),
-      paymasterPostOpGasLimit: BigInt(result.value.paymasterPostOpGasLimit),
+      paymaster: result.data.paymaster,
+      paymasterData: result.data.paymasterData,
+      paymasterVerificationGasLimit: BigInt(result.data.paymasterVerificationGasLimit),
+      paymasterPostOpGasLimit: BigInt(result.data.paymasterPostOpGasLimit),
     });
   }
 }

@@ -18,6 +18,7 @@ import * as auditService from './audit.service.js';
 import * as truthviewService from './truthview.service.js';
 import * as reconciliationService from './reconciliation.service.js';
 import { logger } from '../middleware/logger.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 const { tokens, ledgerPositions, transfers, investors, distributions, distributionPayments, auditLog, decisions } = schema;
 
@@ -249,49 +250,19 @@ async function generateCapTableReport(request: ReportRequest): Promise<string> {
 
       return formatReport(data, request.format);
     } catch (error) {
-      // Log database errors but fall back to mock data for development/demo
-      logger.warn('Cap table snapshot query failed, falling back to mock data', {
+      logger.error('Cap table snapshot query failed', {
         error: error instanceof Error ? error : undefined,
         metadata: { tokenId },
       });
+      throw new AppError(
+        `Failed to generate cap table report for token ${tokenId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        500,
+        'REPORT_GENERATION_FAILED'
+      );
     }
   }
 
-  // Fallback mock data
-  const data = {
-    reportType: 'Cap Table',
-    generatedAt: new Date(),
-    tokenId,
-    totalSupply: '5000000000000000000000000',
-    issuedSupply: '750000000000000000000000',
-    holders: [
-      {
-        rank: 1,
-        walletAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
-        balance: '250000000000000000000000',
-        percentage: '5.00%',
-        investorId: 'inv_001',
-        investorType: 'accredited',
-        jurisdiction: 'AE',
-      },
-      {
-        rank: 2,
-        walletAddress: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-        balance: '500000000000000000000000',
-        percentage: '10.00%',
-        investorId: 'inv_002',
-        investorType: 'institutional',
-        jurisdiction: 'GB',
-      },
-    ],
-    summary: {
-      totalHolders: 2,
-      averageHolding: '375000000000000000000000',
-      medianHolding: '375000000000000000000000',
-    },
-  };
-
-  return formatReport(data, request.format);
+  throw new AppError('tokenId is required for cap table reports', 400, 'VALIDATION_ERROR');
 }
 
 async function generateTransferHistoryReport(request: ReportRequest): Promise<string> {
@@ -615,11 +586,105 @@ function formatReport(data: unknown, format: ReportFormat): string {
     case 'csv':
       return convertToCSV(data);
     case 'pdf':
-      // In production, use a PDF library like pdfkit or puppeteer
-      return JSON.stringify({ format: 'pdf', note: 'PDF generation not implemented', data });
+      return generatePDF(data);
     default:
       return JSON.stringify(data, null, 2);
   }
+}
+
+function generatePDF(data: unknown): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+  const chunks: Buffer[] = [];
+
+  doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+  const obj = data as Record<string, unknown>;
+
+  // Header
+  doc.fontSize(20).font('Helvetica-Bold').text('AHOY Tokenisation Report', { align: 'center' });
+  doc.moveDown(0.5);
+  doc.fontSize(10).font('Helvetica').fillColor('#666666')
+    .text(`Generated: ${obj.generatedAt || new Date().toISOString()}`, { align: 'center' });
+  doc.moveDown(1);
+
+  // Divider
+  doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#dddddd');
+  doc.moveDown(1);
+
+  // Report type
+  if (obj.reportType) {
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#000000')
+      .text(`Report Type: ${String(obj.reportType).replace(/_/g, ' ').toUpperCase()}`);
+    doc.moveDown(0.5);
+  }
+
+  // Summary section
+  const summaryKeys = Object.keys(obj).filter(
+    k => !Array.isArray(obj[k]) && k !== 'reportType' && k !== 'generatedAt'
+  );
+  if (summaryKeys.length > 0) {
+    doc.fontSize(12).font('Helvetica-Bold').text('Summary');
+    doc.moveDown(0.3);
+    for (const key of summaryKeys) {
+      const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+      doc.fontSize(10).font('Helvetica')
+        .text(`${label}: ${JSON.stringify(obj[key])}`, { indent: 10 });
+    }
+    doc.moveDown(1);
+  }
+
+  // Data table
+  const dataArrayKey = Object.keys(obj).find(k => Array.isArray(obj[k]));
+  if (dataArrayKey && Array.isArray(obj[dataArrayKey])) {
+    const items = obj[dataArrayKey] as Record<string, unknown>[];
+    doc.fontSize(12).font('Helvetica-Bold').text(`${dataArrayKey} (${items.length} records)`);
+    doc.moveDown(0.5);
+
+    if (items.length > 0) {
+      const headers = Object.keys(items[0]).slice(0, 5); // Max 5 columns for readability
+      const colWidth = 490 / headers.length;
+
+      // Table header
+      doc.fontSize(8).font('Helvetica-Bold');
+      const headerY = doc.y;
+      let x = 50;
+      for (const h of headers) {
+        doc.text(h, x, headerY, { width: colWidth });
+        x += colWidth;
+      }
+      doc.moveDown(0.3);
+
+      // Table rows (max 50 for page limits)
+      doc.font('Helvetica').fontSize(7);
+      for (const item of items.slice(0, 50)) {
+        if (doc.y > 720) { doc.addPage(); }
+        const rowY = doc.y;
+        x = 50;
+        for (const h of headers) {
+          const val = item[h];
+          const text = val === null || val === undefined ? '' : String(val).slice(0, 30);
+          doc.text(text, x, rowY, { width: colWidth });
+          x += colWidth;
+        }
+        doc.moveDown(0.2);
+      }
+      if (items.length > 50) {
+        doc.moveDown(0.5).fontSize(8).text(`... and ${items.length - 50} more records`);
+      }
+    }
+  }
+
+  // Footer
+  doc.moveDown(2);
+  doc.fontSize(8).fillColor('#999999')
+    .text('Generated by AHOY Tokenisation Platform', 50, 750, { align: 'center' });
+
+  doc.end();
+
+  // PDFKit's end() is synchronous when using buffer mode
+  return Buffer.concat(chunks).toString('binary');
 }
 
 function convertToCSV(data: unknown): string {
@@ -681,12 +746,5 @@ function getContentType(format: ReportFormat): string {
 }
 
 function generateChecksum(content: string): string {
-  // Simple hash for demo - use crypto.createHash in production
-  let hash = 0;
-  for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return `sha256:${Math.abs(hash).toString(16).padStart(16, '0')}`;
+  return `sha256:${createHash('sha256').update(content).digest('hex')}`;
 }

@@ -8,6 +8,7 @@ import { z, ZodSchema, ZodError } from 'zod';
 
 // Re-export all schemas
 export * from './schemas.js';
+export * from './real-estate.js';
 
 // ============================================================================
 // Validation Errors

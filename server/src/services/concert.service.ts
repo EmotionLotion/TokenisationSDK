@@ -118,10 +118,10 @@ export async function createTicket(input: CreateConcertTicketInput) {
     throw new ValidationError('Event date must be in the future');
   }
 
-  // Idempotency by barcode
+  // Idempotency by confirmationCode (barcode)
   if (barcode) {
     const existing = await db.query.concertTickets.findFirst({
-      where: and(eq(concertTickets.orgId, orgId), eq(concertTickets.barcode, barcode)),
+      where: and(eq(concertTickets.orgId, orgId), eq(concertTickets.confirmationCode, barcode)),
     });
     if (existing) return existing;
   }
@@ -131,23 +131,24 @@ export async function createTicket(input: CreateConcertTicketInput) {
     venueCode,
     venueName,
     eventName,
+    artist: 'TBD',
     eventDate: evtDate,
     doorsOpen: doorsOpen ? new Date(doorsOpen) : null,
     section: section ?? null,
     row: row ?? null,
-    seat: seat ?? null,
-    ticketTier: ticketTier ?? 'GA',
+    seatNumber: seat ?? null,
+    seatingTier: ticketTier ?? 'GA',
     fanId: fanId ?? null,
     fanWallet: fanWallet ?? null,
     fanName: fanName ?? null,
-    barcode: barcode ?? `CT-${randomUUID().slice(0, 12).toUpperCase()}`,
+    confirmationCode: barcode ?? `CT-${randomUUID().slice(0, 12).toUpperCase()}`,
     bookingReference: bookingReference ?? randomUUID().slice(0, 6).toUpperCase(),
     status: 'CREATED',
     transferable: toDbBool(transferable ?? true),
     maxTransfers: maxTransfers ?? 3,
     transferCount: 0,
     resalePriceCap: resalePriceCap ?? null,
-    pricePaid: pricePaid ?? '0',
+    faceValue: pricePaid ?? '0',
     currency: currency ?? 'ETH',
     metadataVersion: 1,
     metadata: toDbJson(metadata),
@@ -406,7 +407,7 @@ export async function requestTransfer(input: TransferConcertTicketInput) {
 
   const [transfer] = await db.insert(concertTicketTransfers).values({
     orgId,
-    ticketId,
+    concertTicketId: ticketId,
     fromWallet,
     toWallet,
     fromFanId: ticket.fanId ?? null,
@@ -438,7 +439,7 @@ export async function approveTransfer(orgId: string, transferId: string, approve
   }
 
   // Execute the transfer
-  const ticket = await getTicket(orgId, transfer.ticketId);
+  const ticket = await getTicket(orgId, transfer.concertTicketId);
 
   await db.update(concertTickets).set({
     fanWallet: transfer.toWallet,
@@ -446,7 +447,7 @@ export async function approveTransfer(orgId: string, transferId: string, approve
     transferCount: (ticket.transferCount ?? 0) + 1,
     metadataVersion: (ticket.metadataVersion ?? 1) + 1,
     updatedAt: new Date(),
-  }).where(eq(concertTickets.id, transfer.ticketId));
+  }).where(eq(concertTickets.id, transfer.concertTicketId));
 
   const [updated] = await db.update(concertTicketTransfers).set({
     status: 'COMPLETED',
@@ -455,11 +456,11 @@ export async function approveTransfer(orgId: string, transferId: string, approve
     updatedAt: new Date(),
   }).where(eq(concertTicketTransfers.id, transferId)).returning();
 
-  await recordConcertEvent(orgId, transfer.ticketId, 'TICKET_TRANSFERRED', approvedBy, 'VENUE_ADMIN', null, null, {
+  await recordConcertEvent(orgId, transfer.concertTicketId, 'TICKET_TRANSFERRED', approvedBy, 'VENUE_ADMIN', null, null, {
     transferId, from: transfer.fromWallet, to: transfer.toWallet,
   });
 
-  logger.info('Concert transfer approved and completed', { transferId, ticketId: transfer.ticketId });
+  logger.info('Concert transfer approved and completed', { transferId, ticketId: transfer.concertTicketId });
   return updated;
 }
 
@@ -472,7 +473,7 @@ export async function rejectTransfer(orgId: string, transferId: string, reason: 
 
   if (!updated) throw new NotFoundError('Transfer request not found');
 
-  await recordConcertEvent(orgId, updated.ticketId, 'TRANSFER_REJECTED', rejectedBy, 'VENUE_ADMIN', null, null, {
+  await recordConcertEvent(orgId, updated.concertTicketId, 'TRANSFER_REJECTED', rejectedBy, 'VENUE_ADMIN', null, null, {
     transferId, reason,
   });
 
@@ -485,14 +486,14 @@ export async function rejectTransfer(orgId: string, transferId: string, reason: 
 
 export async function getTicketEvents(orgId: string, ticketId: string, limit = 50) {
   return db.select().from(concertTicketEvents)
-    .where(and(eq(concertTicketEvents.orgId, orgId), eq(concertTicketEvents.ticketId, ticketId)))
+    .where(and(eq(concertTicketEvents.orgId, orgId), eq(concertTicketEvents.concertTicketId, ticketId)))
     .orderBy(desc(concertTicketEvents.createdAt))
     .limit(limit);
 }
 
 export async function getTransferHistory(orgId: string, ticketId: string) {
   return db.select().from(concertTicketTransfers)
-    .where(and(eq(concertTicketTransfers.orgId, orgId), eq(concertTicketTransfers.ticketId, ticketId)))
+    .where(and(eq(concertTicketTransfers.orgId, orgId), eq(concertTicketTransfers.concertTicketId, ticketId)))
     .orderBy(desc(concertTicketTransfers.createdAt));
 }
 
@@ -545,7 +546,7 @@ async function recordConcertEvent(
 ) {
   await db.insert(concertTicketEvents).values({
     orgId,
-    ticketId,
+    concertTicketId: ticketId,
     eventType,
     actor,
     actorRole,

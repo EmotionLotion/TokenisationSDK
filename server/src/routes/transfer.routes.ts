@@ -6,6 +6,7 @@ import * as batchTransferService from '../services/batch-transfer.service.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
 import { idempotencyMiddleware } from '../services/idempotency.service.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 import { db, schema } from '../config/database.js';
 import { eq, and } from 'drizzle-orm';
 
@@ -385,6 +386,7 @@ const confirmTransferSchema = z.object({
 transferRouter.post(
   '/',
   apiKeyMiddleware,
+  requireScope('write'),
   idempotencyMiddleware({ operation: 'transfer.create', required: true }),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
@@ -410,7 +412,7 @@ transferRouter.post(
 });
 
 // Execute full saga (create + precheck + optional auto-approve + sign)
-transferRouter.post('/execute', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/execute', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -451,7 +453,7 @@ const estimateGasSchema = z.object({
 });
 
 // Estimate gas for a transfer without creating one
-transferRouter.post('/estimate-gas', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/estimate-gas', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -519,7 +521,7 @@ const batchTransferSchema = z.object({
   })).min(1).max(100),
 });
 
-transferRouter.post('/batch', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/batch', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -538,7 +540,7 @@ transferRouter.post('/batch', apiKeyMiddleware, async (req: ApiKeyRequest, res: 
 });
 
 // List transfers
-transferRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.get('/', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -562,7 +564,7 @@ transferRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respon
 });
 
 // Get transfer by ID
-transferRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.get('/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -576,7 +578,7 @@ transferRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Res
 });
 
 // Precheck transfer (Step 2)
-transferRouter.post('/:id/precheck', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/precheck', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -590,7 +592,7 @@ transferRouter.post('/:id/precheck', apiKeyMiddleware, async (req: ApiKeyRequest
 });
 
 // Approve transfer (Step 3)
-transferRouter.post('/:id/approve', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/approve', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -604,7 +606,7 @@ transferRouter.post('/:id/approve', apiKeyMiddleware, async (req: ApiKeyRequest,
 });
 
 // Cancel transfer
-transferRouter.post('/:id/cancel', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/cancel', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -619,7 +621,7 @@ transferRouter.post('/:id/cancel', apiKeyMiddleware, async (req: ApiKeyRequest, 
 });
 
 // Sign transfer (Step 4) - Returns tx payload for non-custodial signing
-transferRouter.post('/:id/sign', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/sign', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -634,7 +636,7 @@ transferRouter.post('/:id/sign', apiKeyMiddleware, async (req: ApiKeyRequest, re
 });
 
 // Submit transfer (Step 5) - Submit signed tx hash
-transferRouter.post('/:id/submit', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/submit', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -653,7 +655,7 @@ transferRouter.post('/:id/submit', apiKeyMiddleware, async (req: ApiKeyRequest, 
 });
 
 // Confirm transfer (Step 6) - Called by indexer when tx is mined
-transferRouter.post('/:id/confirm', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/confirm', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -672,7 +674,7 @@ transferRouter.post('/:id/confirm', apiKeyMiddleware, async (req: ApiKeyRequest,
 });
 
 // Reconcile transfer (Step 7) - Verify on-chain state
-transferRouter.post('/:id/reconcile', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/reconcile', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -686,7 +688,7 @@ transferRouter.post('/:id/reconcile', apiKeyMiddleware, async (req: ApiKeyReques
 });
 
 // Settle transfer (Step 8) - Final settlement
-transferRouter.post('/:id/settle', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/:id/settle', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -704,7 +706,7 @@ transferRouter.post('/:id/settle', apiKeyMiddleware, async (req: ApiKeyRequest, 
 // ============================================================================
 
 // Check transfer compliance without creating a transfer
-transferRouter.post('/check', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/check', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -740,7 +742,7 @@ transferRouter.post('/check', apiKeyMiddleware, async (req: ApiKeyRequest, res: 
 // ============================================================================
 
 // Create redemption request (investor exit)
-transferRouter.post('/redemption', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+transferRouter.post('/redemption', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

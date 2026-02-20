@@ -6,6 +6,7 @@
  */
 
 import type { HttpClient } from '../utils/http.js';
+import { parseOrThrow, createScheduleInputSchema, redemptionRequestInputSchema } from '../validation/real-estate.js';
 
 export interface ExitWindow {
   id: string;
@@ -41,46 +42,41 @@ export interface RedemptionRequest {
 export class ExitWindowModule {
   constructor(private http: HttpClient) {}
 
-  async getSchedule(assetId: string): Promise<ExitWindowSchedule | null> {
-    const response = await this.http.get<{ data: ExitWindowSchedule | null }>(
-      `/api/v1/assets/${assetId}/exit-schedule`,
-    );
-    return response.data.data;
-  }
-
   async setSchedule(assetId: string, schedule: Omit<ExitWindowSchedule, 'id' | 'assetId' | 'nextWindowOpens' | 'active'>): Promise<ExitWindowSchedule> {
+    const validated = parseOrThrow(createScheduleInputSchema, schedule, 'SetSchedule');
     const response = await this.http.put<{ data: ExitWindowSchedule }>(
-      `/api/v1/assets/${assetId}/exit-schedule`,
-      schedule,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/exit-schedule`,
+      validated,
     );
     return response.data.data;
   }
 
   async getWindows(assetId: string): Promise<ExitWindow[]> {
     const response = await this.http.get<{ data: ExitWindow[] }>(
-      `/api/v1/assets/${assetId}/exit-windows`,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/exit-windows`,
     );
     return response.data.data;
   }
 
   async getCurrentWindow(assetId: string): Promise<ExitWindow | null> {
     const response = await this.http.get<{ data: ExitWindow | null }>(
-      `/api/v1/assets/${assetId}/exit-windows/current`,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/exit-windows/current`,
     );
     return response.data.data;
   }
 
   async getNextWindow(assetId: string): Promise<ExitWindow | null> {
     const response = await this.http.get<{ data: ExitWindow | null }>(
-      `/api/v1/assets/${assetId}/exit-windows/next`,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/exit-windows/next`,
     );
     return response.data.data;
   }
 
   async requestRedemption(assetId: string, input: { investorId: string; amount: number }): Promise<RedemptionRequest> {
+    const validated = parseOrThrow(redemptionRequestInputSchema, input, 'RedemptionRequest');
     const response = await this.http.post<{ data: RedemptionRequest }>(
-      `/api/v1/assets/${assetId}/exit-windows/redeem`,
-      input,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/exit-windows/redeem`,
+      validated,
     );
     return response.data.data;
   }

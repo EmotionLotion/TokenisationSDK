@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { readFileSync } from 'fs';
+import { randomBytes } from 'crypto';
 import { UnauthorizedError } from './errorHandler.js';
 import { logger } from './logger.js';
 
@@ -94,11 +96,95 @@ const EFFECTIVE_JWT_SECRET = (() => {
     throw new Error('FATAL: JWT_SECRET is required in production/staging');
   }
   // Development only: generate ephemeral secret (will invalidate tokens on restart)
-  const crypto = require('crypto');
-  const devSecret = crypto.randomBytes(64).toString('hex');
+  const devSecret = randomBytes(64).toString('hex');
   logger.warn('SECURITY: Using auto-generated JWT secret. Tokens will be invalidated on server restart.');
   return devSecret;
 })();
+
+// ============================================================================
+// JWT ALGORITHM CONFIGURATION
+// ============================================================================
+// Supported: HS256 (symmetric, default), RS256 (RSA), ES256 (ECDSA)
+const JWT_ALGORITHM = (process.env.JWT_ALGORITHM || 'HS256') as jwt.Algorithm;
+const SUPPORTED_ALGORITHMS: jwt.Algorithm[] = ['HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'];
+
+// For asymmetric algorithms, load public/private keys
+const JWT_PRIVATE_KEY_PATH = process.env.JWT_PRIVATE_KEY_PATH;
+const JWT_PUBLIC_KEY_PATH = process.env.JWT_PUBLIC_KEY_PATH;
+// Inline keys (base64-encoded) for container deployments
+const JWT_PRIVATE_KEY_B64 = process.env.JWT_PRIVATE_KEY_B64;
+const JWT_PUBLIC_KEY_B64 = process.env.JWT_PUBLIC_KEY_B64;
+
+// Validate configured algorithm
+if (!SUPPORTED_ALGORITHMS.includes(JWT_ALGORITHM)) {
+  logger.error(`FATAL: Unsupported JWT_ALGORITHM '${JWT_ALGORITHM}'. Supported: ${SUPPORTED_ALGORITHMS.join(', ')}`);
+  process.exit(1);
+}
+
+function isAsymmetricAlgorithm(alg: string): boolean {
+  return alg.startsWith('RS') || alg.startsWith('ES') || alg.startsWith('PS');
+}
+
+function loadSigningKey(): string | Buffer {
+  if (!isAsymmetricAlgorithm(JWT_ALGORITHM)) {
+    return EFFECTIVE_JWT_SECRET;
+  }
+
+  if (JWT_PRIVATE_KEY_B64) {
+    return Buffer.from(JWT_PRIVATE_KEY_B64, 'base64');
+  }
+
+  if (JWT_PRIVATE_KEY_PATH) {
+    return readFileSync(JWT_PRIVATE_KEY_PATH, 'utf-8');
+  }
+
+  throw new Error(
+    `FATAL: Asymmetric JWT algorithm ${JWT_ALGORITHM} requires JWT_PRIVATE_KEY_PATH or JWT_PRIVATE_KEY_B64`
+  );
+}
+
+function loadVerificationKey(): string | Buffer {
+  if (!isAsymmetricAlgorithm(JWT_ALGORITHM)) {
+    return EFFECTIVE_JWT_SECRET;
+  }
+
+  if (JWT_PUBLIC_KEY_B64) {
+    return Buffer.from(JWT_PUBLIC_KEY_B64, 'base64');
+  }
+
+  if (JWT_PUBLIC_KEY_PATH) {
+    return readFileSync(JWT_PUBLIC_KEY_PATH, 'utf-8');
+  }
+
+  throw new Error(
+    `FATAL: Asymmetric JWT algorithm ${JWT_ALGORITHM} requires JWT_PUBLIC_KEY_PATH or JWT_PUBLIC_KEY_B64`
+  );
+}
+
+// Eagerly validate key availability at module load
+let SIGNING_KEY: string | Buffer;
+let VERIFICATION_KEY: string | Buffer;
+try {
+  SIGNING_KEY = loadSigningKey();
+  VERIFICATION_KEY = loadVerificationKey();
+} catch (err) {
+  if (IS_PRODUCTION || IS_STAGING) {
+    logger.error((err as Error).message);
+    process.exit(1);
+  }
+  // In development, fall back to HS256 with ephemeral secret
+  logger.warn(`JWT key loading failed, falling back to HS256: ${(err as Error).message}`);
+  SIGNING_KEY = EFFECTIVE_JWT_SECRET;
+  VERIFICATION_KEY = EFFECTIVE_JWT_SECRET;
+}
+
+// Production security warning for symmetric algorithms
+if (IS_PRODUCTION && JWT_ALGORITHM === 'HS256') {
+  logger.warn(
+    'SECURITY WARNING: Using HS256 (symmetric) JWT in production. ' +
+    'Consider RS256 or ES256 for better security. Set JWT_ALGORITHM=RS256 with key files.'
+  );
+}
 
 // Track dev mode usage for audit purposes
 const devModeUsageLog: Array<{ timestamp: Date; ip: string; orgId?: string; partyId?: string }> = [];
@@ -216,8 +302,8 @@ export function authMiddleware(
       throw new UnauthorizedError('Invalid authorization format');
     }
 
-    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, {
-      algorithms: ['HS256', 'HS384', 'HS512'],
+    const decoded = jwt.verify(token, VERIFICATION_KEY, {
+      algorithms: [JWT_ALGORITHM],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
@@ -251,8 +337,8 @@ export function optionalAuthMiddleware(
     const [scheme, token] = authHeader.split(' ');
 
     if (scheme === 'Bearer' && token) {
-      const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, {
-        algorithms: ['HS256', 'HS384', 'HS512'],
+      const decoded = jwt.verify(token, VERIFICATION_KEY, {
+        algorithms: [JWT_ALGORITHM],
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,
       }) as JwtPayload;
@@ -267,8 +353,8 @@ export function optionalAuthMiddleware(
 }
 
 export function generateToken(payload: Omit<JwtPayload, 'iat' | 'exp' | 'iss' | 'aud'>): string {
-  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, {
-    algorithm: 'HS256',
+  return jwt.sign(payload, SIGNING_KEY, {
+    algorithm: JWT_ALGORITHM,
     expiresIn: (process.env.JWT_EXPIRES_IN || '1h') as jwt.SignOptions['expiresIn'],
     issuer: JWT_ISSUER,
     audience: JWT_AUDIENCE,
@@ -276,8 +362,8 @@ export function generateToken(payload: Omit<JwtPayload, 'iat' | 'exp' | 'iss' | 
 }
 
 export function generateRefreshToken(payload: Omit<JwtPayload, 'iat' | 'exp' | 'iss' | 'aud'>): string {
-  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, {
-    algorithm: 'HS256',
+  return jwt.sign(payload, SIGNING_KEY, {
+    algorithm: JWT_ALGORITHM,
     expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'],
     issuer: JWT_ISSUER,
     audience: JWT_AUDIENCE,
@@ -285,8 +371,8 @@ export function generateRefreshToken(payload: Omit<JwtPayload, 'iat' | 'exp' | '
 }
 
 export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, EFFECTIVE_JWT_SECRET, {
-    algorithms: ['HS256', 'HS384', 'HS512'],
+  return jwt.verify(token, VERIFICATION_KEY, {
+    algorithms: [JWT_ALGORITHM],
     issuer: JWT_ISSUER,
     audience: JWT_AUDIENCE,
   }) as JwtPayload;
@@ -397,8 +483,8 @@ export async function apiKeyMiddleware(
 
       // Check if it's a JWT (not an API key)
       if (!token.startsWith('sk_')) {
-        const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, {
-          algorithms: ['HS256', 'HS384', 'HS512'],
+        const decoded = jwt.verify(token, VERIFICATION_KEY, {
+          algorithms: [JWT_ALGORITHM],
           issuer: JWT_ISSUER,
           audience: JWT_AUDIENCE,
         }) as JwtPayload;

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as iamService from '../services/iam.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { authMiddleware, apiKeyMiddleware, type AuthRequest, type ApiKeyRequest } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 
 export const iamRouter = Router();
 
@@ -64,7 +65,7 @@ const createApiKeySchema = z.object({
 // ============================================================================
 
 // Create organization (admin only)
-iamRouter.post('/orgs', async (req: Request, res: Response, next: NextFunction) => {
+iamRouter.post('/orgs', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createOrgSchema.parse(req.body);
     const org = await iamService.createOrg(input);
@@ -79,7 +80,7 @@ iamRouter.post('/orgs', async (req: Request, res: Response, next: NextFunction) 
 });
 
 // List organizations (admin only)
-iamRouter.get('/orgs', async (req: Request, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { limit, offset, status } = req.query;
     const orgs = await iamService.listOrgs({
@@ -94,7 +95,7 @@ iamRouter.get('/orgs', async (req: Request, res: Response, next: NextFunction) =
 });
 
 // Get organization by ID
-iamRouter.get('/orgs/:id', async (req: Request, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:id', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const org = await iamService.getOrg(req.params.id);
     res.json(org);
@@ -104,7 +105,7 @@ iamRouter.get('/orgs/:id', async (req: Request, res: Response, next: NextFunctio
 });
 
 // Update organization
-iamRouter.patch('/orgs/:id', async (req: Request, res: Response, next: NextFunction) => {
+iamRouter.patch('/orgs/:id', apiKeyMiddleware, requireScope('write'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = updateOrgSchema.parse(req.body);
     const org = await iamService.updateOrg(req.params.id, input);
@@ -123,7 +124,7 @@ iamRouter.patch('/orgs/:id', async (req: Request, res: Response, next: NextFunct
 // ============================================================================
 
 // Create user in org
-iamRouter.post('/orgs/:orgId/users', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.post('/orgs/:orgId/users', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId;
 
@@ -145,7 +146,7 @@ iamRouter.post('/orgs/:orgId/users', apiKeyMiddleware, async (req: ApiKeyRequest
 });
 
 // List users in org
-iamRouter.get('/orgs/:orgId/users', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/users', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId;
 
@@ -166,7 +167,7 @@ iamRouter.get('/orgs/:orgId/users', apiKeyMiddleware, async (req: ApiKeyRequest,
 });
 
 // Get user by ID
-iamRouter.get('/orgs/:orgId/users/:userId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/users/:userId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, userId } = req.params;
 
@@ -182,7 +183,7 @@ iamRouter.get('/orgs/:orgId/users/:userId', apiKeyMiddleware, async (req: ApiKey
 });
 
 // Update user
-iamRouter.patch('/orgs/:orgId/users/:userId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.patch('/orgs/:orgId/users/:userId', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, userId } = req.params;
 
@@ -207,7 +208,7 @@ iamRouter.patch('/orgs/:orgId/users/:userId', apiKeyMiddleware, async (req: ApiK
 // ============================================================================
 
 // Create role in org
-iamRouter.post('/orgs/:orgId/roles', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.post('/orgs/:orgId/roles', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId;
 
@@ -228,7 +229,7 @@ iamRouter.post('/orgs/:orgId/roles', apiKeyMiddleware, async (req: ApiKeyRequest
 });
 
 // List roles in org
-iamRouter.get('/orgs/:orgId/roles', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/roles', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId;
 
@@ -244,7 +245,7 @@ iamRouter.get('/orgs/:orgId/roles', apiKeyMiddleware, async (req: ApiKeyRequest,
 });
 
 // Get role by ID
-iamRouter.get('/orgs/:orgId/roles/:roleId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/roles/:roleId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, roleId } = req.params;
 
@@ -260,7 +261,7 @@ iamRouter.get('/orgs/:orgId/roles/:roleId', apiKeyMiddleware, async (req: ApiKey
 });
 
 // Assign role to user
-iamRouter.post('/orgs/:orgId/users/:userId/roles', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.post('/orgs/:orgId/users/:userId/roles', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, userId } = req.params;
 
@@ -281,7 +282,7 @@ iamRouter.post('/orgs/:orgId/users/:userId/roles', apiKeyMiddleware, async (req:
 });
 
 // Remove role from user
-iamRouter.delete('/orgs/:orgId/users/:userId/roles/:roleId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.delete('/orgs/:orgId/users/:userId/roles/:roleId', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, userId, roleId } = req.params;
 
@@ -297,7 +298,7 @@ iamRouter.delete('/orgs/:orgId/users/:userId/roles/:roleId', apiKeyMiddleware, a
 });
 
 // Get user roles
-iamRouter.get('/orgs/:orgId/users/:userId/roles', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/users/:userId/roles', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, userId } = req.params;
 
@@ -320,7 +321,7 @@ iamRouter.get('/orgs/:orgId/users/:userId/roles', apiKeyMiddleware, async (req: 
 // ============================================================================
 
 // Create API key
-iamRouter.post('/orgs/:orgId/api-keys', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.post('/orgs/:orgId/api-keys', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId;
 
@@ -355,7 +356,7 @@ iamRouter.post('/orgs/:orgId/api-keys', apiKeyMiddleware, async (req: ApiKeyRequ
 });
 
 // List API keys
-iamRouter.get('/orgs/:orgId/api-keys', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/api-keys', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId;
 
@@ -376,7 +377,7 @@ iamRouter.get('/orgs/:orgId/api-keys', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // Get API key by ID
-iamRouter.get('/orgs/:orgId/api-keys/:keyId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.get('/orgs/:orgId/api-keys/:keyId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, keyId } = req.params;
 
@@ -392,7 +393,7 @@ iamRouter.get('/orgs/:orgId/api-keys/:keyId', apiKeyMiddleware, async (req: ApiK
 });
 
 // Revoke API key
-iamRouter.delete('/orgs/:orgId/api-keys/:keyId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+iamRouter.delete('/orgs/:orgId/api-keys/:keyId', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { orgId, keyId } = req.params;
 

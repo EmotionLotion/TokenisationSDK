@@ -12,6 +12,9 @@ import { pool, getDbMode } from '../config/database.js';
 import { logger } from './logger.js';
 import { type ApiKeyRequest } from './auth.js';
 
+/** Track whether the SQLite RLS skip warning has been logged */
+let _rlsWarningLogged = false;
+
 /**
  * Middleware to set the current org_id in PostgreSQL session for RLS
  *
@@ -26,6 +29,10 @@ export function rlsMiddleware() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // Skip RLS for SQLite mode (SQLite doesn't support RLS)
     if (getDbMode() === 'sqlite') {
+      if (!_rlsWarningLogged) {
+        logger.warn('RLS middleware skipped — SQLite mode does not support Row-Level Security. All org data is accessible. Use PostgreSQL for multi-tenant isolation.');
+        _rlsWarningLogged = true;
+      }
       return next();
     }
 

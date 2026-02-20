@@ -4,6 +4,7 @@ import * as complianceService from '../services/compliance.service.js';
 import { screenInvestorSanctions } from '../services/compliance.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 import { logger } from '../middleware/logger.js';
 
 export const complianceRouter = Router();
@@ -73,7 +74,7 @@ const evaluateIssuanceSchema = z.object({
 // ============================================================================
 
 // Create policy
-complianceRouter.post('/policies', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/policies', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -96,7 +97,7 @@ complianceRouter.post('/policies', apiKeyMiddleware, async (req: ApiKeyRequest, 
 });
 
 // List policies
-complianceRouter.get('/policies', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/policies', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -118,7 +119,7 @@ complianceRouter.get('/policies', apiKeyMiddleware, async (req: ApiKeyRequest, r
 });
 
 // Get policy by ID
-complianceRouter.get('/policies/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/policies/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -142,7 +143,7 @@ complianceRouter.get('/policies/default/ruleset', async (_req, res: Response) =>
 // ============================================================================
 
 // Publish new policy version
-complianceRouter.post('/policies/:id/versions', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/policies/:id/versions', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -167,7 +168,7 @@ complianceRouter.post('/policies/:id/versions', apiKeyMiddleware, async (req: Ap
 });
 
 // List policy versions
-complianceRouter.get('/policies/:id/versions', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/policies/:id/versions', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -181,7 +182,7 @@ complianceRouter.get('/policies/:id/versions', apiKeyMiddleware, async (req: Api
 });
 
 // Get specific policy version
-complianceRouter.get('/policies/:id/versions/:version', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/policies/:id/versions/:version', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -218,7 +219,7 @@ const simulateTransferSchema = z.object({
  * Use this to check if a transfer would be allowed before executing.
  * Returns the same decision structure but does not create a DB record.
  */
-complianceRouter.post('/policies/simulate/transfer', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/policies/simulate/transfer', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -383,7 +384,7 @@ async function simulateTransferDecision(input: {
 // ============================================================================
 
 // Evaluate transfer decision
-complianceRouter.post('/decisions/transfer', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/decisions/transfer', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -406,7 +407,7 @@ complianceRouter.post('/decisions/transfer', apiKeyMiddleware, async (req: ApiKe
 });
 
 // Evaluate issuance decision
-complianceRouter.post('/decisions/issuance', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/decisions/issuance', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -429,7 +430,7 @@ complianceRouter.post('/decisions/issuance', apiKeyMiddleware, async (req: ApiKe
 });
 
 // Get decision by ID
-complianceRouter.get('/decisions/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/decisions/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -443,7 +444,7 @@ complianceRouter.get('/decisions/:id', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // List decisions
-complianceRouter.get('/decisions', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/decisions', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -466,7 +467,7 @@ complianceRouter.get('/decisions', apiKeyMiddleware, async (req: ApiKeyRequest, 
 });
 
 // Verify decision signature
-complianceRouter.post('/decisions/:id/verify', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/decisions/:id/verify', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -500,7 +501,7 @@ complianceRouter.post('/decisions/:id/verify', apiKeyMiddleware, async (req: Api
 // ============================================================================
 
 // Get receipts with filtering
-complianceRouter.get('/receipts', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/receipts', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -541,7 +542,7 @@ complianceRouter.get('/receipts', apiKeyMiddleware, async (req: ApiKeyRequest, r
 });
 
 // Verify a receipt
-complianceRouter.get('/receipts/:id/verify', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/receipts/:id/verify', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -579,7 +580,7 @@ complianceRouter.get('/receipts/:id/verify', apiKeyMiddleware, async (req: ApiKe
       };
 
       try {
-        verification.signatureValid = complianceService.verifyDecisionSignature(payload, decision.signature);
+        verification.signatureValid = await complianceService.verifyDecisionSignature(payload, decision.signature);
         if (!verification.signatureValid) {
           verification.valid = false;
           verification.issues.push('Invalid signature');
@@ -601,7 +602,7 @@ complianceRouter.get('/receipts/:id/verify', apiKeyMiddleware, async (req: ApiKe
 });
 
 // Get a specific receipt by ID
-complianceRouter.get('/receipts/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/receipts/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -646,7 +647,7 @@ const freezeInvestorSchema = z.object({
 });
 
 // Configure KYC provider for the organization
-complianceRouter.post('/kyc/configure', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/kyc/configure', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -669,7 +670,7 @@ complianceRouter.post('/kyc/configure', apiKeyMiddleware, async (req: ApiKeyRequ
 });
 
 // Initiate KYC verification for an investor
-complianceRouter.post('/kyc/verify/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/kyc/verify/:investorId', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -687,7 +688,7 @@ complianceRouter.post('/kyc/verify/:investorId', apiKeyMiddleware, async (req: A
 });
 
 // Get KYC verification status for an investor
-complianceRouter.get('/kyc/status/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.get('/kyc/status/:investorId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -705,7 +706,7 @@ complianceRouter.get('/kyc/status/:investorId', apiKeyMiddleware, async (req: Ap
 });
 
 // Freeze an investor
-complianceRouter.post('/kyc/freeze/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/kyc/freeze/:investorId', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -729,7 +730,7 @@ complianceRouter.post('/kyc/freeze/:investorId', apiKeyMiddleware, async (req: A
 });
 
 // Unfreeze an investor
-complianceRouter.post('/kyc/unfreeze/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+complianceRouter.post('/kyc/unfreeze/:investorId', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

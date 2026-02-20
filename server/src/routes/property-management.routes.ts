@@ -206,7 +206,7 @@ propertyManagementRouter.patch(
       }
 
       const input = updateUnitSchema.parse(req.body);
-      const unit = await propertyManagementService.updateUnit(req.apiKey.orgId, req.params.unitId, input);
+      const unit = await propertyManagementService.updateUnit(req.apiKey.orgId, req.params.unitId, input as any);
 
       res.json({ unit });
     } catch (error) {

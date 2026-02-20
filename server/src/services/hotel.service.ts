@@ -107,13 +107,16 @@ export async function createReservation(input: CreateReservationInput) {
     throw new ValidationError('Check-out date must be after check-in date');
   }
 
-  // Idempotency by confirmation number
+  // Idempotency by confirmation code
   if (confirmationNumber) {
     const existing = await db.query.hotelReservations.findFirst({
-      where: and(eq(hotelReservations.orgId, orgId), eq(hotelReservations.confirmationNumber, confirmationNumber)),
+      where: and(eq(hotelReservations.orgId, orgId), eq(hotelReservations.confirmationCode, confirmationNumber)),
     });
     if (existing) return existing;
   }
+
+  // Calculate night count from dates
+  const nightCount = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
 
   const [reservation] = await db.insert(hotelReservations).values({
     orgId,
@@ -121,19 +124,19 @@ export async function createReservation(input: CreateReservationInput) {
     hotelName,
     checkInDate: checkIn,
     checkOutDate: checkOut,
+    nightCount,
     roomType: roomType ?? 'STANDARD',
     roomNumber: roomNumber ?? null,
     guestId: guestId ?? null,
     guestWallet: guestWallet ?? null,
-    guestName: guestName ?? null,
-    guestEmail: guestEmail ?? null,
-    confirmationNumber: confirmationNumber ?? `RES-${randomUUID().slice(0, 12).toUpperCase()}`,
+    guestName: guestName ?? 'Unknown',
+    confirmationCode: confirmationNumber ?? `RES-${randomUUID().slice(0, 12).toUpperCase()}`,
     bookingReference: bookingReference ?? randomUUID().slice(0, 6).toUpperCase(),
     status: 'CREATED',
     transferable: toDbBool(transferable ?? true),
     maxTransfers: maxTransfers ?? 3,
     transferCount: 0,
-    pricePaid: pricePaid ?? '0',
+    rate: pricePaid ?? '0',
     currency: currency ?? 'ETH',
     metadata: toDbJson(metadata),
     createdAt: new Date(),

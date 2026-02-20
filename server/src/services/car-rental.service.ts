@@ -75,18 +75,19 @@ const ON_CHAIN_SELECTORS: Record<string, string> = {
 export interface CreateRentalInput {
   orgId: string;
   rentalCompanyCode: string;
-  vehicleClass: string;
+  rentalCompanyName?: string;
+  vehicleCategory?: string;
   vehicleMake?: string;
   vehicleModel?: string;
-  vehiclePlate?: string;
-  pickupLocation: string;
-  dropoffLocation: string;
-  pickupTime: string; // ISO timestamp
-  dropoffTime: string; // ISO timestamp
+  licensePlate?: string;
+  pickupLocation?: string;
+  returnLocation?: string;
+  pickupDate: string; // ISO timestamp
+  returnDate: string; // ISO timestamp
   driverId?: string;
   driverWallet?: string;
   driverName?: string;
-  confirmationNumber?: string;
+  confirmationCode?: string;
   bookingReference?: string;
   transferable?: boolean;
   maxTransfers?: number;
@@ -94,6 +95,7 @@ export interface CreateRentalInput {
   currency?: string;
   depositAmount?: string;
   insuranceType?: string;
+  insuranceProvider?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -112,27 +114,27 @@ export interface TransferRentalInput {
 
 export async function createRental(input: CreateRentalInput) {
   const {
-    orgId, rentalCompanyCode, vehicleClass, vehicleMake, vehicleModel,
-    vehiclePlate, pickupLocation, dropoffLocation, pickupTime, dropoffTime,
-    driverId, driverWallet, driverName, confirmationNumber, bookingReference,
+    orgId, rentalCompanyCode, rentalCompanyName, vehicleCategory, vehicleMake, vehicleModel,
+    licensePlate, pickupLocation, returnLocation, pickupDate: pickupDateStr, returnDate: returnDateStr,
+    driverId, driverWallet, driverName, confirmationCode, bookingReference,
     transferable, maxTransfers, dailyRate, currency, depositAmount,
-    insuranceType, metadata,
+    insuranceType, insuranceProvider, metadata,
   } = input;
 
-  const pickupDate = new Date(pickupTime);
-  const dropoffDate = new Date(dropoffTime);
+  const pickupDate = new Date(pickupDateStr);
+  const returnDateVal = new Date(returnDateStr);
 
   if (pickupDate <= new Date()) {
     throw new ValidationError('Pickup time must be in the future');
   }
-  if (dropoffDate <= pickupDate) {
+  if (returnDateVal <= pickupDate) {
     throw new ValidationError('Dropoff time must be after pickup time');
   }
 
-  // Check idempotency by confirmation number
-  if (confirmationNumber) {
+  // Check idempotency by confirmation code
+  if (confirmationCode) {
     const existing = await db.query.carRentals.findFirst({
-      where: and(eq(carRentals.orgId, orgId), eq(carRentals.confirmationNumber, confirmationNumber)),
+      where: and(eq(carRentals.orgId, orgId), eq(carRentals.confirmationCode, confirmationCode)),
     });
     if (existing) return existing;
   }
@@ -140,18 +142,19 @@ export async function createRental(input: CreateRentalInput) {
   const [rental] = await db.insert(carRentals).values({
     orgId,
     rentalCompanyCode,
-    vehicleClass,
-    vehicleMake: vehicleMake ?? null,
-    vehicleModel: vehicleModel ?? null,
-    vehiclePlate: vehiclePlate ?? null,
-    pickupLocation,
-    dropoffLocation,
-    pickupTime: pickupDate,
-    dropoffTime: dropoffDate,
+    rentalCompanyName: rentalCompanyName ?? rentalCompanyCode,
+    vehicleCategory: vehicleCategory ?? 'ECONOMY',
+    vehicleMake: vehicleMake ?? 'Unknown',
+    vehicleModel: vehicleModel ?? 'Unknown',
+    licensePlate: licensePlate ?? null,
+    pickupLocation: pickupLocation ?? 'TBD',
+    returnLocation: returnLocation ?? pickupLocation ?? 'TBD',
+    pickupDate,
+    returnDate: returnDateVal,
     driverId: driverId ?? null,
     driverWallet: driverWallet ?? null,
-    driverName: driverName ?? null,
-    confirmationNumber: confirmationNumber ?? `CR-${randomUUID().slice(0, 12).toUpperCase()}`,
+    driverName: driverName ?? 'Unknown',
+    confirmationCode: confirmationCode ?? `CR-${randomUUID().slice(0, 12).toUpperCase()}`,
     bookingReference: bookingReference ?? randomUUID().slice(0, 6).toUpperCase(),
     status: 'CREATED',
     transferable: toDbBool(transferable ?? true),
@@ -160,13 +163,13 @@ export async function createRental(input: CreateRentalInput) {
     dailyRate: dailyRate ?? '0',
     currency: currency ?? 'ETH',
     depositAmount: depositAmount ?? '0',
-    depositResolution: null,
-    chargeAmount: null,
+    depositStatus: 'HELD',
     insuranceType: insuranceType ?? 'BASIC',
+    insuranceProvider: insuranceProvider ?? null,
     pickupMileage: null,
-    pickupFuelLevel: null,
+    pickupFuel: null,
     returnMileage: null,
-    returnFuelLevel: null,
+    returnFuel: null,
     damageReport: toDbJson(null),
     metadata: toDbJson(metadata),
     createdAt: new Date(),
@@ -175,7 +178,7 @@ export async function createRental(input: CreateRentalInput) {
 
   // Record event
   await recordRentalEvent(orgId, rental.id, 'RENTAL_CREATED', 'SYSTEM', 'RENTAL_AGENT', null, 'CREATED', {
-    rentalCompanyCode, vehicleClass, pickupLocation, dropoffLocation,
+    rentalCompanyCode, vehicleCategory, pickupLocation, returnLocation,
   });
 
   logger.info('Rental created', { rentalId: rental.id, rentalCompanyCode, orgId });
@@ -326,7 +329,7 @@ export async function confirmPickup(
   orgId: string,
   rentalId: string,
   mileage: number,
-  fuelLevel: number,
+  fuelLevel: string | number,
   actor: string,
 ) {
   const rental = await getRental(orgId, rentalId);
@@ -336,13 +339,12 @@ export async function confirmPickup(
   }
 
   if (mileage < 0) throw new ValidationError('Mileage must be non-negative');
-  if (fuelLevel < 0 || fuelLevel > 100) throw new ValidationError('Fuel level must be between 0 and 100');
 
   // Record pickup data before transition
   await db.update(carRentals)
     .set({
       pickupMileage: mileage,
-      pickupFuelLevel: fuelLevel,
+      pickupFuel: String(fuelLevel),
       updatedAt: new Date(),
     })
     .where(and(eq(carRentals.id, rentalId), eq(carRentals.orgId, orgId)));
@@ -350,7 +352,7 @@ export async function confirmPickup(
   return transitionRental(orgId, rentalId, 'PICKED_UP', actor, 'RENTAL_AGENT', {
     action: 'confirm_pickup',
     pickupMileage: mileage,
-    pickupFuelLevel: fuelLevel,
+    pickupFuel: fuelLevel,
   });
 }
 
@@ -358,8 +360,8 @@ export async function processReturn(
   orgId: string,
   rentalId: string,
   mileage: number,
-  fuelLevel: number,
-  damageReport: Record<string, unknown> | null,
+  fuelLevel: string | number,
+  damageReport: Record<string, unknown> | null | undefined,
   actor: string,
 ) {
   const rental = await getRental(orgId, rentalId);
@@ -369,7 +371,6 @@ export async function processReturn(
   }
 
   if (mileage < 0) throw new ValidationError('Mileage must be non-negative');
-  if (fuelLevel < 0 || fuelLevel > 100) throw new ValidationError('Fuel level must be between 0 and 100');
 
   // Validate return mileage is >= pickup mileage
   if (rental.pickupMileage != null && mileage < (rental.pickupMileage as number)) {
@@ -380,7 +381,7 @@ export async function processReturn(
   await db.update(carRentals)
     .set({
       returnMileage: mileage,
-      returnFuelLevel: fuelLevel,
+      returnFuel: String(fuelLevel),
       damageReport: toDbJson(damageReport),
       updatedAt: new Date(),
     })
@@ -389,7 +390,7 @@ export async function processReturn(
   return transitionRental(orgId, rentalId, 'RETURNED', actor, 'RENTAL_AGENT', {
     action: 'process_return',
     returnMileage: mileage,
-    returnFuelLevel: fuelLevel,
+    returnFuel: fuelLevel,
     hasDamage: damageReport != null && Object.keys(damageReport).length > 0,
   });
 }
@@ -398,7 +399,7 @@ export async function inspectVehicle(
   orgId: string,
   rentalId: string,
   depositResolution: DepositResolution,
-  chargeAmount: string | null,
+  chargeAmount: string | null | undefined,
   actor: string,
 ) {
   const rental = await getRental(orgId, rentalId);
@@ -435,8 +436,7 @@ export async function inspectVehicle(
   // Record inspection data before transition
   await db.update(carRentals)
     .set({
-      depositResolution,
-      chargeAmount,
+      depositStatus: depositResolution,
       updatedAt: new Date(),
     })
     .where(and(eq(carRentals.id, rentalId), eq(carRentals.orgId, orgId)));
@@ -504,7 +504,7 @@ export async function requestTransfer(input: TransferRentalInput) {
   if (!['CREATED', 'CONFIRMED'].includes(status)) throw new ValidationError(`Cannot transfer rental in status ${status}`);
 
   // Transfer window guard: 24h before pickup
-  const pickupTime = new Date(rental.pickupTime).getTime();
+  const pickupTime = new Date(rental.pickupDate).getTime();
   const cutoff = pickupTime - (24 * 60 * 60 * 1000);
   if (Date.now() >= cutoff) throw new ValidationError('Transfer window closed (less than 24h before pickup)');
 
@@ -612,7 +612,7 @@ export async function expireStaleRentals(orgId: string) {
   const staleRentals = await db.select().from(carRentals).where(
     and(
       eq(carRentals.orgId, orgId),
-      sql`${carRentals.pickupTime} < ${sixHoursAgo}`,
+      sql`${carRentals.pickupDate} < ${sixHoursAgo}`,
       sql`(${carRentals.status} = 'CREATED' OR ${carRentals.status} = 'CONFIRMED')`,
     )
   );
@@ -622,7 +622,7 @@ export async function expireStaleRentals(orgId: string) {
     try {
       await transitionRental(orgId, rental.id, 'EXPIRED', 'AUTOMATION', 'SYSTEM', {
         reason: 'Auto-expired: pickup time passed',
-        pickupTime: rental.pickupTime,
+        pickupDate: rental.pickupDate,
       });
       results.push({ rentalId: rental.id, success: true });
     } catch (error: any) {

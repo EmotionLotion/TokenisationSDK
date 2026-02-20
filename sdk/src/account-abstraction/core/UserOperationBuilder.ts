@@ -272,8 +272,8 @@ export class UserOperationBuilder {
       if (this.config.autoPopulateGasPrices && (!userOp.maxFeePerGas || !userOp.maxPriorityFeePerGas)) {
         const gasPricesResult = await this.config.bundler.getGasPrices();
         if (gasPricesResult.success) {
-          userOp.maxFeePerGas = userOp.maxFeePerGas || gasPricesResult.value.fast.maxFeePerGas;
-          userOp.maxPriorityFeePerGas = userOp.maxPriorityFeePerGas || gasPricesResult.value.fast.maxPriorityFeePerGas;
+          userOp.maxFeePerGas = userOp.maxFeePerGas || gasPricesResult.data.fast.maxFeePerGas;
+          userOp.maxPriorityFeePerGas = userOp.maxPriorityFeePerGas || gasPricesResult.data.fast.maxPriorityFeePerGas;
         }
       }
 
@@ -284,10 +284,10 @@ export class UserOperationBuilder {
         if (pmDataResult.success) {
           userOp = {
             ...userOp,
-            paymaster: pmDataResult.value.paymaster,
-            paymasterVerificationGasLimit: pmDataResult.value.paymasterVerificationGasLimit,
-            paymasterPostOpGasLimit: pmDataResult.value.paymasterPostOpGasLimit,
-            paymasterData: pmDataResult.value.paymasterData,
+            paymaster: pmDataResult.data.paymaster,
+            paymasterVerificationGasLimit: pmDataResult.data.paymasterVerificationGasLimit,
+            paymasterPostOpGasLimit: pmDataResult.data.paymasterPostOpGasLimit,
+            paymasterData: pmDataResult.data.paymasterData,
           };
         }
       } else if (this.paymasterDataOverride) {
@@ -305,9 +305,9 @@ export class UserOperationBuilder {
         const gasEstimate = await this.config.bundler.estimateUserOperationGas(userOp);
         if (gasEstimate.success) {
           const multiplier = this.config.gasBufferMultiplier || 1.2;
-          userOp.callGasLimit = userOp.callGasLimit || BigInt(Math.ceil(Number(gasEstimate.value.callGasLimit) * multiplier));
-          userOp.verificationGasLimit = userOp.verificationGasLimit || BigInt(Math.ceil(Number(gasEstimate.value.verificationGasLimit) * multiplier));
-          userOp.preVerificationGas = userOp.preVerificationGas || BigInt(Math.ceil(Number(gasEstimate.value.preVerificationGas) * multiplier));
+          userOp.callGasLimit = userOp.callGasLimit || BigInt(Math.ceil(Number(gasEstimate.data.callGasLimit) * multiplier));
+          userOp.verificationGasLimit = userOp.verificationGasLimit || BigInt(Math.ceil(Number(gasEstimate.data.verificationGasLimit) * multiplier));
+          userOp.preVerificationGas = userOp.preVerificationGas || BigInt(Math.ceil(Number(gasEstimate.data.preVerificationGas) * multiplier));
         }
       }
 
@@ -327,7 +327,7 @@ export class UserOperationBuilder {
     }
 
     try {
-      const signedUserOp = await this.config.account.signUserOperation(buildResult.value);
+      const signedUserOp = await this.config.account.signUserOperation(buildResult.data);
       return ok(signedUserOp);
     } catch (error) {
       return err(`Failed to sign UserOperation: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -351,7 +351,7 @@ export class UserOperationBuilder {
       return err(signedResult.error);
     }
 
-    const signedUserOp = signedResult.value;
+    const signedUserOp = signedResult.data;
 
     // Validate if not skipped
     if (!options.skipValidation) {
@@ -367,7 +367,7 @@ export class UserOperationBuilder {
       return err(`Failed to send UserOperation: ${sendResult.error}`);
     }
 
-    const { userOpHash } = sendResult.value;
+    const { userOpHash } = sendResult.data;
 
     // Wait for receipt if requested
     if (options.waitForReceipt) {
@@ -379,7 +379,7 @@ export class UserOperationBuilder {
       if (receiptResult.success) {
         return ok({
           userOpHash,
-          receipt: receiptResult.value,
+          receipt: receiptResult.data,
         });
       }
 
@@ -399,7 +399,7 @@ export class UserOperationBuilder {
       return err(buildResult.error);
     }
 
-    return this.config.bundler.simulateUserOperation(buildResult.value);
+    return this.config.bundler.simulateUserOperation(buildResult.data);
   }
 
   // ============================================================================
@@ -415,7 +415,7 @@ export class UserOperationBuilder {
       return err(buildResult.error);
     }
 
-    const userOp = buildResult.value;
+    const userOp = buildResult.data;
     const totalGas = (userOp.callGasLimit || 0n) +
       (userOp.verificationGasLimit || 0n) +
       (userOp.preVerificationGas || 0n);

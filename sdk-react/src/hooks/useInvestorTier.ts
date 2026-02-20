@@ -55,7 +55,7 @@ export interface UseInvestorTierReturn {
 // ============================================================================
 
 export function useInvestorTier(assetId?: string): UseInvestorTierReturn {
-  const { httpClient } = useTokenisation();
+  const { api: httpClient } = useTokenisation();
   const [plans, setPlans] = useState<InvestorPlan[]>([]);
   const [currentTier, setCurrentTier] = useState<InvestorTier | null>(null);
   const [loading, setLoading] = useState(false);

@@ -67,7 +67,7 @@ kycWebhookRouter.post('/:provider', async (req: Request, res: Response, next: Ne
     // Dynamic import to avoid circular dependency
     const investorService = await import('../services/investor.service.js');
     if (typeof investorService.processKycWebhook === 'function') {
-      await investorService.processKycWebhook(provider, req.body, signature);
+      await investorService.processKycWebhook(provider as import('../services/investor.service.js').KycProvider, req.body, signature);
     } else {
       logger.warn('processKycWebhook not available in investor.service');
     }

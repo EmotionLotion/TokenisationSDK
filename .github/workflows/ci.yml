@@ -135,7 +135,17 @@ jobs:
         working-directory: ./contracts
         run: |
           npm install -g solhint
-          solhint 'src/**/*.sol' || true
+          solhint 'src/**/*.sol'
+
+      - name: Lint Server
+        run: |
+          cd server
+          npx eslint src/ --ext .ts --max-warnings 0 2>/dev/null || echo "::warning::ESLint not configured for server — add .eslintrc"
+
+      - name: Lint SDK
+        run: |
+          cd sdk
+          npx eslint src/ --ext .ts --max-warnings 0 2>/dev/null || echo "::warning::ESLint not configured for SDK — add .eslintrc"
 
   # ============================================================================
   # Security Scan
@@ -156,15 +166,40 @@ jobs:
           cache: 'pnpm'
 
       - name: Run pnpm audit
-        run: pnpm audit --audit-level=high || true
+        run: pnpm audit --audit-level=critical
+
+      - name: Check for high vulnerabilities
+        run: |
+          pnpm audit --audit-level=high 2>&1 || echo "::warning::High severity vulnerabilities found — review before release"
 
       - name: Install Slither
         run: pip3 install slither-analyzer
 
       - name: Run Slither
         working-directory: ./contracts
-        run: slither . --exclude-dependencies || true
+        run: slither . --exclude-dependencies
         continue-on-error: true
+
+  # ============================================================================
+  # SAST - Static Application Security Testing
+  # ============================================================================
+  sast:
+    name: SAST Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
 
   # ============================================================================
   # Build Artifacts
@@ -272,7 +307,7 @@ jobs:
 
       - name: Run coverage
         run: |
-          pnpm --filter sdk run test -- --run --coverage || true
+          pnpm --filter sdk run test -- --run --coverage
           echo "| Coverage | See Codecov |" >> $GITHUB_STEP_SUMMARY
 
       - name: Security audit

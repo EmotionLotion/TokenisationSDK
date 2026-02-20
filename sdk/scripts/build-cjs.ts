@@ -48,6 +48,7 @@ const sharedOptions = {
     'ethers',
     'viem',
     '@chainlink/*',
+    'drizzle-orm',
     'pg',
     'ioredis',
     'bullmq',

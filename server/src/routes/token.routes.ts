@@ -4,6 +4,7 @@ import * as tokenService from '../services/token.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
 import { idempotencyMiddleware } from '../services/idempotency.service.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 
 export const tokenRouter = Router();
 
@@ -83,6 +84,7 @@ const confirmIssuanceSchema = z.object({
 tokenRouter.post(
   '/',
   apiKeyMiddleware,
+  requireScope('write'),
   idempotencyMiddleware({ operation: 'token.create', required: true }),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
@@ -107,7 +109,7 @@ tokenRouter.post(
 });
 
 // List tokens
-tokenRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -130,7 +132,7 @@ tokenRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response,
 });
 
 // Get token by ID
-tokenRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -144,7 +146,7 @@ tokenRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respon
 });
 
 // Update token
-tokenRouter.patch('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.patch('/:id', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -171,6 +173,7 @@ tokenRouter.patch('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Resp
 tokenRouter.post(
   '/:id/deploy',
   apiKeyMiddleware,
+  requireScope('admin'),
   idempotencyMiddleware({ operation: 'token.deploy', required: true }),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
@@ -192,7 +195,7 @@ tokenRouter.post(
 });
 
 // Confirm deployment
-tokenRouter.post('/:id/confirm-deployment', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:id/confirm-deployment', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -222,7 +225,7 @@ tokenRouter.post('/:id/confirm-deployment', apiKeyMiddleware, async (req: ApiKey
 // ============================================================================
 
 // Pause token
-tokenRouter.post('/:id/pause', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:id/pause', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -238,7 +241,7 @@ tokenRouter.post('/:id/pause', apiKeyMiddleware, async (req: ApiKeyRequest, res:
 });
 
 // Unpause token
-tokenRouter.post('/:id/unpause', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:id/unpause', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -252,7 +255,7 @@ tokenRouter.post('/:id/unpause', apiKeyMiddleware, async (req: ApiKeyRequest, re
 });
 
 // Freeze token
-tokenRouter.post('/:id/freeze', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:id/freeze', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -275,7 +278,7 @@ tokenRouter.post('/:id/freeze', apiKeyMiddleware, async (req: ApiKeyRequest, res
 // ============================================================================
 
 // Create tranche
-tokenRouter.post('/:tokenId/tranches', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/tranches', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -299,7 +302,7 @@ tokenRouter.post('/:tokenId/tranches', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // List tranches
-tokenRouter.get('/:tokenId/tranches', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/tranches', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -313,7 +316,7 @@ tokenRouter.get('/:tokenId/tranches', apiKeyMiddleware, async (req: ApiKeyReques
 });
 
 // Get tranche
-tokenRouter.get('/:tokenId/tranches/:trancheId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/tranches/:trancheId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -331,7 +334,7 @@ tokenRouter.get('/:tokenId/tranches/:trancheId', apiKeyMiddleware, async (req: A
 // ============================================================================
 
 // Issue tokens
-tokenRouter.post('/:tokenId/issue', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/issue', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -355,7 +358,7 @@ tokenRouter.post('/:tokenId/issue', apiKeyMiddleware, async (req: ApiKeyRequest,
 });
 
 // Confirm issuance
-tokenRouter.post('/:tokenId/issuances/:issuanceId/confirm', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/issuances/:issuanceId/confirm', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -384,7 +387,7 @@ tokenRouter.post('/:tokenId/issuances/:issuanceId/confirm', apiKeyMiddleware, as
 // ============================================================================
 
 // Redeem tokens
-tokenRouter.post('/:tokenId/redeem', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/redeem', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -408,7 +411,7 @@ tokenRouter.post('/:tokenId/redeem', apiKeyMiddleware, async (req: ApiKeyRequest
 });
 
 // Confirm redemption
-tokenRouter.post('/:tokenId/redemptions/:redemptionId/confirm', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/redemptions/:redemptionId/confirm', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -437,7 +440,7 @@ tokenRouter.post('/:tokenId/redemptions/:redemptionId/confirm', apiKeyMiddleware
 // ============================================================================
 
 // Get cap table
-tokenRouter.get('/:tokenId/cap-table', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/cap-table', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -451,7 +454,7 @@ tokenRouter.get('/:tokenId/cap-table', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // Get ledger positions
-tokenRouter.get('/:tokenId/positions', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/positions', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -474,7 +477,7 @@ tokenRouter.get('/:tokenId/positions', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // Get specific position
-tokenRouter.get('/:tokenId/positions/:investorId/:walletAddress', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/positions/:investorId/:walletAddress', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -501,7 +504,7 @@ tokenRouter.get('/:tokenId/positions/:investorId/:walletAddress', apiKeyMiddlewa
 // ============================================================================
 
 // Get wallet balance for a token
-tokenRouter.get('/:tokenId/balance', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/balance', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -534,6 +537,7 @@ tokenRouter.get('/:tokenId/balance', apiKeyMiddleware, async (req: ApiKeyRequest
 tokenRouter.post(
   '/:tokenId/burn',
   apiKeyMiddleware,
+  requireScope('admin'),
   idempotencyMiddleware({ operation: 'token.burn', required: true }),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
@@ -580,7 +584,7 @@ tokenRouter.post(
 // ============================================================================
 
 // Attach policy to token
-tokenRouter.post('/:tokenId/policies', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/policies', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -624,7 +628,7 @@ const initiateClawbackSchema = z.object({
 });
 
 // Initiate a clawback
-tokenRouter.post('/:tokenId/clawback', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/clawback', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -649,7 +653,7 @@ tokenRouter.post('/:tokenId/clawback', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // List clawbacks for a token
-tokenRouter.get('/:tokenId/clawbacks', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/clawbacks', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -672,7 +676,7 @@ tokenRouter.get('/:tokenId/clawbacks', apiKeyMiddleware, async (req: ApiKeyReque
 });
 
 // Get a specific clawback
-tokenRouter.get('/:tokenId/clawbacks/:clawbackId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.get('/:tokenId/clawbacks/:clawbackId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -686,7 +690,7 @@ tokenRouter.get('/:tokenId/clawbacks/:clawbackId', apiKeyMiddleware, async (req:
 });
 
 // Approve a clawback
-tokenRouter.post('/:tokenId/clawbacks/:clawbackId/approve', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/clawbacks/:clawbackId/approve', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -705,7 +709,7 @@ tokenRouter.post('/:tokenId/clawbacks/:clawbackId/approve', apiKeyMiddleware, as
 });
 
 // Execute a clawback
-tokenRouter.post('/:tokenId/clawbacks/:clawbackId/execute', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/clawbacks/:clawbackId/execute', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -724,7 +728,7 @@ tokenRouter.post('/:tokenId/clawbacks/:clawbackId/execute', apiKeyMiddleware, as
 });
 
 // Confirm a clawback (after on-chain execution)
-tokenRouter.post('/:tokenId/clawbacks/:clawbackId/confirm', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+tokenRouter.post('/:tokenId/clawbacks/:clawbackId/confirm', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

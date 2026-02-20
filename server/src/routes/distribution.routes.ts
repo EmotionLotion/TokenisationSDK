@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as distributionService from '../services/distribution.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 
 export const distributionRouter = Router();
 
@@ -74,7 +75,7 @@ function toScheduleResponse(dist: Record<string, unknown>) {
 }
 
 // GET /schedules/due — must be registered before /schedules/:id
-distributionRouter.get('/schedules/due', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/schedules/due', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distributions = await distributionService.listDistributions(req.apiKey.orgId, { status: 'draft' as distributionService.DistributionStatus });
@@ -88,7 +89,7 @@ distributionRouter.get('/schedules/due', apiKeyMiddleware, async (req: ApiKeyReq
 });
 
 // POST /schedules — create a schedule
-distributionRouter.post('/schedules', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/schedules', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const input = createScheduleSchema.parse(req.body);
@@ -122,7 +123,7 @@ distributionRouter.post('/schedules', apiKeyMiddleware, async (req: ApiKeyReques
 });
 
 // GET /schedules — list schedules
-distributionRouter.get('/schedules', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/schedules', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const { assetId, type, limit, offset } = req.query;
@@ -138,7 +139,7 @@ distributionRouter.get('/schedules', apiKeyMiddleware, async (req: ApiKeyRequest
 });
 
 // GET /schedules/:id — get a schedule
-distributionRouter.get('/schedules/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/schedules/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distribution = await distributionService.getDistribution(req.params.id, req.apiKey.orgId);
@@ -147,7 +148,7 @@ distributionRouter.get('/schedules/:id', apiKeyMiddleware, async (req: ApiKeyReq
 });
 
 // PATCH /schedules/:id — update a schedule
-distributionRouter.patch('/schedules/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.patch('/schedules/:id', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const input = updateScheduleSchema.parse(req.body);
@@ -173,7 +174,7 @@ distributionRouter.patch('/schedules/:id', apiKeyMiddleware, async (req: ApiKeyR
 });
 
 // POST /schedules/:id/pause — pause a schedule
-distributionRouter.post('/schedules/:id/pause', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/schedules/:id/pause', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distribution = await distributionService.cancelDistribution(req.params.id, req.apiKey.orgId, 'paused');
@@ -185,7 +186,7 @@ distributionRouter.post('/schedules/:id/pause', apiKeyMiddleware, async (req: Ap
 });
 
 // POST /schedules/:id/resume — resume a schedule
-distributionRouter.post('/schedules/:id/resume', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/schedules/:id/resume', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distribution = await distributionService.getDistribution(req.params.id, req.apiKey.orgId);
@@ -196,7 +197,7 @@ distributionRouter.post('/schedules/:id/resume', apiKeyMiddleware, async (req: A
 });
 
 // DELETE /schedules/:id — cancel/delete a schedule
-distributionRouter.delete('/schedules/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.delete('/schedules/:id', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     await distributionService.cancelDistribution(req.params.id, req.apiKey.orgId, 'schedule deleted');
@@ -205,7 +206,7 @@ distributionRouter.delete('/schedules/:id', apiKeyMiddleware, async (req: ApiKey
 });
 
 // POST /schedules/:id/execute — execute a scheduled distribution
-distributionRouter.post('/schedules/:id/execute', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/schedules/:id/execute', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     try {
@@ -222,7 +223,7 @@ distributionRouter.post('/schedules/:id/execute', apiKeyMiddleware, async (req: 
 // Core Distribution Routes
 // ============================================================================
 
-distributionRouter.post('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const input = createDistributionSchema.parse(req.body);
@@ -239,7 +240,7 @@ distributionRouter.post('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: R
   }
 });
 
-distributionRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const { tokenId, status, type, limit, offset } = req.query;
@@ -254,7 +255,7 @@ distributionRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Re
   } catch (error) { next(error); }
 });
 
-distributionRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distribution = await distributionService.getDistribution(req.params.id, req.apiKey.orgId);
@@ -262,7 +263,7 @@ distributionRouter.get('/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res:
   } catch (error) { next(error); }
 });
 
-distributionRouter.get('/:id/calculate', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/:id/calculate', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const summary = await distributionService.calculatePayments(req.params.id, req.apiKey.orgId);
@@ -270,7 +271,7 @@ distributionRouter.get('/:id/calculate', apiKeyMiddleware, async (req: ApiKeyReq
   } catch (error) { next(error); }
 });
 
-distributionRouter.post('/:id/approve', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/:id/approve', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distribution = await distributionService.approveDistribution(req.params.id, req.apiKey.orgId, req.apiKey.keyId || 'system');
@@ -278,7 +279,7 @@ distributionRouter.post('/:id/approve', apiKeyMiddleware, async (req: ApiKeyRequ
   } catch (error) { next(error); }
 });
 
-distributionRouter.post('/:id/execute', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/:id/execute', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const distribution = await distributionService.executeDistribution(req.params.id, req.apiKey.orgId);
@@ -286,7 +287,7 @@ distributionRouter.post('/:id/execute', apiKeyMiddleware, async (req: ApiKeyRequ
   } catch (error) { next(error); }
 });
 
-distributionRouter.post('/:id/cancel', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/:id/cancel', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const { reason } = req.body;
@@ -296,7 +297,7 @@ distributionRouter.post('/:id/cancel', apiKeyMiddleware, async (req: ApiKeyReque
   } catch (error) { next(error); }
 });
 
-distributionRouter.get('/:id/payments', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.get('/:id/payments', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const { status, limit, offset } = req.query;
@@ -309,7 +310,7 @@ distributionRouter.get('/:id/payments', apiKeyMiddleware, async (req: ApiKeyRequ
   } catch (error) { next(error); }
 });
 
-distributionRouter.post('/payments/:paymentId/confirm', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+distributionRouter.post('/payments/:paymentId/confirm', apiKeyMiddleware, requireScope('admin'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) throw new ValidationError('API key required');
     const { txHash, bankReference } = req.body;

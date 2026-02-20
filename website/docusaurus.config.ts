@@ -11,7 +11,11 @@ const config: Config = {
   organizationName: 'EmotionLotion',
   projectName: 'TokenisationSDK',
   onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
@@ -56,15 +60,15 @@ const config: Config = {
           title: 'Docs',
           items: [
             { label: 'Quick Start', to: '/docs/getting-started/QUICKSTART' },
-            { label: 'API Reference', to: '/docs/API_REFERENCE' },
-            { label: 'SDK Reference', to: '/docs/ONE_PAGE_SDK_REFERENCE' },
+            { label: 'API Reference', to: '/docs/api/SDK_REFERENCE' },
+            { label: 'REST API', to: '/docs/api/REST_API' },
           ],
         },
         {
           title: 'Resources',
           items: [
             { label: 'GitHub', href: 'https://github.com/EmotionLotion/TokenisationSDK' },
-            { label: 'Changelog', to: '/docs/CHANGELOG' },
+            { label: 'FAQ', to: '/docs/FAQ' },
           ],
         },
       ],

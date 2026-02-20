@@ -6,7 +6,7 @@
   "linked": [
     ["@tokenisation/sdk", "@tokenisation/sdk-react", "@tokenisation/ui-kit"]
   ],
-  "access": "restricted",
+  "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": []

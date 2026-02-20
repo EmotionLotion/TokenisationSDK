@@ -99,12 +99,16 @@ projectRouter.get('/', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respons
       throw new ValidationError('API key required');
     }
 
-    const { limit, offset, status, jurisdiction, assetType, search } = req.query;
+    const { status, jurisdiction, assetType, search } = req.query;
+    const projPag = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const projects = await projectService.listProjects({
       orgId: req.apiKey.orgId,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: projPag.limit,
+      offset: projPag.offset,
       status: status as string | undefined,
       jurisdiction: jurisdiction as string | undefined,
       assetType: assetType as string | undefined,
@@ -278,7 +282,11 @@ projectRouter.get('/documents', apiKeyMiddleware, async (req: ApiKeyRequest, res
       throw new ValidationError('API key required');
     }
 
-    const { projectId, assetId, type, status, limit, offset } = req.query;
+    const { projectId, assetId, type, status } = req.query;
+    const docPag = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const documents = await projectService.listDocuments({
       orgId: req.apiKey.orgId,
@@ -286,8 +294,8 @@ projectRouter.get('/documents', apiKeyMiddleware, async (req: ApiKeyRequest, res
       assetId: assetId as string | undefined,
       type: type as string | undefined,
       status: status as string | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: docPag.limit,
+      offset: docPag.offset,
     });
 
     res.json({ data: documents, count: documents.length });
@@ -389,15 +397,19 @@ projectRouter.get('/:id/documents', apiKeyMiddleware, async (req: ApiKeyRequest,
     // Verify project exists
     await projectService.getProject(req.params.id, req.apiKey.orgId);
 
-    const { type, status, limit, offset } = req.query;
+    const { type, status } = req.query;
+    const docPag2 = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const documents = await projectService.listDocuments({
       orgId: req.apiKey.orgId,
       projectId: req.params.id,
       type: type as string | undefined,
       status: status as string | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: docPag2.limit,
+      offset: docPag2.offset,
     });
 
     res.json({ data: documents, count: documents.length });

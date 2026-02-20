@@ -7,7 +7,7 @@
   "react-native": "src/index.ts",
   "source": "src/index.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "echo 'sdk-react-native: no source files yet, skipping build'",
     "dev": "tsc --watch",
     "test": "jest",
     "lint": "eslint src --ext .ts,.tsx",

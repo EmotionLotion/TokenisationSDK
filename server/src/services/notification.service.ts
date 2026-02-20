@@ -370,13 +370,36 @@ export class NotificationService {
     html: string,
     text: string
   ): Promise<NotificationResult> {
-    // AWS SES implementation would go here
-    // For now, return mock result
-    logger.info(`[SES Email] To: ${to}, Subject: ${subject}`);
+    const { SESClient, SendEmailCommand } = await import('@aws-sdk/client-ses');
+
+    const client = new SESClient({
+      region: process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1',
+      ...(process.env.AWS_ACCESS_KEY_ID && {
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+        },
+      }),
+    });
+
+    const command = new SendEmailCommand({
+      Source: process.env.EMAIL_FROM_ADDRESS || 'noreply@ahoy.fund',
+      Destination: { ToAddresses: [to] },
+      Message: {
+        Subject: { Data: subject, Charset: 'UTF-8' },
+        Body: {
+          Html: { Data: html, Charset: 'UTF-8' },
+          Text: { Data: text, Charset: 'UTF-8' },
+        },
+      },
+    });
+
+    const result = await client.send(command);
+
     return {
       success: true,
       channel: 'email',
-      messageId: `ses-${Date.now()}`,
+      messageId: result.MessageId || `ses-${Date.now()}`,
       sentAt: new Date(),
     };
   }

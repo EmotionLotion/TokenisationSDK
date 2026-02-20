@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as issuanceService from '../services/issuance.service.js';
 import { apiKeyMiddleware } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import type { ContextRequest } from '../middleware/context.js';
 
@@ -60,7 +61,7 @@ const mintConfirmSchema = z.object({
 /**
  * POST /offerings - Create a new offering
  */
-router.post('/offerings', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/offerings', apiKeyMiddleware, requireScope('write'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -87,7 +88,7 @@ router.post('/offerings', apiKeyMiddleware, async (req: Request, res: Response, 
 /**
  * GET /offerings - List offerings
  */
-router.get('/offerings', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/offerings', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -114,7 +115,7 @@ router.get('/offerings', apiKeyMiddleware, async (req: Request, res: Response, n
 /**
  * GET /offerings/:id - Get offering by ID
  */
-router.get('/offerings/:id', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/offerings/:id', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -135,7 +136,7 @@ router.get('/offerings/:id', apiKeyMiddleware, async (req: Request, res: Respons
 /**
  * PATCH /offerings/:id/status - Update offering status
  */
-router.patch('/offerings/:id/status', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/offerings/:id/status', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -162,7 +163,7 @@ router.patch('/offerings/:id/status', apiKeyMiddleware, async (req: Request, res
 /**
  * POST /offerings/:id/settle - Settle an offering
  */
-router.post('/offerings/:id/settle', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/offerings/:id/settle', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -187,7 +188,7 @@ router.post('/offerings/:id/settle', apiKeyMiddleware, async (req: Request, res:
 /**
  * POST /allocations - Create a new allocation
  */
-router.post('/allocations', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/allocations', apiKeyMiddleware, requireScope('write'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -210,7 +211,7 @@ router.post('/allocations', apiKeyMiddleware, async (req: Request, res: Response
 /**
  * GET /allocations - List allocations
  */
-router.get('/allocations', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/allocations', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -238,7 +239,7 @@ router.get('/allocations', apiKeyMiddleware, async (req: Request, res: Response,
 /**
  * GET /allocations/:id - Get allocation by ID
  */
-router.get('/allocations/:id', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/allocations/:id', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -259,7 +260,7 @@ router.get('/allocations/:id', apiKeyMiddleware, async (req: Request, res: Respo
 /**
  * PATCH /allocations/:id/status - Update allocation status
  */
-router.patch('/allocations/:id/status', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/allocations/:id/status', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -295,7 +296,7 @@ router.patch('/allocations/:id/status', apiKeyMiddleware, async (req: Request, r
 /**
  * GET /mint-queue - Get allocations ready for minting
  */
-router.get('/mint-queue', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/mint-queue', apiKeyMiddleware, requireScope('read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -316,7 +317,7 @@ router.get('/mint-queue', apiKeyMiddleware, async (req: Request, res: Response, 
 /**
  * POST /allocations/:id/queue-mint - Queue allocation for minting
  */
-router.post('/allocations/:id/queue-mint', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/allocations/:id/queue-mint', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -337,7 +338,7 @@ router.post('/allocations/:id/queue-mint', apiKeyMiddleware, async (req: Request
 /**
  * POST /allocations/:id/mark-minting - Mark allocation as minting
  */
-router.post('/allocations/:id/mark-minting', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/allocations/:id/mark-minting', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -362,7 +363,7 @@ router.post('/allocations/:id/mark-minting', apiKeyMiddleware, async (req: Reque
 /**
  * POST /allocations/:id/confirm-mint - Confirm mint after chain confirmation
  */
-router.post('/allocations/:id/confirm-mint', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/allocations/:id/confirm-mint', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;
@@ -390,7 +391,7 @@ router.post('/allocations/:id/confirm-mint', apiKeyMiddleware, async (req: Reque
 /**
  * POST /allocations/:id/fail-mint - Mark mint as failed
  */
-router.post('/allocations/:id/fail-mint', apiKeyMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/allocations/:id/fail-mint', apiKeyMiddleware, requireScope('admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctxReq = req as ContextRequest;
     const orgId = ctxReq.apiKey?.orgId;

@@ -416,7 +416,6 @@ class SimpleSmartAccount implements ISmartAccount {
       preVerificationGas: params.gasLimits?.preVerificationGas ?? 50000n,
       maxFeePerGas: params.gasPrices?.maxFeePerGas ?? 1000000000n, // 1 gwei
       maxPriorityFeePerGas: params.gasPrices?.maxPriorityFeePerGas ?? 100000000n, // 0.1 gwei
-      signature: '0x',
     };
   }
 

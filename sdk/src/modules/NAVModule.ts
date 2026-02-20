@@ -8,6 +8,7 @@
  */
 
 import type { HttpClient } from '../utils/http.js';
+import { parseOrThrow, navValuationInputSchema } from '../validation/real-estate.js';
 
 // ============================================================================
 // Types
@@ -99,9 +100,10 @@ export class NAVModule {
    * Submit a manual valuation and compute NAV.
    */
   async submitValuation(assetId: string, input: ManualValuationInput): Promise<{ nav: NAVRecord }> {
+    const validated = parseOrThrow(navValuationInputSchema, input, 'SubmitValuation');
     const response = await this.http.post<{ nav: NAVRecord }>(
       `/api/v1/assets/${encodeURIComponent(assetId)}/nav/valuations`,
-      input,
+      validated,
     );
     return response.data;
   }

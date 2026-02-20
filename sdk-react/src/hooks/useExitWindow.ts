@@ -38,7 +38,7 @@ export interface UseExitWindowReturn {
 }
 
 export function useExitWindow(assetId?: string): UseExitWindowReturn {
-  const { httpClient } = useTokenisation();
+  const { api: httpClient } = useTokenisation();
   const [schedule, setSchedule] = useState<ExitWindowSchedule | null>(null);
   const [currentWindow, setCurrentWindow] = useState<ExitWindow | null>(null);
   const [nextWindow, setNextWindow] = useState<ExitWindow | null>(null);

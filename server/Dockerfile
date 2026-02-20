@@ -19,7 +19,7 @@ COPY . .
 RUN pnpm run build
 
 # Production stage
-FROM base AS runner
+FROM base AS production
 ENV NODE_ENV=production
 
 # Create non-root user

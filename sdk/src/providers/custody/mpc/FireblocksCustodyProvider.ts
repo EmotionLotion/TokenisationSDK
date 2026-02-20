@@ -82,13 +82,13 @@ type FireblocksStatus =
  *
  * // Keys are automatically generated in Fireblocks
  * await fireblocks.generateKeyShares({
- *   accountId: account.value.accountId,
+ *   accountId: account.data.accountId,
  *   totalShares: 3,
  *   threshold: 2,
  * });
  *
  * // Get signer for transactions
- * const signer = await fireblocks.createSigner(account.value.accountId, 8453);
+ * const signer = await fireblocks.createSigner(account.data.accountId, 8453);
  * ```
  */
 export class FireblocksCustodyProvider extends AbstractMPCProvider {

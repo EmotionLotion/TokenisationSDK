@@ -129,8 +129,8 @@ export class AlchemyBundler extends AbstractBundler {
       return super.getGasPrices();
     }
 
-    const maxFeePerGas = BigInt(maxFeeResult.value);
-    const maxPriorityFeePerGas = BigInt(priorityFeeResult.value);
+    const maxFeePerGas = BigInt(maxFeeResult.data);
+    const maxPriorityFeePerGas = BigInt(priorityFeeResult.data);
 
     return ok({
       standard: {
@@ -181,10 +181,10 @@ export class AlchemyBundler extends AbstractBundler {
     }
 
     return ok({
-      paymaster: result.value.paymaster,
-      paymasterData: result.value.paymasterData,
-      paymasterVerificationGasLimit: BigInt(result.value.paymasterVerificationGasLimit),
-      paymasterPostOpGasLimit: BigInt(result.value.paymasterPostOpGasLimit),
+      paymaster: result.data.paymaster,
+      paymasterData: result.data.paymasterData,
+      paymasterVerificationGasLimit: BigInt(result.data.paymasterVerificationGasLimit),
+      paymasterPostOpGasLimit: BigInt(result.data.paymasterPostOpGasLimit),
     });
   }
 
@@ -252,9 +252,9 @@ export class AlchemyBundler extends AbstractBundler {
     }
 
     return ok({
-      success: result.value.simulationResult.success,
-      revertReason: result.value.simulationResult.revertData,
-      traces: result.value.callTrace,
+      success: result.data.simulationResult.success,
+      revertReason: result.data.simulationResult.revertData,
+      traces: result.data.callTrace,
     });
   }
 }

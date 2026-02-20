@@ -440,12 +440,38 @@ export async function signTransfer(
   });
 
   if (mode === 'custodial') {
-    // For custodial mode, the signer service would sign and submit
-    // This is a placeholder - in production, call the Relayer service
-    return {
-      transfer: formatTransferResponse(signing),
-      txPayload: { ...txPayload, requiresSignature: true },
-    };
+    // Sign and submit via the relayer service
+    const { signedTx, hash } = await relayerService.signTransaction(
+      {
+        to: txPayload.to,
+        from: transfer.fromWallet,
+        data: txPayload.data,
+        value: txPayload.value,
+        gasLimit: txPayload.gasLimit,
+        chainId: txPayload.chainId,
+      },
+      orgId
+    );
+
+    // Submit the signed transaction
+    const { txHash } = await relayerService.submitTransaction(
+      txPayload.chainId,
+      signedTx,
+      orgId
+    );
+
+    // Transition to submitted state
+    const submitted = await transitionTransfer(signing, 'submitted', {
+      txHash,
+      submittedAt: new Date(),
+    });
+
+    await emitTransferEvent(id, orgId, 'transfer.submitted', {
+      transferId: id,
+      txHash,
+    });
+
+    return { transfer: formatTransferResponse(submitted) };
   }
 
   // For non-custodial, return payload for client to sign

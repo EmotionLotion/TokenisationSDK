@@ -93,11 +93,11 @@ export class ZKPPlugin {
       };
 
       // Generate proof using snarkjs
-      const proof = await this._generateProof(artifacts.value, circuitInput);
+      const proof = await this._generateProof(artifacts.data, circuitInput);
 
       // Cache if enabled
       if (this.config.enableCache) {
-        const cacheKey = this._getCacheKey('AGE_PROOF', input);
+        const cacheKey = await this._getCacheKey('AGE_PROOF', input);
         this.proofCache.set(cacheKey, {
           proof,
           expiresAt: Date.now() + (this.config.cacheDuration || 3600) * 1000,
@@ -138,10 +138,10 @@ export class ZKPPlugin {
         merklePathIndices: input.merklePathIndices,
       };
 
-      const proof = await this._generateProof(artifacts.value, circuitInput);
+      const proof = await this._generateProof(artifacts.data, circuitInput);
 
       if (this.config.enableCache) {
-        const cacheKey = this._getCacheKey('ACCREDITATION_PROOF', input);
+        const cacheKey = await this._getCacheKey('ACCREDITATION_PROOF', input);
         this.proofCache.set(cacheKey, {
           proof,
           expiresAt: Date.now() + (this.config.cacheDuration || 3600) * 1000,
@@ -186,10 +186,10 @@ export class ZKPPlugin {
         merklePathIndices: input.merklePathIndices,
       };
 
-      const proof = await this._generateProof(artifacts.value, circuitInput);
+      const proof = await this._generateProof(artifacts.data, circuitInput);
 
       if (this.config.enableCache) {
-        const cacheKey = this._getCacheKey('JURISDICTION_PROOF', input);
+        const cacheKey = await this._getCacheKey('JURISDICTION_PROOF', input);
         this.proofCache.set(cacheKey, {
           proof,
           expiresAt: Date.now() + (this.config.cacheDuration || 3600) * 1000,
@@ -229,10 +229,10 @@ export class ZKPPlugin {
         merklePathIndices: input.merklePathIndices,
       };
 
-      const proof = await this._generateProof(artifacts.value, circuitInput);
+      const proof = await this._generateProof(artifacts.data, circuitInput);
 
       if (this.config.enableCache) {
-        const cacheKey = this._getCacheKey('KYC_STATUS_PROOF', input);
+        const cacheKey = await this._getCacheKey('KYC_STATUS_PROOF', input);
         this.proofCache.set(cacheKey, {
           proof,
           expiresAt: Date.now() + (this.config.cacheDuration || 3600) * 1000,
@@ -265,7 +265,7 @@ export class ZKPPlugin {
         return err(`Failed to load verification key: ${vkeyResult.error}`);
       }
 
-      const valid = await this._verifyProof(vkeyResult.value, proof);
+      const valid = await this._verifyProof(vkeyResult.data, proof);
 
       return ok({
         valid,
@@ -315,11 +315,11 @@ export class ZKPPlugin {
 
         // Leaf = H(commitment, expiry)
         const leaf = await this._poseidonHash([
-          commitmentResult.value,
+          commitmentResult.data,
           claim.expiryTimestamp,
         ]);
         leaves.push(leaf);
-        claim.commitment = commitmentResult.value;
+        claim.commitment = commitmentResult.data;
         claim.leafIndex = leaves.length - 1;
       }
 
@@ -335,9 +335,9 @@ export class ZKPPlugin {
   /**
    * Generate external nullifier for a context
    */
-  generateExternalNullifier(context: string): string {
+  async generateExternalNullifier(context: string): Promise<string> {
     // Use keccak256 hash of context
-    const { ethers } = require('ethers');
+    const { ethers } = await import('ethers');
     return ethers.keccak256(ethers.toUtf8Bytes(context));
   }
 
@@ -348,8 +348,8 @@ export class ZKPPlugin {
   /**
    * Get cached proof
    */
-  getCachedProof(proofType: ZKProofType, input: ProofInput): ZKProof | null {
-    const cacheKey = this._getCacheKey(proofType, input);
+  async getCachedProof(proofType: ZKProofType, input: ProofInput): Promise<ZKProof | null> {
+    const cacheKey = await this._getCacheKey(proofType, input);
     const cached = this.proofCache.get(cacheKey);
 
     if (cached && cached.expiresAt > Date.now()) {
@@ -539,8 +539,8 @@ export class ZKPPlugin {
     };
   }
 
-  private _getCacheKey(proofType: ZKProofType, input: ProofInput): string {
-    const { ethers } = require('ethers');
+  private async _getCacheKey(proofType: ZKProofType, input: ProofInput): Promise<string> {
+    const { ethers } = await import('ethers');
     return ethers.keccak256(
       ethers.toUtf8Bytes(proofType + JSON.stringify(input))
     );

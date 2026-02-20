@@ -36,6 +36,8 @@ const getStateColor = (state: LifecycleState): string => {
         'ACTIVE': 'bg-green-500/20 text-green-400 border-green-500/30',
         'FROZEN': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
         'REDEEMED': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        'PARTIALLY_REDEEMED': 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+        'CLOSED': 'bg-slate-500/20 text-slate-400 border-slate-500/30',
         'EXPIRED': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
         'BURNED': 'bg-red-500/20 text-red-400 border-red-500/30',
     };

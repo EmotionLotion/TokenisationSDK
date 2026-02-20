@@ -26,6 +26,7 @@ import {
   type GetValuationInput,
   type ListDldEventsParams,
 } from './validation-governance.js';
+import { parseOrThrow, dldRegisterTitleInputSchema, dldIngestEventInputSchema, dldCreateSyncJobInputSchema } from '../validation/real-estate.js';
 
 // ============================================================================
 // Types
@@ -166,9 +167,10 @@ export class DLDModule {
     unitNumber?: string;
     propertyDetails?: Record<string, unknown>;
   }): Promise<TitleDeed> {
+    const validated = parseOrThrow(dldRegisterTitleInputSchema, input, 'RegisterTitle');
     const response = await this.http.post<TitleDeed>(
       '/api/v1/dld/titles',
-      input
+      validated
     );
     return response.data;
   }
@@ -217,11 +219,8 @@ export class DLDModule {
    */
   async verify(input: VerifyTitleDeedInput): Promise<TitleDeed> {
     const validated = validate(VerifyTitleDeedInputSchema, input);
-    // The server expects POST /titles/:id/verify with the title ID in the URL.
-    // Extract the deedNumber/id from input to build the correct URL.
-    const titleId = (validated as Record<string, unknown>).deedNumber || (validated as Record<string, unknown>).titleId || (validated as Record<string, unknown>).id;
     const response = await this.http.post<TitleDeed>(
-      `/api/v1/dld/titles/${encodeURIComponent(String(titleId))}/verify`,
+      `/api/v1/dld/titles/${encodeURIComponent(validated.deedNumber)}/verify`,
       validated
     );
     return response.data;
@@ -361,9 +360,10 @@ export class DLDModule {
     dldEventId?: string;
     occurredAt?: string;
   }): Promise<DldEvent> {
+    const validated = parseOrThrow(dldIngestEventInputSchema, input, 'IngestEvent');
     const response = await this.http.post<DldEvent>(
       '/api/v1/dld/events',
-      input
+      validated
     );
     return response.data;
   }
@@ -402,9 +402,10 @@ export class DLDModule {
     jobType: 'poll' | 'reconcile' | 'manual';
     config?: Record<string, unknown>;
   }): Promise<{ id: string; status: string }> {
+    const validated = parseOrThrow(dldCreateSyncJobInputSchema, input, 'CreateSyncJob');
     const response = await this.http.post<{ id: string; status: string }>(
       '/api/v1/dld/sync-jobs',
-      input
+      validated
     );
     return response.data;
   }

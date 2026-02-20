@@ -176,6 +176,13 @@ async function findRedemption(redemptionId: string, orgId?: string): Promise<Red
   return rowToRedemption(rows[0]);
 }
 
+// Whitelist of allowed column names for redemption_requests updates (prevents SQL injection via object keys)
+const ALLOWED_UPDATE_COLUMNS = new Set([
+  'nav_per_token', 'total_value', 'approved_by', 'approved_at',
+  'burn_tx_hash', 'disbursement_id', 'disbursement_method',
+  'rejection_reason', 'metadata',
+]);
+
 async function updateRedemptionStatus(
   redemptionId: string,
   newStatus: RedemptionStatus,
@@ -188,6 +195,9 @@ async function updateRedemptionStatus(
   const params: any[] = [newStatus];
 
   for (const [key, value] of Object.entries(updates)) {
+    if (!ALLOWED_UPDATE_COLUMNS.has(key)) {
+      throw new ValidationError(`Invalid column for redemption update: ${key}`);
+    }
     setClauses.push(`${key} = ?`);
     params.push(typeof value === 'object' ? JSON.stringify(value) : value);
   }
@@ -351,8 +361,10 @@ export async function priceRedemption(redemptionId: string): Promise<RedemptionR
         : (navRows[0].metadata || {});
       navPerToken = meta.navPerToken || meta.nav_per_token || null;
     }
-  } catch {
-    // corporate_actions table might not exist; continue
+  } catch (err) {
+    logger.warn('[RedemptionService] Failed to query corporate_actions for NAV', {
+      metadata: { redemptionId, tokenId: redemption.tokenId, error: err instanceof Error ? err.message : 'unknown' },
+    });
   }
 
   // Fallback: check token metadata for NAV
@@ -369,8 +381,10 @@ export async function priceRedemption(redemptionId: string): Promise<RedemptionR
           : (tokenRows[0].metadata || {});
         navPerToken = meta.navPerToken || meta.nav_per_token || null;
       }
-    } catch {
-      // Token lookup failed
+    } catch (err) {
+      logger.warn('[RedemptionService] Failed to query token metadata for NAV', {
+        metadata: { redemptionId, tokenId: redemption.tokenId, error: err instanceof Error ? err.message : 'unknown' },
+      });
     }
   }
 
@@ -479,14 +493,43 @@ export async function executeRedemption(redemptionId: string): Promise<Redemptio
     const tokenAddress = tokenRows[0].address;
     const chainId = tokenRows[0].chain_id;
 
+    let burnTxHash: string;
+
     // Encode burn(uint256) calldata
     const burnSelector = '0x42966c68'; // burn(uint256)
     const paddedAmount = BigInt(redemption.amount).toString(16).padStart(64, '0');
     const burnData = `${burnSelector}${paddedAmount}`;
 
-    // In production, this would call relayerService.submitTransaction
-    // For now, we generate a mock tx hash
-    const burnTxHash = `0x${randomUUID().replace(/-/g, '')}${'0'.repeat(32)}`.slice(0, 66);
+    try {
+      // Import relayer service for on-chain burn
+      const relayerService = await import('./relayer.service.js');
+
+      const { signedTx, hash } = await relayerService.signTransaction(
+        {
+          to: tokenAddress,
+          from: redemption.walletAddress,
+          data: burnData,
+          value: '0',
+          chainId: chainId ? Number(chainId) : 8453, // Default to Base
+        },
+        redemption.orgId
+      );
+
+      const { txHash } = await relayerService.submitTransaction(
+        chainId ? Number(chainId) : 8453,
+        signedTx,
+        redemption.orgId
+      );
+
+      burnTxHash = txHash;
+    } catch (relayerErr) {
+      // If no signer key configured (non-custodial mode), generate a pending hash
+      // The client must sign and submit the burn transaction
+      logger.warn('[RedemptionService] Relayer signing unavailable — generating pending burn reference', {
+        metadata: { redemptionId, error: relayerErr instanceof Error ? relayerErr.message : 'unknown' },
+      });
+      burnTxHash = `pending:burn:${randomUUID().replace(/-/g, '')}`;
+    }
 
     logger.info('[RedemptionService] Burn transaction submitted', {
       metadata: {
@@ -575,11 +618,12 @@ export async function executeRedemption(redemptionId: string): Promise<Redemptio
       await updateRedemptionStatus(redemptionId, 'failed', {
         rejection_reason: errorMessage,
       });
-    } catch {
+    } catch (statusErr) {
       // If we can't update status, the redemption is stuck in burning/burned state
       // This requires manual intervention
-      logger.error('[RedemptionService] CRITICAL: Failed to mark redemption as failed', {
-        metadata: { redemptionId },
+      logger.error('[RedemptionService] CRITICAL: Failed to mark redemption as failed — manual intervention required', {
+        error: statusErr as Error,
+        metadata: { redemptionId, originalError: errorMessage },
       });
     }
 

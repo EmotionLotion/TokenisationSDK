@@ -185,7 +185,7 @@ export abstract class AbstractMPCProvider implements IMPCProvider {
     this.storage.signingRequests.set(requestId, {
       request,
       status: 'pending',
-      sessionId: sessionResult.value.sessionId,
+      sessionId: sessionResult.data.sessionId,
     });
 
     return ok({ requestId });
@@ -205,7 +205,7 @@ export abstract class AbstractMPCProvider implements IMPCProvider {
     if (signingRequest.sessionId) {
       const sessionResult = await this.getSigningSession(signingRequest.sessionId);
       if (sessionResult.success) {
-        const session = sessionResult.value;
+        const session = sessionResult.data;
 
         switch (session.status) {
           case 'completed':
@@ -270,7 +270,7 @@ export abstract class AbstractMPCProvider implements IMPCProvider {
     }
 
     // Store shares
-    this.storage.keyShares.set(params.accountId, result.value);
+    this.storage.keyShares.set(params.accountId, result.data);
 
     // Update account status
     account.canSign = true;
@@ -388,7 +388,7 @@ export abstract class AbstractMPCProvider implements IMPCProvider {
     // Get latest status from provider
     const statusResult = await this._getSigningStatusImpl(sessionId);
     if (statusResult.success) {
-      Object.assign(session, statusResult.value);
+      Object.assign(session, statusResult.data);
     }
 
     return ok(session);
@@ -473,7 +473,7 @@ export abstract class AbstractMPCProvider implements IMPCProvider {
 
     return ok({
       signature: '', // Will be populated when session completes
-      sessionId: sessionResult.value.sessionId,
+      sessionId: sessionResult.data.sessionId,
     });
   }
 
@@ -500,7 +500,7 @@ export abstract class AbstractMPCProvider implements IMPCProvider {
 
     return ok({
       signature: '', // Will be populated when session completes
-      sessionId: sessionResult.value.sessionId,
+      sessionId: sessionResult.data.sessionId,
     });
   }
 

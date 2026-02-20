@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as ledgerService from '../services/ledger.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 
 export const ledgerRouter = Router();
 
@@ -20,7 +21,7 @@ const dateRangeSchema = z.object({
 // ============================================================================
 
 // List positions
-ledgerRouter.get('/positions', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/positions', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -44,7 +45,7 @@ ledgerRouter.get('/positions', apiKeyMiddleware, async (req: ApiKeyRequest, res:
 });
 
 // Get position by wallet
-ledgerRouter.get('/positions/wallet/:walletAddress', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/positions/wallet/:walletAddress', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -62,7 +63,7 @@ ledgerRouter.get('/positions/wallet/:walletAddress', apiKeyMiddleware, async (re
 });
 
 // Get positions by investor
-ledgerRouter.get('/positions/investor/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/positions/investor/:investorId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -80,7 +81,7 @@ ledgerRouter.get('/positions/investor/:investorId', apiKeyMiddleware, async (req
 });
 
 // Get specific position
-ledgerRouter.get('/positions/:tokenId/:investorId/:walletAddress', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/positions/:tokenId/:investorId/:walletAddress', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -108,7 +109,7 @@ ledgerRouter.get('/positions/:tokenId/:investorId/:walletAddress', apiKeyMiddlew
 // ============================================================================
 
 // List ledger events
-ledgerRouter.get('/events', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/events', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -137,7 +138,7 @@ ledgerRouter.get('/events', apiKeyMiddleware, async (req: ApiKeyRequest, res: Re
 // ============================================================================
 
 // Create cap table snapshot
-ledgerRouter.post('/snapshots', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.post('/snapshots', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -162,7 +163,7 @@ ledgerRouter.post('/snapshots', apiKeyMiddleware, async (req: ApiKeyRequest, res
 });
 
 // List cap table snapshots
-ledgerRouter.get('/snapshots', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/snapshots', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -185,7 +186,7 @@ ledgerRouter.get('/snapshots', apiKeyMiddleware, async (req: ApiKeyRequest, res:
 });
 
 // Get cap table snapshot
-ledgerRouter.get('/snapshots/:id', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/snapshots/:id', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -199,7 +200,7 @@ ledgerRouter.get('/snapshots/:id', apiKeyMiddleware, async (req: ApiKeyRequest, 
 });
 
 // Verify cap table snapshot integrity
-ledgerRouter.get('/snapshots/:id/verify', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/snapshots/:id/verify', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -217,7 +218,7 @@ ledgerRouter.get('/snapshots/:id/verify', apiKeyMiddleware, async (req: ApiKeyRe
 // ============================================================================
 
 // Get position summary for a token
-ledgerRouter.get('/analytics/summary/:tokenId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/analytics/summary/:tokenId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -231,7 +232,7 @@ ledgerRouter.get('/analytics/summary/:tokenId', apiKeyMiddleware, async (req: Ap
 });
 
 // Get token distribution
-ledgerRouter.get('/analytics/distribution/:tokenId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/analytics/distribution/:tokenId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -245,7 +246,7 @@ ledgerRouter.get('/analytics/distribution/:tokenId', apiKeyMiddleware, async (re
 });
 
 // Get holder movements
-ledgerRouter.post('/analytics/holder-movements', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.post('/analytics/holder-movements', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -270,7 +271,7 @@ ledgerRouter.post('/analytics/holder-movements', apiKeyMiddleware, async (req: A
 });
 
 // Get transfer volume
-ledgerRouter.post('/analytics/transfer-volume', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.post('/analytics/transfer-volume', apiKeyMiddleware, requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');
@@ -300,7 +301,7 @@ ledgerRouter.post('/analytics/transfer-volume', apiKeyMiddleware, async (req: Ap
 // ============================================================================
 
 // Get investor portfolio
-ledgerRouter.get('/portfolio/:investorId', apiKeyMiddleware, async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+ledgerRouter.get('/portfolio/:investorId', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
       throw new ValidationError('API key required');

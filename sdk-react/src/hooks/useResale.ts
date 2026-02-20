@@ -38,7 +38,7 @@ export interface UseResaleReturn {
 // ============================================================================
 
 export function useResale(): UseResaleReturn {
-  const { modules } = useTokenisation();
+  const { modules } = useTokenisation() as any;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 

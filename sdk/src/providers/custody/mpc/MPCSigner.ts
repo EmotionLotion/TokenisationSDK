@@ -23,9 +23,11 @@ import {
   type Provider,
   type TransactionRequest,
   type TransactionResponse,
+  type TransactionLike,
   type TypedDataDomain,
   type TypedDataField,
   Transaction,
+  resolveAddress,
   hashMessage,
   TypedDataEncoder,
 } from 'ethers';
@@ -92,7 +94,7 @@ export class MPCSigner extends AbstractSigner {
       throw new Error(`Failed to get MPC account: ${accountResult.error}`);
     }
 
-    const address = accountResult.value.addresses[0];
+    const address = accountResult.data.addresses[0];
     if (!address) {
       throw new Error('MPC account has no addresses');
     }
@@ -112,15 +114,15 @@ export class MPCSigner extends AbstractSigner {
     }
 
     // If signing is async (has sessionId), wait for completion
-    if (result.value.sessionId) {
-      const session = await this.waitForSigningSession(result.value.sessionId);
+    if (result.data.sessionId) {
+      const session = await this.waitForSigningSession(result.data.sessionId);
       if (!session.signature) {
         throw new Error('Signing session completed without signature');
       }
       return session.signature;
     }
 
-    return result.value.signature;
+    return result.data.signature;
   }
 
   /**
@@ -152,15 +154,15 @@ export class MPCSigner extends AbstractSigner {
     }
 
     // If signing is async, wait for completion
-    if (result.value.sessionId) {
-      const session = await this.waitForSigningSession(result.value.sessionId);
+    if (result.data.sessionId) {
+      const session = await this.waitForSigningSession(result.data.sessionId);
       if (!session.signature) {
         throw new Error('Signing session completed without signature');
       }
       return session.signature;
     }
 
-    return result.value.signature;
+    return result.data.signature;
   }
 
   /**
@@ -173,8 +175,8 @@ export class MPCSigner extends AbstractSigner {
     // Serialize the transaction
     const transaction = Transaction.from({
       type: populatedTx.type,
-      to: populatedTx.to,
-      from: populatedTx.from,
+      to: populatedTx.to as string | null | undefined,
+      from: populatedTx.from as string | null | undefined,
       nonce: Number(populatedTx.nonce),
       gasLimit: populatedTx.gasLimit,
       gasPrice: populatedTx.gasPrice,
@@ -206,7 +208,7 @@ export class MPCSigner extends AbstractSigner {
     }
 
     // Wait for signing to complete
-    const session = await this.waitForSigningSession(sessionResult.value.sessionId);
+    const session = await this.waitForSigningSession(sessionResult.data.sessionId);
 
     if (!session.signature) {
       throw new Error('Signing session completed without signature');
@@ -293,7 +295,7 @@ export class MPCSigner extends AbstractSigner {
         throw new Error(`Failed to get signing session: ${result.error}`);
       }
 
-      const session = result.value;
+      const session = result.data;
 
       switch (session.status) {
         case 'completed':
@@ -331,10 +333,10 @@ export class MPCSigner extends AbstractSigner {
   /**
    * Populate transaction with defaults
    */
-  private async populateTransaction(tx: TransactionRequest): Promise<TransactionRequest> {
+  async populateTransaction(tx: TransactionRequest): Promise<TransactionLike<string>> {
     const provider = this.provider;
     if (!provider) {
-      return tx;
+      return tx as TransactionLike<string>;
     }
 
     const populated: TransactionRequest = { ...tx };
@@ -346,7 +348,7 @@ export class MPCSigner extends AbstractSigner {
 
     // Get nonce if not set
     if (populated.nonce === undefined) {
-      populated.nonce = await provider.getTransactionCount(populated.from, 'pending');
+      populated.nonce = await provider.getTransactionCount(await resolveAddress(populated.from), 'pending');
     }
 
     // Get gas price / fee data
@@ -380,7 +382,15 @@ export class MPCSigner extends AbstractSigner {
       populated.chainId = this.chainId;
     }
 
-    return populated;
+    // Resolve AddressLike fields to strings for TransactionLike<string> compatibility
+    const resolvedTo = populated.to ? await resolveAddress(populated.to) : (populated.to as null | undefined);
+    const resolvedFrom = populated.from ? await resolveAddress(populated.from) : undefined;
+
+    return {
+      ...populated,
+      to: resolvedTo,
+      from: resolvedFrom,
+    } as TransactionLike<string>;
   }
 
   // ============================================================================

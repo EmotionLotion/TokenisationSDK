@@ -532,7 +532,7 @@ export const paths: Record<string, any> = {
   '/wallet-passes/tokens/{tokenId}/wallet-pass': { get: { tags: ['Wallet Pass'], summary: 'Generate token wallet pass', parameters: [{ name: 'tokenId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'platform', in: 'query', schema: { type: 'string', enum: ['apple', 'google'] } }], responses: ok('Wallet pass') } },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HACKATHON: GPU COMPUTE, PREDICTION MARKET, TRAVEL SHIELD, PROOF OF FUNDS, DEPIN
+  // EXPERIMENTAL VERTICALS: GPU Compute, Prediction Markets, Travel Shield, Proof of Funds, DePIN
   // ═══════════════════════════════════════════════════════════════════════════
   '/gpu-nodes': {
     post: { tags: ['GPU Compute'], summary: 'Register GPU node', requestBody: json({ gpuModel: { type: 'string' }, gpuCount: { type: 'integer' }, vram: { type: 'integer' }, datacenter: { type: 'string' } }, ['gpuModel', 'gpuCount', 'vram']), responses: created('Node registered') },

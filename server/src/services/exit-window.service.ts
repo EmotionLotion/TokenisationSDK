@@ -236,10 +236,10 @@ export async function processWindowTransitions(assetId?: string): Promise<{ open
   let scheduleRows: any[];
   if (assetId) {
     scheduleRows = await (db as any).select().from(exitWindowSchedules)
-      .where(and(eq(exitWindowSchedules.assetId, assetId), eq(exitWindowSchedules.active, 1)));
+      .where(and(eq(exitWindowSchedules.assetId, assetId), eq(exitWindowSchedules.active, true)));
   } else {
     scheduleRows = await (db as any).select().from(exitWindowSchedules)
-      .where(eq(exitWindowSchedules.active, 1));
+      .where(eq(exitWindowSchedules.active, true));
   }
 
   for (const schedule of scheduleRows) {

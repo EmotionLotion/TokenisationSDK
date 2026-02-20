@@ -89,13 +89,13 @@ interface Web3AuthUserInfo {
  *
  * // Keys are generated after social login
  * await web3Auth.generateKeyShares({
- *   accountId: account.value.accountId,
+ *   accountId: account.data.accountId,
  *   totalShares: 3,
  *   threshold: 2,
  * });
  *
  * // Get signer
- * const signer = await web3Auth.createSigner(account.value.accountId, 8453);
+ * const signer = await web3Auth.createSigner(account.data.accountId, 8453);
  * ```
  */
 export class Web3AuthCustodyProvider extends AbstractMPCProvider {

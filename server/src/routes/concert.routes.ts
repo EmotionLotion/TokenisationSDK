@@ -165,7 +165,7 @@ concertRouter.post('/:id/transfer', async (req: ApiKeyRequest, res: Response, ne
     const body = TransferSchema.parse(req.body);
     const transfer = await concertService.requestTransfer({
       orgId: req.apiKey!.orgId,
-      concertTicketId: req.params.id,
+      ticketId: req.params.id,
       ...body,
     });
     res.status(201).json({ data: transfer });

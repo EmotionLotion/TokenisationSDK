@@ -79,13 +79,13 @@ interface PKPInfo {
  *
  * // Generate keys (distributed across Lit nodes)
  * await lit.generateKeyShares({
- *   accountId: account.value.accountId,
+ *   accountId: account.data.accountId,
  *   totalShares: 30, // Lit uses 2/3 of 30 nodes
  *   threshold: 20,
  * });
  *
  * // Get signer
- * const signer = await lit.createSigner(account.value.accountId, 8453);
+ * const signer = await lit.createSigner(account.data.accountId, 8453);
  * ```
  */
 export class LitProtocolCustodyProvider extends AbstractMPCProvider {

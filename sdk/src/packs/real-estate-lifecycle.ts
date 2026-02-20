@@ -282,4 +282,14 @@ export function mapStateToStakeStage(state: RealEstateLifecycleState): string {
 // ============================================================================
 
 // Register the real estate lifecycle in the global state machine registry
-stateMachineRegistry.register(REAL_ESTATE_LIFECYCLE);
+// Deferred to avoid circular dependency with StateMachine.ts
+export function registerRealEstateLifecycle(): void {
+  stateMachineRegistry.register(REAL_ESTATE_LIFECYCLE);
+}
+
+// Auto-register when imported (safe as long as StateMachine.ts doesn't side-effect import this file)
+try {
+  registerRealEstateLifecycle();
+} catch (e) {
+  console.warn('Real estate lifecycle auto-registration deferred:', e instanceof Error ? e.message : e);
+}

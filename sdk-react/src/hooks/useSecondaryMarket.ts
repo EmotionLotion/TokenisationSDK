@@ -30,7 +30,7 @@ export interface UseSecondaryMarketReturn {
 }
 
 export function useSecondaryMarket(assetId?: string): UseSecondaryMarketReturn {
-  const { httpClient } = useTokenisation();
+  const { api: httpClient } = useTokenisation();
   const [listings, setListings] = useState<SecondaryListing[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);

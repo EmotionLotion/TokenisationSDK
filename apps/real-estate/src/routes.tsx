@@ -44,6 +44,7 @@ export const router = createBrowserRouter([
       { path: 'onboarding', element: <Onboarding /> },
       { path: 'invest/:propertyId', element: <InvestFlow /> },
       { index: true, element: <Portfolio /> },
+      { path: 'portfolio', element: <Portfolio /> },
       { path: 'statements', element: <Statements /> },
       { path: 'cart', element: <CartCheckout /> },
     ],

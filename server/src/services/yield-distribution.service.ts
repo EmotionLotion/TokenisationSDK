@@ -171,9 +171,25 @@ export async function computeYield(
   const effectiveUtilization = Math.max(0, utilizationScore - rule.minUtilization) / (100 - rule.minUtilization);
   const multipliedYield = rule.baseYield * effectiveUtilization * rule.utilizationMultiplier;
 
-  // Simulate holder count and total amount (in production, query cap table)
-  const holderCount = Math.floor(Math.random() * 50) + 10; // Mock
-  const totalAmount = multipliedYield * 1000; // Mock: assume 1000 tokens
+  // Query actual holder count and total supply from cap table
+  let holderCount = 0;
+  let totalSupply = 1000; // fallback
+  try {
+    const holders = await rawQuery<{ cnt: number }>(
+      'SELECT COUNT(DISTINCT investor_id) as cnt FROM ledger_positions WHERE token_id = (SELECT id FROM tokens WHERE asset_id = ? AND org_id = ? LIMIT 1) AND CAST(balance AS INTEGER) > 0',
+      [assetId, orgId]
+    );
+    holderCount = holders[0]?.cnt ?? 0;
+
+    const supplyRows = await rawQuery<{ total: string }>(
+      'SELECT total_supply as total FROM tokens WHERE asset_id = ? AND org_id = ? LIMIT 1',
+      [assetId, orgId]
+    );
+    if (supplyRows[0]?.total) totalSupply = Number(supplyRows[0].total);
+  } catch (err) {
+    logger.warn('YieldDistributionService: Could not query cap table, using fallback', { error: err instanceof Error ? err.message : 'unknown' });
+  }
+  const totalAmount = multipliedYield * totalSupply / 100; // yield percentage of total supply value
 
   const id = randomUUID();
   const now = new Date().toISOString();

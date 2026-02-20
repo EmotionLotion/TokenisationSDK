@@ -197,7 +197,22 @@ export function createKYCProvider(
  * Get default KYC provider from environment
  */
 export function getDefaultKYCProvider(): KYCProviderAdapter {
-  const provider = process.env.KYC_PROVIDER as KYCProviderType || 'mock';
+  const provider = (process.env.KYC_PROVIDER as KYCProviderType) || 'mock';
+
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging';
+
+  if (provider === 'mock') {
+    if (isProduction) {
+      throw new Error(
+        'FATAL: KYC_PROVIDER is not configured or set to "mock" in production/staging. ' +
+        'Set KYC_PROVIDER to "sumsub", "onfido", or "jumio" with valid credentials.'
+      );
+    }
+    console.warn(
+      '\x1b[33m⚠ WARNING: KYC_PROVIDER not configured — using mock provider. ' +
+      'All investors will auto-pass KYC. Set KYC_PROVIDER in .env for real verification.\x1b[0m'
+    );
+  }
 
   const config: KYCProviderConfig = {
     sumsub: process.env.SUMSUB_APP_TOKEN

@@ -8,6 +8,7 @@
  */
 
 import type { HttpClient } from '../utils/http.js';
+import { parseOrThrow, propertyUnitInputSchema, maintenanceRequestInputSchema, expenseInputSchema } from '../validation/real-estate.js';
 
 // ============================================================================
 // Types
@@ -108,9 +109,10 @@ export class PropertyModule {
     status?: UnitStatus;
     metadata?: Record<string, unknown>;
   }): Promise<PropertyUnit> {
+    const validated = parseOrThrow(propertyUnitInputSchema, input, 'AddUnit');
     const response = await this.http.post<{ unit: PropertyUnit }>(
       `/api/v1/properties/${encodeURIComponent(assetId)}/units`,
-      input,
+      validated,
     );
     return response.data.unit;
   }
@@ -163,9 +165,10 @@ export class PropertyModule {
     currency?: string;
     metadata?: Record<string, unknown>;
   }): Promise<MaintenanceRequest> {
+    const validated = parseOrThrow(maintenanceRequestInputSchema, input, 'CreateMaintenanceRequest');
     const response = await this.http.post<{ request: MaintenanceRequest }>(
       `/api/v1/properties/${encodeURIComponent(assetId)}/maintenance`,
-      input,
+      validated,
     );
     return response.data.request;
   }
@@ -216,9 +219,10 @@ export class PropertyModule {
     period?: string;
     metadata?: Record<string, unknown>;
   }): Promise<PropertyExpense> {
+    const validated = parseOrThrow(expenseInputSchema, input, 'RecordExpense');
     const response = await this.http.post<{ expense: PropertyExpense }>(
       `/api/v1/properties/${encodeURIComponent(assetId)}/expenses`,
-      input,
+      validated,
     );
     return response.data.expense;
   }

@@ -142,6 +142,68 @@ authRouter.post('/siwe/verify', async (req, res, next) => {
   }
 });
 
+// Email/password registration
+authRouter.post('/register', async (req, res, next) => {
+  try {
+    const { email, password, name, orgId } = req.body;
+
+    if (!email || !password) {
+      throw new ValidationError('Email and password are required');
+    }
+    if (password.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters');
+    }
+    if (!orgId) {
+      throw new ValidationError('Organization ID is required');
+    }
+
+    const iamService = await import('../services/iam.service.js');
+    const user = await iamService.createUser({ email, password, name, orgId });
+
+    const tokenPayload = { partyId: user.id, address: email, orgId };
+    const token = generateToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+
+    res.status(201).json({ token, refreshToken, user });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Email/password login
+authRouter.post('/login', async (req, res, next) => {
+  try {
+    const { email, password, orgId } = req.body;
+
+    if (!email || !password) {
+      throw new ValidationError('Email and password are required');
+    }
+
+    const iamService = await import('../services/iam.service.js');
+    const user = await iamService.verifyUserPassword(email, password, orgId);
+
+    const tokenPayload = { partyId: user.id, address: email, orgId: user.orgId };
+    const token = generateToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+
+    // Store session (siweNonce is required by schema; use a random value for email auth)
+    await db.insert(sessions).values({
+      partyId: user.id,
+      walletAddress: email.slice(0, 42),
+      siweNonce: randomBytes(16).toString('hex'),
+      jwtIssuedAt: new Date(),
+      jwtExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      refreshTokenHash: createHash('sha256').update(refreshToken).digest('hex'),
+      refreshExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isActive: true,
+    });
+
+    res.json({ token, refreshToken, user });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Refresh token
 authRouter.post('/refresh', async (req, res, next) => {
   try {

@@ -242,7 +242,21 @@ export function getCustodyConfigFromEnv(): CustodyProviderConfig {
  * Get the default custody provider based on configuration.
  */
 export function getDefaultCustodyProvider(): CustodyProvider {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging';
+
   if (process.env.FIREBLOCKS_API_KEY) return 'fireblocks';
   if (process.env.BITGO_ACCESS_TOKEN) return 'bitgo';
+
+  if (isProduction) {
+    throw new Error(
+      'FATAL: No custody provider configured in production/staging. ' +
+      'Set FIREBLOCKS_API_KEY or BITGO_ACCESS_TOKEN with valid credentials.'
+    );
+  }
+
+  console.warn(
+    '\x1b[33m⚠ WARNING: No custody provider configured — using mock custody. ' +
+    'No real asset custody. Set FIREBLOCKS_API_KEY or BITGO_ACCESS_TOKEN in .env.\x1b[0m'
+  );
   return 'mock';
 }

@@ -112,7 +112,7 @@ export abstract class AbstractBundler implements IBundler {
       return [];
     }
 
-    return result.value.map((address) => ({
+    return result.data.map((address) => ({
       address,
       version: address.toLowerCase() === DEFAULT_ENTRY_POINTS.V07.toLowerCase()
         ? 'v0.7'
@@ -146,7 +146,7 @@ export abstract class AbstractBundler implements IBundler {
       return err(result.error);
     }
 
-    const userOpHash = result.value;
+    const userOpHash = result.data;
 
     // Wait for receipt if requested
     if (options?.waitForReceipt) {
@@ -168,7 +168,7 @@ export abstract class AbstractBundler implements IBundler {
       return err(result.error);
     }
 
-    return ok(result.value);
+    return ok(result.data);
   }
 
   async getUserOperationReceipt(
@@ -183,7 +183,7 @@ export abstract class AbstractBundler implements IBundler {
       return err(result.error);
     }
 
-    return ok(result.value);
+    return ok(result.data);
   }
 
   async waitForReceipt(
@@ -196,8 +196,8 @@ export abstract class AbstractBundler implements IBundler {
     while (Date.now() - startTime < timeout) {
       const result = await this.getUserOperationReceipt(userOpHash);
 
-      if (result.success && result.value) {
-        return ok(result.value);
+      if (result.success && result.data) {
+        return ok(result.data);
       }
 
       // Wait before next poll
@@ -231,14 +231,14 @@ export abstract class AbstractBundler implements IBundler {
     }
 
     return ok({
-      preVerificationGas: BigInt(result.value.preVerificationGas),
-      verificationGasLimit: BigInt(result.value.verificationGasLimit),
-      callGasLimit: BigInt(result.value.callGasLimit),
-      paymasterVerificationGasLimit: result.value.paymasterVerificationGasLimit
-        ? BigInt(result.value.paymasterVerificationGasLimit)
+      preVerificationGas: BigInt(result.data.preVerificationGas),
+      verificationGasLimit: BigInt(result.data.verificationGasLimit),
+      callGasLimit: BigInt(result.data.callGasLimit),
+      paymasterVerificationGasLimit: result.data.paymasterVerificationGasLimit
+        ? BigInt(result.data.paymasterVerificationGasLimit)
         : undefined,
-      paymasterPostOpGasLimit: result.value.paymasterPostOpGasLimit
-        ? BigInt(result.value.paymasterPostOpGasLimit)
+      paymasterPostOpGasLimit: result.data.paymasterPostOpGasLimit
+        ? BigInt(result.data.paymasterPostOpGasLimit)
         : undefined,
     });
   }
@@ -275,7 +275,7 @@ export abstract class AbstractBundler implements IBundler {
       return err(result.error);
     }
 
-    return ok(BigInt(result.value));
+    return ok(BigInt(result.data));
   }
 
   async simulateUserOperation(

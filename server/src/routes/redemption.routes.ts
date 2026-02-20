@@ -9,6 +9,7 @@ import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import * as redemptionService from '../services/redemption.service.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
+import { requireScope } from '../middleware/scopeGuard.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 
 export const redemptionRouter = Router();
@@ -51,6 +52,7 @@ const listRedemptionsQuerySchema = z.object({
 redemptionRouter.post(
   '/tokens/:tokenId/redeem',
   apiKeyMiddleware,
+  requireScope('write'),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.apiKey) {
@@ -90,6 +92,7 @@ redemptionRouter.post(
 redemptionRouter.get(
   '/tokens/:tokenId/redemptions',
   apiKeyMiddleware,
+  requireScope('read'),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.apiKey) {
@@ -136,6 +139,7 @@ redemptionRouter.get(
 redemptionRouter.get(
   '/redemptions/:id',
   apiKeyMiddleware,
+  requireScope('read'),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.apiKey) {
@@ -164,6 +168,7 @@ redemptionRouter.get(
 redemptionRouter.patch(
   '/redemptions/:id/approve',
   apiKeyMiddleware,
+  requireScope('admin'),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.apiKey) {
@@ -210,6 +215,7 @@ redemptionRouter.patch(
 redemptionRouter.patch(
   '/redemptions/:id/reject',
   apiKeyMiddleware,
+  requireScope('admin'),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.apiKey) {
@@ -248,6 +254,7 @@ redemptionRouter.patch(
 redemptionRouter.post(
   '/redemptions/:id/execute',
   apiKeyMiddleware,
+  requireScope('admin'),
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.apiKey) {

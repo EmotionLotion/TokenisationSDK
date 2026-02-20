@@ -17,10 +17,10 @@ function HomepageHeader() {
           <Link className="button button--secondary button--lg" to="/docs/getting-started/QUICKSTART">
             Quick Start
           </Link>
-          <Link className="button button--secondary button--lg" to="/docs/ONE_PAGE_SDK_REFERENCE">
+          <Link className="button button--secondary button--lg" to="/docs/api/SDK_REFERENCE">
             SDK Reference
           </Link>
-          <Link className="button button--secondary button--lg" to="/docs/API_REFERENCE">
+          <Link className="button button--secondary button--lg" to="/docs/api/REST_API">
             API Reference
           </Link>
         </div>
