@@ -11,7 +11,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { rawQuery } from '../config/database.js';
+import { rawQuery, execStatement } from '../config/database.js';
 import { logger } from '../middleware/logger.js';
 
 // ============================================================================
@@ -101,7 +101,7 @@ async function ensureTables(): Promise<void> {
   if (tablesInitialised) return;
 
   try {
-    await rawQuery(`
+    await execStatement(`
       CREATE TABLE IF NOT EXISTS nav_history (
         id TEXT PRIMARY KEY,
         org_id TEXT NOT NULL,
@@ -120,17 +120,17 @@ async function ensureTables(): Promise<void> {
       )
     `);
 
-    await rawQuery(`
+    await execStatement(`
       CREATE INDEX IF NOT EXISTS idx_nav_history_asset
         ON nav_history(asset_id, computed_at)
     `);
 
-    await rawQuery(`
+    await execStatement(`
       CREATE INDEX IF NOT EXISTS idx_nav_history_org_asset
         ON nav_history(org_id, asset_id)
     `);
 
-    await rawQuery(`
+    await execStatement(`
       CREATE TABLE IF NOT EXISTS valuation_sources (
         id TEXT PRIMARY KEY,
         org_id TEXT NOT NULL,
@@ -144,7 +144,7 @@ async function ensureTables(): Promise<void> {
       )
     `);
 
-    await rawQuery(`
+    await execStatement(`
       CREATE INDEX IF NOT EXISTS idx_valuation_sources_nav_record
         ON valuation_sources(nav_record_id)
     `);
@@ -187,10 +187,15 @@ export async function calculateNAV(
   );
   const totalSupply = latestRows[0]?.total_supply ?? '0';
 
+  // Validate numeric strings before BigInt conversion
+  if (!/^\d+$/.test(input.totalAssetValue)) throw new Error('Invalid totalAssetValue: must be a non-negative integer string');
+  if (!/^\d+$/.test(liabilities)) throw new Error('Invalid liabilities: must be a non-negative integer string');
+  const sanitizedSupply = totalSupply && /^\d+$/.test(totalSupply) ? totalSupply : '1';
+
   // Compute NAV
   const totalAssetBig = BigInt(input.totalAssetValue);
   const liabilitiesBig = BigInt(liabilities);
-  const supplyBig = BigInt(totalSupply || '1'); // avoid div-by-zero
+  const supplyBig = BigInt(sanitizedSupply); // avoid div-by-zero with validated fallback
 
   const netAssetValue = totalAssetBig > liabilitiesBig
     ? totalAssetBig - liabilitiesBig
@@ -218,7 +223,7 @@ export async function calculateNAV(
     createdAt: now,
   };
 
-  await rawQuery(
+  await execStatement(
     `INSERT INTO nav_history
        (id, org_id, asset_id, nav_per_token, total_asset_value, liabilities,
         net_asset_value, total_supply, currency, decimals, source, tx_hash, computed_at, created_at)
@@ -234,7 +239,7 @@ export async function calculateNAV(
   // Persist valuation sources if provided
   if (input.sources && input.sources.length > 0) {
     for (const src of input.sources) {
-      await rawQuery(
+      await execStatement(
         `INSERT INTO valuation_sources
            (id, org_id, asset_id, nav_record_id, source_name, value, weight, timestamp, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
@@ -395,7 +400,7 @@ export async function processCallback(
     createdAt: now,
   };
 
-  await rawQuery(
+  await execStatement(
     `INSERT INTO nav_history
        (id, org_id, asset_id, nav_per_token, total_asset_value, liabilities,
         net_asset_value, total_supply, currency, decimals, source, tx_hash, computed_at, created_at)
@@ -411,7 +416,7 @@ export async function processCallback(
   // Persist valuation sources
   if (payload.valuationSources && payload.valuationSources.length > 0) {
     for (const src of payload.valuationSources) {
-      await rawQuery(
+      await execStatement(
         `INSERT INTO valuation_sources
            (id, org_id, asset_id, nav_record_id, source_name, value, weight, timestamp, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,

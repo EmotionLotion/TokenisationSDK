@@ -98,13 +98,17 @@ dldRouter.get('/titles', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respo
       throw new ValidationError('API key required');
     }
 
-    const { projectId, status, limit, offset } = req.query;
+    const { projectId, status } = req.query;
+    const paginationResult = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const titles = await dldService.listTitles(req.apiKey.orgId, {
       projectId: projectId as string | undefined,
       status: status as string | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: paginationResult.limit,
+      offset: paginationResult.offset,
     });
 
     res.json({ data: titles, count: titles.length });
@@ -183,11 +187,14 @@ dldRouter.get('/titles/:id/events', apiKeyMiddleware, async (req: ApiKeyRequest,
       throw new ValidationError('API key required');
     }
 
-    const { limit, offset } = req.query;
+    const pag = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const events = await dldService.getTitleEvents(req.params.id, req.apiKey.orgId, {
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: pag.limit,
+      offset: pag.offset,
     });
 
     res.json({ data: events, count: events.length });
@@ -233,14 +240,18 @@ dldRouter.get('/events', apiKeyMiddleware, async (req: ApiKeyRequest, res: Respo
       throw new ValidationError('API key required');
     }
 
-    const { titleId, eventType, processed, limit, offset } = req.query;
+    const { titleId, eventType, processed } = req.query;
+    const pag2 = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const events = await dldService.listEvents(req.apiKey.orgId, {
       titleId: titleId as string | undefined,
       type: eventType as string | undefined, // Map eventType to type
       processed: processed === 'true' ? true : processed === 'false' ? false : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: pag2.limit,
+      offset: pag2.offset,
     });
 
     res.json({ data: events, count: events.length });
@@ -299,13 +310,17 @@ dldRouter.get('/sync-jobs', apiKeyMiddleware, async (req: ApiKeyRequest, res: Re
       throw new ValidationError('API key required');
     }
 
-    const { status, jobType, limit, offset } = req.query;
+    const { status, jobType } = req.query;
+    const pag3 = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const jobs = await dldService.listSyncJobs(req.apiKey.orgId, {
       status: status as string | undefined,
       jobType: jobType as string | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: pag3.limit,
+      offset: pag3.offset,
     });
 
     res.json({ data: jobs, count: jobs.length });

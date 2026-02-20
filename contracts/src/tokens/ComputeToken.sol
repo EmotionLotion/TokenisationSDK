@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IIdentityRegistry.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ComputeToken
@@ -16,6 +18,7 @@ import "../interfaces/IIdentityRegistry.sol";
  * - Freeze/unfreeze, force transfers, recovery
  */
 contract ComputeToken {
+    using SafeERC20 for IERC20;
     // ============================================================================
     // STATE
     // ============================================================================
@@ -209,10 +212,7 @@ contract ComputeToken {
         require(amount > 0, "ComputeToken: zero amount");
 
         // Transfer payment tokens from caller
-        (bool success, bytes memory data) = paymentToken.call(
-            abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), amount)
-        );
-        require(success && (data.length == 0 || abi.decode(data, (bool))), "ComputeToken: transfer failed");
+        IERC20(paymentToken).safeTransferFrom(msg.sender, address(this), amount);
 
         // Update cumulative revenue per token
         revenuePerToken += (amount * 1e18) / totalSupply;
@@ -233,10 +233,7 @@ contract ComputeToken {
         _pendingRevenue[msg.sender] = 0;
 
         // Transfer payment tokens to claimant
-        (bool success, bytes memory data) = paymentToken.call(
-            abi.encodeWithSelector(0xa9059cbb, msg.sender, claimable)
-        );
-        require(success && (data.length == 0 || abi.decode(data, (bool))), "ComputeToken: claim transfer failed");
+        IERC20(paymentToken).safeTransfer(msg.sender, claimable);
 
         emit RevenueClaimed(msg.sender, claimable);
     }
@@ -320,7 +317,9 @@ contract ComputeToken {
 
         // Compliance checks
         if (rules.requireKyc) {
-            require(identityRegistry.isVerified(to, new uint256[](0)), "ComputeToken: recipient not KYC verified");
+            uint256[] memory kycClaims = new uint256[](1);
+            kycClaims[0] = 1; // ClaimTopics.KYC
+            require(identityRegistry.isVerified(to, kycClaims), "ComputeToken: recipient not KYC verified");
         }
         if (rules.minTransferAmount > 0) {
             require(amount >= rules.minTransferAmount, "ComputeToken: below min transfer");
@@ -335,11 +334,27 @@ contract ComputeToken {
             require(investorCount < rules.maxInvestorCount, "ComputeToken: max investors reached");
         }
 
-        // Country check
-        if (rules.blockedCountries.length > 0) {
+        // Country checks
+        {
             uint16 country = identityRegistry.getCountry(to);
-            for (uint256 i = 0; i < rules.blockedCountries.length; i++) {
-                require(country != rules.blockedCountries[i], "ComputeToken: blocked country");
+
+            // Check allowed countries whitelist
+            if (rules.allowedCountries.length > 0) {
+                bool allowed = false;
+                for (uint256 i = 0; i < rules.allowedCountries.length; i++) {
+                    if (rules.allowedCountries[i] == country) {
+                        allowed = true;
+                        break;
+                    }
+                }
+                require(allowed, "ComputeToken: country not allowed");
+            }
+
+            // Check blocked countries blacklist
+            if (rules.blockedCountries.length > 0) {
+                for (uint256 i = 0; i < rules.blockedCountries.length; i++) {
+                    require(country != rules.blockedCountries[i], "ComputeToken: blocked country");
+                }
             }
         }
 

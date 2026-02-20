@@ -11,6 +11,32 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract HardwareVerificationModule is Ownable {
     // ============================================================================
+    // Local struct mirror for ABI decoding GPUNodeNFT.getNodeInfo() return data
+    // ============================================================================
+
+    struct GPUNodeInfoDecoded {
+        string gpuModel;
+        uint8 gpuCount;
+        uint16 vramPerGpuGB;
+        uint16 totalVramGB;
+        uint8 interconnect;
+        string cpuModel;
+        uint32 ramGB;
+        uint16 storageTB;
+        uint16 networkBandwidthGbps;
+        uint8 datacenterTier;
+        string datacenterLocation;
+        uint32 tdpWatts;
+        uint256 benchmarkScore;
+        uint256 acquisitionCostUsd;
+        uint256 acquisitionDate;
+        uint16 depreciationMonths;
+        bool verified;
+        uint256 verifiedAt;
+        uint256 lastVerificationCheck;
+    }
+
+    // ============================================================================
     // Events
     // ============================================================================
 
@@ -139,11 +165,9 @@ contract HardwareVerificationModule is Ownable {
         );
         if (!infoSuccess) return false;
 
-        // Decode lastVerificationCheck from GPUNodeInfo struct
-        // GPUNodeInfo has lastVerificationCheck as the last field
-        // We need to access the 18th element (0-indexed) of the tuple
-        (, , , , , , , , , , , , , , , , , , uint256 lastCheck) =
-            abi.decode(infoData, (string, uint8, uint16, uint16, uint8, string, uint32, uint16, uint16, uint8, string, uint32, uint256, uint256, uint256, uint16, bool, uint256, uint256));
+        // Decode GPUNodeInfo struct to extract lastVerificationCheck
+        GPUNodeInfoDecoded memory nodeInfo = abi.decode(infoData, (GPUNodeInfoDecoded));
+        uint256 lastCheck = nodeInfo.lastVerificationCheck;
 
         if (block.timestamp - lastCheck > verificationExpirySeconds) return false;
 

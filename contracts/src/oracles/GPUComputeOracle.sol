@@ -223,8 +223,9 @@ contract GPUComputeOracle is Ownable {
     // ============================================================================
 
     /**
-     * @notice Calculate NAV using DCF model
-     * NAV = hardwareValue + (annualNOI * remainingMonths / 12) / (1 + discountRate/10000)
+     * @notice Calculate NAV using DCF model with per-year discounting
+     * NAV = hardwareValue + sum(annualNOI / (1 + r)^year) for each remaining year
+     * Uses integer math with 1e18 precision scaling
      */
     function _calculateNAV(
         uint256 hardwareValue,
@@ -232,15 +233,35 @@ contract GPUComputeOracle is Ownable {
         uint16 remainingMonths,
         uint16 discountRate
     ) internal pure returns (uint256) {
-        // Projected total remaining income
-        uint256 totalProjectedIncome = (annualNoi * remainingMonths) / 12;
+        if (remainingMonths == 0 || annualNoi == 0) {
+            return hardwareValue;
+        }
 
-        // Discount factor: 1 + rate/10000, scaled by 10000
-        uint256 discountFactor = 10000 + discountRate;
+        uint256 PRECISION = 1e18;
+        uint256 totalDiscountedIncome = 0;
 
-        // Discounted income
-        uint256 discountedIncome = (totalProjectedIncome * 10000) / discountFactor;
+        uint256 fullYears = remainingMonths / 12;
+        uint256 partialMonths = remainingMonths % 12;
 
-        return hardwareValue + discountedIncome;
+        // Discount factor per year: (10000 + discountRate) / 10000, scaled by PRECISION
+        uint256 discountFactorScaled = ((10000 + uint256(discountRate)) * PRECISION) / 10000;
+
+        // Cumulative discount: starts at PRECISION (= 1.0)
+        uint256 cumulativeDiscount = PRECISION;
+
+        // Discount each full year
+        for (uint256 y = 0; y < fullYears; y++) {
+            cumulativeDiscount = (cumulativeDiscount * discountFactorScaled) / PRECISION;
+            totalDiscountedIncome += (annualNoi * PRECISION) / cumulativeDiscount;
+        }
+
+        // Discount remaining partial year
+        if (partialMonths > 0) {
+            cumulativeDiscount = (cumulativeDiscount * discountFactorScaled) / PRECISION;
+            uint256 partialIncome = (annualNoi * partialMonths) / 12;
+            totalDiscountedIncome += (partialIncome * PRECISION) / cumulativeDiscount;
+        }
+
+        return hardwareValue + totalDiscountedIncome;
     }
 }

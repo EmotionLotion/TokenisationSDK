@@ -183,6 +183,9 @@ export class VARAConditionEvaluator implements ICustomConditionEvaluator {
   private cacheTtlMs: number;
 
   constructor(config: VARAConditionEvaluatorConfig = {}) {
+    if (!config.varaServiceProvider && typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('VARAConditionEvaluator: real varaServiceProvider is required in production — mock is not allowed');
+    }
     this.varaService = config.varaServiceProvider ?? new MockVARAServiceProvider();
     this.minimumAmlScore = config.minimumAmlScore ?? 70; // Default 70% AML score required
     this.allowPendingStatus = config.allowPendingStatus ?? false;

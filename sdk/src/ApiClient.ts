@@ -52,6 +52,11 @@ import { EscrowModule } from './modules/EscrowClient.js';
 import { CashFlowModule } from './modules/CashFlowClient.js';
 import { DLDModule } from './modules/DLDClient.js';
 import { LegalModule } from './modules/LegalModule.js';
+import { SecondaryMarketModule } from './modules/SecondaryMarketModule.js';
+import { InvestorTierModule } from './modules/InvestorTierModule.js';
+import { ExitWindowModule } from './modules/ExitWindowModule.js';
+import { PropertyModule } from './modules/PropertyModule.js';
+import { NAVModule } from './modules/NAVModule.js';
 import type { TokenizationSDKConfig } from './types.js';
 
 // ============================================================================
@@ -103,6 +108,21 @@ export class ApiClient {
   /** Legal - KYC/AML compliance, investor verification, freeze/unfreeze */
   public readonly legal: LegalModule;
 
+  /** Secondary market - P2P listings and purchases */
+  public readonly secondaryMarket: SecondaryMarketModule;
+
+  /** Investor tiers - per-tier investment limits and eligibility */
+  public readonly investorTiers: InvestorTierModule;
+
+  /** Exit windows - scheduler-driven redemption windows */
+  public readonly exitWindows: ExitWindowModule;
+
+  /** Property management - units, maintenance, expenses */
+  public readonly properties: PropertyModule;
+
+  /** NAV - Net Asset Value calculation and history */
+  public readonly nav: NAVModule;
+
   constructor(config: TokenizationSDKConfig) {
     // Validate API key format
     if (!config.apiKey || !config.apiKey.startsWith('sk_')) {
@@ -144,6 +164,11 @@ export class ApiClient {
     this.cashflow = new CashFlowModule(this.http);
     this.dld = new DLDModule(this.http);
     this.legal = new LegalModule(this.http);
+    this.secondaryMarket = new SecondaryMarketModule(this.http);
+    this.investorTiers = new InvestorTierModule(this.http);
+    this.exitWindows = new ExitWindowModule(this.http);
+    this.properties = new PropertyModule(this.http);
+    this.nav = new NAVModule(this.http);
   }
 
   /**

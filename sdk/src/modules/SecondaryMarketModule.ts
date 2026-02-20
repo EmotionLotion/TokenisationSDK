@@ -43,18 +43,16 @@ export class SecondaryMarketModule {
   constructor(private http: HttpClient) {}
 
   async listListings(assetId: string, params?: { status?: string; limit?: number; offset?: number }): Promise<SecondaryListing[]> {
-    const query = params
-      ? '?' + Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join('&')
-      : '';
     const response = await this.http.get<{ data: SecondaryListing[] }>(
-      `/api/v1/assets/${assetId}/listings${query}`,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/listings`,
+      params as Record<string, string | number | boolean | undefined>,
     );
     return response.data.data;
   }
 
   async createListing(assetId: string, input: CreateListingInput): Promise<SecondaryListing> {
     const response = await this.http.post<{ data: SecondaryListing }>(
-      `/api/v1/assets/${assetId}/listings`,
+      `/api/v1/assets/${encodeURIComponent(assetId)}/listings`,
       input,
     );
     return response.data.data;
@@ -62,7 +60,7 @@ export class SecondaryMarketModule {
 
   async purchase(listingId: string, input: { buyerWallet: string; maxPrice?: number }): Promise<PurchaseResult> {
     const response = await this.http.post<{ data: PurchaseResult }>(
-      `/api/v1/listings/${listingId}/purchase`,
+      `/api/v1/listings/${encodeURIComponent(listingId)}/purchase`,
       input,
     );
     return response.data.data;
@@ -70,7 +68,7 @@ export class SecondaryMarketModule {
 
   async cancelListing(listingId: string): Promise<{ success: boolean }> {
     const response = await this.http.post<{ data: { success: boolean } }>(
-      `/api/v1/listings/${listingId}/cancel`,
+      `/api/v1/listings/${encodeURIComponent(listingId)}/cancel`,
       {},
     );
     return response.data.data;

@@ -119,6 +119,8 @@ export const {
   stateTransitions, complianceReceipts, complianceAuditLog, policyRulesets,
   // Real Estate: Investor Tiers, Exit Windows, Secondary Market
   investorPlans, investorTierAssignments, exitWindowSchedules, exitWindows, exitRedemptions, secondaryListings,
+  // NAV & Property Management
+  navHistory, valuationSources, propertyUnits, maintenanceRequests, propertyExpenses,
 } = schema;
 
 // Export schema for query builder access
@@ -135,6 +137,14 @@ export async function rawQuery<T = any>(query: string, params: any[] = []): Prom
     // Convert PostgreSQL-style placeholders ($1, $2) to SQLite-style (?)
     const sqliteQuery = query.replace(/\$\d+/g, '?');
     const stmt = sqliteDb.prepare(sqliteQuery);
+
+    // Detect write statements and route to stmt.run() instead of stmt.all()
+    const trimmed = sqliteQuery.trimStart().toUpperCase();
+    if (/^(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|PRAGMA)/.test(trimmed)) {
+      stmt.run(...params);
+      return [] as T[];
+    }
+
     return stmt.all(...params) as T[];
   } else if (pool) {
     const result = await pool.query(query, params);
@@ -2140,10 +2150,120 @@ export function initializeSqliteSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_secondary_listings_status ON secondary_listings(status);
   `);
 
+  // ========================================================================
+  // SECTION 25: NAV History & Property Management
+  // ========================================================================
+  sqliteDb.exec(`
+    CREATE TABLE IF NOT EXISTS nav_history (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL,
+      nav_per_token TEXT NOT NULL,
+      total_asset_value TEXT NOT NULL,
+      liabilities TEXT NOT NULL DEFAULT '0',
+      net_asset_value TEXT NOT NULL,
+      total_supply TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      decimals INTEGER NOT NULL DEFAULT 18,
+      source TEXT NOT NULL DEFAULT 'cre_workflow',
+      tx_hash TEXT,
+      computed_at TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_nav_history_asset ON nav_history(asset_id, computed_at);
+    CREATE INDEX IF NOT EXISTS idx_nav_history_org_asset ON nav_history(org_id, asset_id);
+
+    CREATE TABLE IF NOT EXISTS valuation_sources (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL,
+      nav_record_id TEXT NOT NULL REFERENCES nav_history(id) ON DELETE CASCADE,
+      source_name TEXT NOT NULL,
+      value TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 1.0,
+      timestamp INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_valuation_sources_nav_record ON valuation_sources(nav_record_id);
+
+    CREATE TABLE IF NOT EXISTS property_units (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      property_asset_id TEXT NOT NULL,
+      unit_number TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'apartment',
+      area REAL NOT NULL DEFAULT 0,
+      tenant_name TEXT,
+      tenant_email TEXT,
+      lease_start TEXT,
+      lease_end TEXT,
+      monthly_rent TEXT,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      status TEXT NOT NULL DEFAULT 'vacant',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_prop_units_org_asset ON property_units(org_id, property_asset_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_prop_units_number ON property_units(org_id, property_asset_id, unit_number);
+
+    CREATE TABLE IF NOT EXISTS maintenance_requests (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      property_asset_id TEXT NOT NULL,
+      unit_id TEXT,
+      category TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      assignee TEXT,
+      estimated_cost TEXT,
+      actual_cost TEXT,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      completed_at TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_maint_req_org_asset ON maintenance_requests(org_id, property_asset_id);
+    CREATE INDEX IF NOT EXISTS idx_maint_req_status ON maintenance_requests(org_id, status);
+
+    CREATE TABLE IF NOT EXISTS property_expenses (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      property_asset_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      description TEXT,
+      vendor TEXT,
+      invoice_ref TEXT,
+      paid_at TEXT,
+      period TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_prop_exp_org_asset ON property_expenses(org_id, property_asset_id);
+    CREATE INDEX IF NOT EXISTS idx_prop_exp_category ON property_expenses(org_id, category);
+  `);
+
   logger.info('SQLite schema initialized (all tables created)');
 }
 
 // Auto-initialize SQLite schema on load
 if (DB_MODE === 'sqlite') {
   initializeSqliteSchema();
+}
+
+// Production/staging safety warning for SQLite mode
+if (DB_MODE === 'sqlite' && (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging')) {
+  console.error(
+    '\x1b[31m╔══════════════════════════════════════════════════════════════╗\n' +
+    '║  CRITICAL: SQLite mode is active in production/staging!     ║\n' +
+    '║  SQLite does not support Row-Level Security (RLS),          ║\n' +
+    '║  concurrent writes, or horizontal scaling.                  ║\n' +
+    '║  Set DB_MODE=postgresql with a proper DATABASE_URL.         ║\n' +
+    '╚══════════════════════════════════════════════════════════════╝\x1b[0m'
+  );
 }

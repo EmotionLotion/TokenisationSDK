@@ -10,7 +10,7 @@
  * @packageDocumentation
  */
 
-import { rawQuery } from '../config/database.js';
+import { rawQuery, execStatement } from '../config/database.js';
 import { randomUUID } from 'crypto';
 import { logger } from '../middleware/logger.js';
 
@@ -78,7 +78,7 @@ export async function ensureTables(): Promise<void> {
 
   logger.info('DePINIoTService: initialising tables');
 
-  await rawQuery(`
+  await execStatement(`
     CREATE TABLE IF NOT EXISTS iot_devices (
       id            TEXT PRIMARY KEY,
       org_id        TEXT NOT NULL,
@@ -89,11 +89,11 @@ export async function ensureTables(): Promise<void> {
       status        TEXT NOT NULL DEFAULT 'active',
       last_seen_at  TEXT,
       metadata      TEXT NOT NULL DEFAULT '{}',
-      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  await rawQuery(`
+  await execStatement(`
     CREATE TABLE IF NOT EXISTS device_telemetry (
       id          TEXT PRIMARY KEY,
       org_id      TEXT NOT NULL,
@@ -101,14 +101,14 @@ export async function ensureTables(): Promise<void> {
       asset_id    TEXT NOT NULL,
       metrics     TEXT NOT NULL DEFAULT '{}',
       timestamp   TEXT NOT NULL,
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  await rawQuery(`CREATE INDEX IF NOT EXISTS idx_iot_org ON iot_devices (org_id, asset_id)`);
-  await rawQuery(`CREATE INDEX IF NOT EXISTS idx_iot_device ON iot_devices (device_id)`);
-  await rawQuery(`CREATE INDEX IF NOT EXISTS idx_dt_device ON device_telemetry (device_id, timestamp)`);
-  await rawQuery(`CREATE INDEX IF NOT EXISTS idx_dt_asset ON device_telemetry (asset_id, timestamp)`);
+  await execStatement(`CREATE INDEX IF NOT EXISTS idx_iot_org ON iot_devices (org_id, asset_id)`);
+  await execStatement(`CREATE INDEX IF NOT EXISTS idx_iot_device ON iot_devices (device_id)`);
+  await execStatement(`CREATE INDEX IF NOT EXISTS idx_dt_device ON device_telemetry (device_id, timestamp)`);
+  await execStatement(`CREATE INDEX IF NOT EXISTS idx_dt_asset ON device_telemetry (asset_id, timestamp)`);
 
   _initialised = true;
   logger.info('DePINIoTService: tables ready');
@@ -130,10 +130,10 @@ export async function registerDevice(
   const id = randomUUID();
   const now = new Date().toISOString();
 
-  await rawQuery(
+  await execStatement(
     `INSERT INTO iot_devices
        (id, org_id, asset_id, device_id, device_type, location, status, last_seen_at, metadata, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'active', NULL, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6, 'active', NULL, $7, $8)`,
     [id, orgId, input.assetId, input.deviceId, input.deviceType, input.location, JSON.stringify(input.metadata ?? {}), now],
   );
 
@@ -158,7 +158,7 @@ export async function ingestTelemetry(
 
   // Look up device to get asset mapping
   const devices = await rawQuery<any>(
-    `SELECT * FROM iot_devices WHERE device_id = ? AND org_id = ? AND status = 'active' LIMIT 1`,
+    `SELECT * FROM iot_devices WHERE device_id = $1 AND org_id = $2 AND status = 'active' LIMIT 1`,
     [input.deviceId, orgId],
   );
   if (devices.length === 0) throw new Error(`Device ${input.deviceId} not found or not active`);
@@ -169,15 +169,15 @@ export async function ingestTelemetry(
   const timestamp = input.timestamp ?? new Date().toISOString();
   const now = new Date().toISOString();
 
-  await rawQuery(
+  await execStatement(
     `INSERT INTO device_telemetry (id, org_id, device_id, asset_id, metrics, timestamp, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [id, orgId, input.deviceId, assetId, JSON.stringify(input.metrics), timestamp, now],
   );
 
   // Update device last_seen_at
-  await rawQuery(
-    `UPDATE iot_devices SET last_seen_at = ? WHERE device_id = ? AND org_id = ?`,
+  await execStatement(
+    `UPDATE iot_devices SET last_seen_at = $1 WHERE device_id = $2 AND org_id = $3`,
     [now, input.deviceId, orgId],
   );
 
@@ -195,13 +195,16 @@ export async function calculateUtilization(
 ): Promise<UtilizationScore> {
   await ensureTables();
 
+  // Compute correct last day of the period month
+  const [periodYear, periodMonth] = period.split('-').map(Number);
+  const lastDay = new Date(periodYear, periodMonth, 0).getDate();
   const periodStart = `${period}-01`;
-  const periodEnd = `${period}-31`;
+  const periodEnd = `${period}-${String(lastDay).padStart(2, '0')}`;
 
   // Get all telemetry for this asset in the period
   const telemetry = await rawQuery<any>(
     `SELECT * FROM device_telemetry
-     WHERE asset_id = ? AND org_id = ? AND timestamp >= ? AND timestamp <= ?
+     WHERE asset_id = $1 AND org_id = $2 AND timestamp >= $3 AND timestamp <= $4
      ORDER BY timestamp`,
     [assetId, orgId, periodStart, periodEnd],
   );
@@ -209,6 +212,14 @@ export async function calculateUtilization(
   if (telemetry.length === 0) {
     return { assetId, period, score: 0, dataPoints: 0, breakdown: {}, calculatedAt: new Date().toISOString() };
   }
+
+  // Whitelist of allowed metric names (prevents injection if metric keys are ever used in SQL)
+  const ALLOWED_METRIC_NAMES = new Set([
+    'occupancy', 'power_kwh', 'flow_rate', 'temperature', 'humidity',
+    'co2_ppm', 'noise_db', 'light_lux', 'access_count', 'utilization',
+    'speed', 'latitude', 'longitude', 'battery_percent', 'signal_strength',
+    'uptime', 'throughput', 'latency', 'error_rate', 'pressure',
+  ]);
 
   // Aggregate metrics across all data points
   const metricSums: Record<string, number> = {};
@@ -222,6 +233,10 @@ export async function calculateUtilization(
     } catch { continue; }
 
     for (const [key, value] of Object.entries(metrics)) {
+      if (!ALLOWED_METRIC_NAMES.has(key)) {
+        logger.warn('DePINIoTService: skipping unknown metric key', { key, assetId });
+        continue;
+      }
       metricSums[key] = (metricSums[key] ?? 0) + value;
       metricCounts[key] = (metricCounts[key] ?? 0) + 1;
     }
@@ -264,17 +279,18 @@ export async function listDevices(
 
   const limit = filters?.limit ?? 50;
   const offset = filters?.offset ?? 0;
-  const conditions: string[] = ['org_id = ?'];
+  let paramIdx = 1;
+  const conditions: string[] = [`org_id = $${paramIdx++}`];
   const params: unknown[] = [orgId];
 
-  if (filters?.assetId) { conditions.push('asset_id = ?'); params.push(filters.assetId); }
-  if (filters?.deviceType) { conditions.push('device_type = ?'); params.push(filters.deviceType); }
-  if (filters?.status) { conditions.push('status = ?'); params.push(filters.status); }
+  if (filters?.assetId) { conditions.push(`asset_id = $${paramIdx++}`); params.push(filters.assetId); }
+  if (filters?.deviceType) { conditions.push(`device_type = $${paramIdx++}`); params.push(filters.deviceType); }
+  if (filters?.status) { conditions.push(`status = $${paramIdx++}`); params.push(filters.status); }
 
   const where = conditions.join(' AND ');
 
   const rows = await rawQuery<any>(
-    `SELECT * FROM iot_devices WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    `SELECT * FROM iot_devices WHERE ${where} ORDER BY created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
     [...params, limit, offset],
   );
 
@@ -300,18 +316,19 @@ export async function getDeviceTelemetry(
   await ensureTables();
 
   const limit = filters?.limit ?? 100;
-  const conditions: string[] = ['device_id = ?', 'org_id = ?'];
+  let paramIdx = 1;
+  const conditions: string[] = [`device_id = $${paramIdx++}`, `org_id = $${paramIdx++}`];
   const params: unknown[] = [deviceId, orgId];
 
   if (filters?.since) {
-    conditions.push('timestamp >= ?');
+    conditions.push(`timestamp >= $${paramIdx++}`);
     params.push(filters.since);
   }
 
   const where = conditions.join(' AND ');
 
   const rows = await rawQuery<any>(
-    `SELECT * FROM device_telemetry WHERE ${where} ORDER BY timestamp DESC LIMIT ?`,
+    `SELECT * FROM device_telemetry WHERE ${where} ORDER BY timestamp DESC LIMIT $${paramIdx++}`,
     [...params, limit],
   );
 

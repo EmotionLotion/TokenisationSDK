@@ -2778,6 +2778,125 @@ export const secondaryListings = pgTable('secondary_listings', {
   statusIdx: index('idx_secondary_listings_status').on(table.status),
 }));
 
+// ============================================================================
+// SECTION 25: NAV History & Property Management
+// ============================================================================
+
+// NAV History — stores NAV snapshots for tokenised assets
+export const navHistory = pgTable('nav_history', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  assetId: text('asset_id').notNull(),
+  navPerToken: text('nav_per_token').notNull(),
+  totalAssetValue: text('total_asset_value').notNull(),
+  liabilities: text('liabilities').notNull().default('0'),
+  netAssetValue: text('net_asset_value').notNull(),
+  totalSupply: text('total_supply').notNull(),
+  currency: text('currency').notNull().default('USD'),
+  decimals: integer('decimals').notNull().default(18),
+  source: text('source').notNull().default('cre_workflow'),
+  txHash: text('tx_hash'),
+  computedAt: text('computed_at').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  assetIdx: index('idx_nav_history_asset').on(table.assetId, table.computedAt),
+  orgAssetIdx: index('idx_nav_history_org_asset').on(table.orgId, table.assetId),
+}));
+
+// Valuation Sources — per-source breakdown linked to a NAV record
+export const valuationSources = pgTable('valuation_sources', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  assetId: text('asset_id').notNull(),
+  navRecordId: text('nav_record_id').notNull().references(() => navHistory.id, { onDelete: 'cascade' }),
+  sourceName: text('source_name').notNull(),
+  value: text('value').notNull(),
+  weight: numeric('weight', { precision: 10, scale: 4 }).notNull().default('1.0'),
+  timestamp: integer('timestamp').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  navRecordIdx: index('idx_valuation_sources_nav_record').on(table.navRecordId),
+}));
+
+// Property Units — individual units within a real estate asset
+export const propertyUnits = pgTable('property_units', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  propertyAssetId: text('property_asset_id').notNull(),
+  unitNumber: text('unit_number').notNull(),
+  type: text('type').notNull().default('apartment'),
+  area: numeric('area', { precision: 12, scale: 2 }).notNull().default('0'),
+  tenantName: text('tenant_name'),
+  tenantEmail: text('tenant_email'),
+  leaseStart: text('lease_start'),
+  leaseEnd: text('lease_end'),
+  monthlyRent: text('monthly_rent'),
+  currency: text('currency').notNull().default('USD'),
+  status: text('status').notNull().default('vacant'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgAssetIdx: index('idx_prop_units_org_asset').on(table.orgId, table.propertyAssetId),
+  numberUnique: uniqueIndex('idx_prop_units_number').on(table.orgId, table.propertyAssetId, table.unitNumber),
+}));
+
+// Maintenance Requests — maintenance lifecycle per property
+export const maintenanceRequests = pgTable('maintenance_requests', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  propertyAssetId: text('property_asset_id').notNull(),
+  unitId: text('unit_id'),
+  category: text('category').notNull(),
+  priority: text('priority').notNull().default('medium'),
+  description: text('description').notNull(),
+  status: text('status').notNull().default('open'),
+  assignee: text('assignee'),
+  estimatedCost: text('estimated_cost'),
+  actualCost: text('actual_cost'),
+  currency: text('currency').notNull().default('USD'),
+  completedAt: text('completed_at'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgAssetIdx: index('idx_maint_req_org_asset').on(table.orgId, table.propertyAssetId),
+  statusIdx: index('idx_maint_req_status').on(table.orgId, table.status),
+}));
+
+// Property Expenses — expense recording per property
+export const propertyExpenses = pgTable('property_expenses', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  propertyAssetId: text('property_asset_id').notNull(),
+  category: text('category').notNull(),
+  amount: text('amount').notNull(),
+  currency: text('currency').notNull().default('USD'),
+  description: text('description'),
+  vendor: text('vendor'),
+  invoiceRef: text('invoice_ref'),
+  paidAt: text('paid_at'),
+  period: text('period'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  orgAssetIdx: index('idx_prop_exp_org_asset').on(table.orgId, table.propertyAssetId),
+  categoryIdx: index('idx_prop_exp_category').on(table.orgId, table.category),
+}));
+
+// NAV & Property Management Types
+export type NAVHistoryRow = typeof navHistory.$inferSelect;
+export type NewNAVHistoryRow = typeof navHistory.$inferInsert;
+export type ValuationSourceRow = typeof valuationSources.$inferSelect;
+export type NewValuationSourceRow = typeof valuationSources.$inferInsert;
+export type PropertyUnitRow = typeof propertyUnits.$inferSelect;
+export type NewPropertyUnitRow = typeof propertyUnits.$inferInsert;
+export type MaintenanceRequestRow = typeof maintenanceRequests.$inferSelect;
+export type NewMaintenanceRequestRow = typeof maintenanceRequests.$inferInsert;
+export type PropertyExpenseRow = typeof propertyExpenses.$inferSelect;
+export type NewPropertyExpenseRow = typeof propertyExpenses.$inferInsert;
+
 // Real Estate Phase 2 Types
 export type InvestorPlanRow = typeof investorPlans.$inferSelect;
 export type NewInvestorPlanRow = typeof investorPlans.$inferInsert;

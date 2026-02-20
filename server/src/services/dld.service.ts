@@ -494,7 +494,7 @@ export async function ingestEvent(input: DldEventData, orgId: string) {
     type,
     payload: payload as any,
     receivedAt: receivedAt || new Date(),
-    processed: false,
+    processed: 0 as any,
   }).returning();
 
   return event;
@@ -537,7 +537,7 @@ export async function processEvent(eventId: string, orgId: string) {
     // Mark as processed
     await db.update(dldEvents)
       .set({
-        processed: true,
+        processed: 1 as any,
         processedAt: new Date(),
         dldTitleId: title.id,
       })
@@ -813,18 +813,126 @@ export async function executeSyncJob(jobId: string, orgId: string): Promise<type
 }
 
 async function executePollSync(job: typeof dldSyncJobs.$inferSelect, orgId: string): Promise<object> {
-  // In production, this would poll the DLD API for updates
-  // For now, simulate with mock data
+  // Guard: require DLD_API_URL in production to prevent mock data from leaking
+  if (process.env.NODE_ENV === 'production' && !process.env.DLD_API_URL) {
+    throw new Error('DLD poll sync requires DLD_API_URL in production');
+  }
 
   const titlesToSync = job.dldTitleId
     ? [await db.query.dldTitles.findFirst({ where: eq(dldTitles.id, job.dldTitleId) })]
     : await db.select().from(dldTitles).where(eq(dldTitles.orgId, orgId));
 
+  const dldApiUrl = process.env.DLD_API_URL;
+  const dldApiKey = process.env.DLD_API_KEY || '';
+
   let syncedCount = 0;
+  let failedCount = 0;
 
   for (const title of titlesToSync) {
-    if (title) {
-      // Mock: Update last synced time
+    if (!title) continue;
+
+    if (dldApiUrl) {
+      // Production mode: call real DLD API
+      try {
+        const headers: Record<string, string> = {
+          'Accept': 'application/json',
+        };
+        if (dldApiKey) {
+          headers['Authorization'] = `Bearer ${dldApiKey}`;
+        }
+
+        const response = await fetch(
+          `${dldApiUrl}/api/v1/titles/${title.externalTitleDeedId}`,
+          { headers, signal: AbortSignal.timeout(30000) }
+        );
+
+        if (!response.ok) {
+          throw new Error(`DLD API returned ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json() as {
+          status?: string;
+          ownerName?: string;
+          propertyType?: string;
+          location?: object;
+          area?: number;
+          areaUnit?: string;
+          valuationAed?: number;
+          flags?: string[];
+          events?: Array<{
+            externalEventId: string;
+            type: string;
+            payload: object;
+            receivedAt?: string;
+          }>;
+        };
+
+        // Update title fields if DLD returned updated data
+        const updateFields: Record<string, unknown> = {
+          lastSyncedAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        if (data.status) {
+          // Map DLD status to internal status
+          const statusMap: Record<string, DldTitleStatus> = {
+            'VALID': 'verified',
+            'VERIFIED': 'verified',
+            'PENDING': 'pending',
+            'DISPUTED': 'conflict',
+            'CONFLICT': 'conflict',
+          };
+          const mappedStatus = statusMap[data.status.toUpperCase()];
+          if (mappedStatus) {
+            updateFields.status = mappedStatus;
+          }
+        }
+
+        if (data.ownerName) updateFields.ownerName = data.ownerName;
+        if (data.propertyType) updateFields.propertyType = data.propertyType;
+        if (data.location) updateFields.location = data.location;
+        if (data.area !== undefined) updateFields.area = data.area.toString();
+        if (data.areaUnit) updateFields.areaUnit = data.areaUnit;
+        if (data.valuationAed !== undefined) updateFields.valuationAed = data.valuationAed.toString();
+        if (data.flags) updateFields.flags = data.flags;
+
+        // Store full response as snapshot
+        const { events: _, ...snapshotData } = data;
+        updateFields.snapshot = { ...(title.snapshot as object || {}), ...snapshotData };
+
+        await db.update(dldTitles)
+          .set(updateFields)
+          .where(eq(dldTitles.id, title.id));
+
+        // Ingest any events returned by the DLD API
+        if (data.events && Array.isArray(data.events)) {
+          for (const evt of data.events) {
+            try {
+              await ingestEvent({
+                externalEventId: evt.externalEventId,
+                titleDeedExternalId: title.externalTitleDeedId,
+                type: evt.type,
+                payload: evt.payload,
+                receivedAt: evt.receivedAt ? new Date(evt.receivedAt) : undefined,
+              }, orgId);
+            } catch (evtError) {
+              // Log but don't fail the title sync for event ingestion errors
+            }
+          }
+        }
+
+        syncedCount++;
+      } catch (error) {
+        failedCount++;
+        // Emit a sync failure event but continue with remaining titles
+        await emitDldEvent(orgId, 'dld.sync.title_failed', {
+          titleId: title.id,
+          externalTitleDeedId: title.externalTitleDeedId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    } else {
+      // Dev/test stub mode: just update lastSyncedAt
       await db.update(dldTitles)
         .set({ lastSyncedAt: new Date(), updatedAt: new Date() })
         .where(eq(dldTitles.id, title.id));
@@ -832,7 +940,7 @@ async function executePollSync(job: typeof dldSyncJobs.$inferSelect, orgId: stri
     }
   }
 
-  return { syncedCount, type: 'poll' };
+  return { syncedCount, failedCount, type: 'poll' };
 }
 
 async function executeReconcileSync(job: typeof dldSyncJobs.$inferSelect, orgId: string): Promise<object> {

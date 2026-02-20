@@ -263,15 +263,21 @@ export async function checkTierEligibility(
     });
   }
 
-  // VARA_MAX_HOLDING check (simplified — would check total exposure in production)
+  // VARA_MAX_HOLDING check — enforce percentage-of-supply limit
   const totalAfterInvestment = investorInfo.totalInvested + amount;
   if (plan.maxHoldingPercent < 100) {
-    if (totalAfterInvestment > plan.maxInvestment) {
+    // Calculate the actual holding limit as a percentage of maxInvestment * (100 / maxHoldingPercent)
+    // maxInvestment represents the absolute cap; maxHoldingPercent represents % of total supply
+    // holdingLimit = totalSupplyValue * (maxHoldingPercent / 100)
+    // Since we don't have totalSupplyValue here, use maxInvestment as a proxy for the absolute cap
+    // and compute maxAllowedByPercent = maxInvestment * (maxHoldingPercent / 100)
+    const maxAllowedByPercent = plan.maxInvestment * (plan.maxHoldingPercent / 100);
+    if (totalAfterInvestment > maxAllowedByPercent) {
       violations.push({
         rule: 'VARA_MAX_HOLDING',
         severity: 'BLOCK',
-        message: `Total holding would exceed ${plan.maxHoldingPercent}% limit`,
-        limit: plan.maxInvestment,
+        message: `Total holding would exceed ${plan.maxHoldingPercent}% of supply limit`,
+        limit: maxAllowedByPercent,
         actual: totalAfterInvestment,
       });
     }
@@ -286,6 +292,64 @@ export async function checkTierEligibility(
     plan,
     violations,
     maxAllowedAmount: hasBlockingViolation ? 0 : maxAllowed,
+  };
+}
+
+export async function assignTier(
+  investorId: string,
+  input: {
+    tier: InvestorTier;
+    accreditationStatus: string;
+    totalInvested?: number;
+  },
+): Promise<{
+  investorId: string;
+  tier: InvestorTier;
+  accreditationStatus: string;
+  totalInvested: number;
+  currency: string;
+}> {
+  const totalInvested = input.totalInvested ?? 0;
+
+  // Check if investor already has a tier assignment
+  const existing = await (db as any)
+    .select()
+    .from(investorTierAssignments)
+    .where(eq(investorTierAssignments.investorId, investorId));
+
+  if (existing.length > 0) {
+    // UPDATE existing assignment
+    await (db as any)
+      .update(investorTierAssignments)
+      .set({
+        tier: input.tier,
+        accreditationStatus: input.accreditationStatus,
+        totalInvested: String(totalInvested),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(investorTierAssignments.investorId, investorId));
+
+    logger.info('Updated investor tier assignment', { investorId, tier: input.tier, accreditationStatus: input.accreditationStatus });
+  } else {
+    // INSERT new assignment
+    const id = `ita-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    await (db as any).insert(investorTierAssignments).values({
+      id,
+      investorId,
+      tier: input.tier,
+      accreditationStatus: input.accreditationStatus,
+      totalInvested: String(totalInvested),
+    });
+
+    logger.info('Created investor tier assignment', { investorId, tier: input.tier, accreditationStatus: input.accreditationStatus });
+  }
+
+  return {
+    investorId,
+    tier: input.tier,
+    accreditationStatus: input.accreditationStatus,
+    totalInvested,
+    currency: 'AED',
   };
 }
 

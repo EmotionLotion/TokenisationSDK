@@ -92,14 +92,35 @@ export async function listGPUNodes(orgId: string, filters: {
   return { data: nodes, total: Number(count), page, limit };
 }
 
+// Whitelist of allowed column names for gpu_nodes updates (prevents SQL injection via object keys)
+const ALLOWED_GPU_NODE_COLUMNS = new Set([
+  'gpu_model', 'gpu_count', 'vram_per_gpu_gb', 'total_vram_gb', 'interconnect',
+  'cpu_model', 'ram_gb', 'storage_tb', 'network_bandwidth_gbps',
+  'datacenter_name', 'datacenter_tier', 'datacenter_location', 'datacenter_certifications',
+  'power_cost_per_kwh', 'tdp_watts', 'benchmark_score',
+  'acquisition_cost_usd', 'acquisition_date', 'estimated_useful_life_months',
+  'vast_machine_id', 'metadata', 'status', 'verified', 'verified_at', 'last_verification_check',
+]);
+
 export async function updateGPUNode(orgId: string, nodeId: string, data: Record<string, unknown>) {
   // Build raw SQL SET clause to bypass PG column type serializers
   const now = new Date().toISOString();
   const entries = Object.entries(data);
   // Map camelCase keys to snake_case column names
   const toSnake = (s: string) => s.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
-  const setClauses = entries.map(([k]) => `${toSnake(k)} = ?`).join(', ');
-  const values = entries.map(([, v]) => {
+
+  // Validate all column names against whitelist before building SQL
+  const validatedEntries: [string, unknown][] = [];
+  for (const [k, v] of entries) {
+    const col = toSnake(k);
+    if (!ALLOWED_GPU_NODE_COLUMNS.has(col)) {
+      throw new Error(`Invalid column for gpu_nodes update: ${col}`);
+    }
+    validatedEntries.push([col, v]);
+  }
+
+  const setClauses = validatedEntries.map(([col]) => `${col} = ?`).join(', ');
+  const values = validatedEntries.map(([, v]) => {
     if (v instanceof Date) return v.toISOString();
     if (typeof v === 'boolean') return v ? 1 : 0;
     if (v !== null && typeof v === 'object') return JSON.stringify(v);
@@ -206,13 +227,31 @@ export async function recordRevenuePeriod(orgId: string, nodeId: string, data: {
   hoursRented?: string; avgUtilizationPercent?: string;
 }) {
 
-  const gross = parseFloat(data.grossRevenueUsd);
-  const electricity = parseFloat(data.electricityCostUsd);
-  const afterElectricity = gross - electricity;
-  const platformFee = afterElectricity * 0.10;
-  const maintenanceReserve = afterElectricity * 0.05;
-  const insurance = afterElectricity * 0.02;
-  const netRevenue = afterElectricity - platformFee - maintenanceReserve - insurance;
+  // Check for overlapping revenue periods
+  const overlapping = await db.select().from(gpuRevenuePeriods)
+    .where(and(
+      eq(gpuRevenuePeriods.nodeId, nodeId),
+      eq(gpuRevenuePeriods.orgId, orgId),
+      sql`${gpuRevenuePeriods.periodStart} < ${data.periodEnd}`,
+      sql`${gpuRevenuePeriods.periodEnd} > ${data.periodStart}`,
+    ));
+  if (overlapping.length > 0) {
+    throw new Error(`Revenue period overlaps with existing period ${overlapping[0].id} (${overlapping[0].periodStart} - ${overlapping[0].periodEnd})`);
+  }
+
+  // Use cents-based integer arithmetic to avoid floating-point errors
+  const grossCents = Math.round(parseFloat(data.grossRevenueUsd) * 100);
+  const electricityCents = Math.round(parseFloat(data.electricityCostUsd) * 100);
+  const afterElectricityCents = grossCents - electricityCents;
+  const platformFeeCents = Math.round(afterElectricityCents * 10 / 100); // 10%
+  const maintenanceReserveCents = Math.round(afterElectricityCents * 5 / 100); // 5%
+  const insuranceCents = Math.round(afterElectricityCents * 2 / 100); // 2%
+  const netRevenueCents = afterElectricityCents - platformFeeCents - maintenanceReserveCents - insuranceCents;
+
+  const platformFee = platformFeeCents / 100;
+  const maintenanceReserve = maintenanceReserveCents / 100;
+  const insurance = insuranceCents / 100;
+  const netRevenue = netRevenueCents / 100;
 
   const revId = crypto.randomUUID();
   const revNow = new Date().toISOString();
@@ -222,7 +261,38 @@ export async function recordRevenuePeriod(orgId: string, nodeId: string, data: {
   );
 
   const [period] = await db.select().from(gpuRevenuePeriods).where(eq(gpuRevenuePeriods.id, revId));
+
+  // Recompute annualized yield for this node's listing
+  await updateAnnualizedYield(orgId, nodeId);
+
   return period;
+}
+
+/**
+ * Recompute the annualized yield percent for a node's compute listing.
+ * yield = (total net revenue / total months) * 12 / acquisition cost * 100
+ */
+async function updateAnnualizedYield(orgId: string, nodeId: string): Promise<void> {
+  const summary = await getNodeRevenueSummary(orgId, nodeId);
+  const periodCount = Number(summary.periodCount);
+  if (periodCount === 0) return;
+
+  const [node] = await db.select().from(gpuNodes)
+    .where(and(eq(gpuNodes.id, nodeId), eq(gpuNodes.orgId, orgId)));
+  if (!node || !node.acquisitionCostUsd) return;
+
+  const totalNetCents = Math.round(parseFloat(String(summary.totalNet)) * 100);
+  const acquisitionCents = Math.round(parseFloat(String(node.acquisitionCostUsd)) * 100);
+  if (acquisitionCents === 0) return;
+
+  // Annualize: (totalNet / periodCount) * 12 / acquisitionCost * 100
+  const annualizedYield = ((totalNetCents / periodCount) * 12) / acquisitionCents * 100;
+  const yieldStr = (Math.round(annualizedYield * 100) / 100).toFixed(2);
+
+  await execStatement(
+    `UPDATE compute_listings SET annualized_yield_percent = ? WHERE node_id = ? AND org_id = ?`,
+    [yieldStr, nodeId, orgId]
+  );
 }
 
 export async function getNodeRevenue(orgId: string, nodeId: string, period?: { start?: string; end?: string }) {
@@ -259,6 +329,11 @@ export async function distributeRevenue(orgId: string, nodeId: string, revenuePe
     .where(and(eq(gpuRevenuePeriods.id, revenuePeriodId), eq(gpuRevenuePeriods.orgId, orgId)));
 
   if (!period || period.distributed) return null;
+
+  // Verify the revenue period belongs to the specified node
+  if (period.nodeId !== nodeId) {
+    throw new Error(`Revenue period ${revenuePeriodId} does not belong to node ${nodeId}`);
+  }
 
   // Mark period as distributed
   const distNow = new Date().toISOString();
@@ -299,8 +374,8 @@ export async function listComputeMarket(filters: {
   const conditions = [eq(computeListings.isActive, 1 as any)];
   if (filters.gpuModel) conditions.push(eq(gpuNodes.gpuModel, filters.gpuModel));
   if (filters.datacenterTier) conditions.push(eq(gpuNodes.datacenterTier, filters.datacenterTier));
-  if (filters.maxPrice) conditions.push(lte(computeListings.pricePerToken, String(filters.maxPrice)));
-  if (filters.minYield) conditions.push(gte(computeListings.annualizedYieldPercent, String(filters.minYield)));
+  if (filters.maxPrice) conditions.push(sql`CAST(${computeListings.pricePerToken} AS REAL) <= ${filters.maxPrice}`);
+  if (filters.minYield) conditions.push(sql`CAST(${computeListings.annualizedYieldPercent} AS REAL) >= ${filters.minYield}`);
 
   // Determine sort order
   let orderClause;

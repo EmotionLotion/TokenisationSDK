@@ -5,9 +5,10 @@
  * Data persisted in DB (secondary_listings table).
  */
 
-import { eq, and } from 'drizzle-orm';
-import { db, secondaryListings } from '../config/database.js';
+import { eq, and, or } from 'drizzle-orm';
+import { db, secondaryListings, tokens } from '../config/database.js';
 import { logger } from '../middleware/logger.js';
+import { createTransfer } from './transfer.service.js';
 
 export interface SecondaryListing {
   id: string;
@@ -113,12 +114,16 @@ export async function createListing(
 export async function purchaseListing(
   listingId: string,
   buyerWallet: string,
+  buyerOrgId: string,
 ): Promise<PurchaseResult> {
   const rows = await (db as any).select().from(secondaryListings).where(eq(secondaryListings.id, listingId));
   if (rows.length === 0) throw new Error('Listing not found');
 
   const listing = rowToListing(rows[0]);
   if (listing.status !== 'active') throw new Error('Listing is not active');
+
+  // Prevent purchasing own listings
+  if (listing.sellerId === buyerOrgId) throw new Error('Cannot purchase own listing');
 
   await (db as any).update(secondaryListings)
     .set({ status: 'sold', soldAt: new Date() })
@@ -127,9 +132,48 @@ export async function purchaseListing(
   const totalPrice = listing.tokenAmount * listing.pricePerToken;
   const platformFee = totalPrice * 0.015; // 1.5% platform fee
 
+  // Look up the token for the listing's asset.
+  // The listing's assetId may correspond to the token's projectId or assetId column.
+  let transferId = `txn-${Date.now()}`;
+  try {
+    const tokenRows = await (db as any).select().from(tokens).where(
+      or(eq(tokens.projectId, listing.assetId), eq(tokens.assetId, listing.assetId))
+    );
+
+    if (tokenRows.length > 0) {
+      const token = tokenRows[0];
+      const transfer = await createTransfer({
+        orgId: buyerOrgId,
+        tokenId: token.id,
+        fromWallet: listing.sellerWallet,
+        toWallet: buyerWallet,
+        amount: String(listing.tokenAmount),
+        metadata: {
+          source: 'secondary-market',
+          listingId,
+          totalPrice,
+          currency: listing.currency,
+          platformFee,
+        },
+      });
+      transferId = transfer.id;
+    } else {
+      logger.warn('No token found for secondary listing asset, using fallback transferId', {
+        listingId,
+        assetId: listing.assetId,
+      });
+    }
+  } catch (error) {
+    logger.warn('Failed to create transfer for secondary market purchase, using fallback transferId', {
+      listingId,
+      assetId: listing.assetId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
   const result: PurchaseResult = {
     listingId,
-    transferId: `txn-${Date.now()}`,
+    transferId,
     buyerWallet,
     sellerWallet: listing.sellerWallet,
     tokenAmount: listing.tokenAmount,
@@ -139,21 +183,24 @@ export async function purchaseListing(
     status: 'completed',
   };
 
-  logger.info('Secondary listing purchased', { listingId, buyerWallet });
+  logger.info('Secondary listing purchased', { listingId, buyerWallet, transferId });
   return result;
 }
 
-export async function cancelListing(listingId: string): Promise<{ success: boolean }> {
+export async function cancelListing(listingId: string, orgId: string): Promise<{ success: boolean }> {
   const rows = await (db as any).select().from(secondaryListings).where(eq(secondaryListings.id, listingId));
   if (rows.length === 0) throw new Error('Listing not found');
 
   const listing = rowToListing(rows[0]);
   if (listing.status !== 'active') throw new Error('Listing is not active');
 
+  // Verify ownership: only the seller can cancel their own listing
+  if (listing.sellerId !== orgId) throw new Error('Unauthorized: not the listing owner');
+
   await (db as any).update(secondaryListings)
     .set({ status: 'cancelled' })
     .where(eq(secondaryListings.id, listingId));
 
-  logger.info('Secondary listing cancelled', { listingId });
+  logger.info('Secondary listing cancelled', { listingId, orgId });
   return { success: true };
 }

@@ -255,7 +255,7 @@ contract ComputeRevenueDistributor is Ownable, ReentrancyGuard {
         // Approve and push net revenue to ComputeToken
         if (period.netRevenue > 0) {
             payment.safeTransferFrom(msg.sender, address(this), period.netRevenue);
-            payment.approve(period.computeToken, period.netRevenue);
+            payment.forceApprove(period.computeToken, period.netRevenue);
 
             // Call depositRevenue on the ComputeToken
             (bool success,) = period.computeToken.call(

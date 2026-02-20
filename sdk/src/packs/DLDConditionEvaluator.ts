@@ -378,9 +378,17 @@ export class DLDConditionEvaluator implements ICustomConditionEvaluator {
       };
     }
 
+    // Return unsatisfied if propertyId is missing — cannot query DLD without it
+    if (!propertyId) {
+      return {
+        satisfied: false,
+        reason: 'Cannot verify property sale: propertyId is required but was not provided',
+      };
+    }
+
     try {
       // Check DLD events for sale completion
-      const events = await this.dldModule.getPropertyEvents(propertyId || '', {
+      const events = await this.dldModule.getPropertyEvents(propertyId, {
         limit: 10,
       });
 

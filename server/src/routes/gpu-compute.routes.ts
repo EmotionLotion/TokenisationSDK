@@ -203,6 +203,10 @@ gpuComputeRouter.get('/gpu-nodes/:nodeId/token', async (req: ApiKeyRequest, res:
 // GET /gpu-nodes/:nodeId/metrics - Get metrics
 gpuComputeRouter.get('/gpu-nodes/:nodeId/metrics', async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
+    // Verify node ownership before returning metrics
+    const node = await gpuComputeService.getGPUNode(req.apiKey!.orgId, req.params.nodeId);
+    if (!node) return res.status(404).json({ success: false, error: 'Node not found' });
+
     const metrics = await gpuComputeService.getNodeMetrics(req.params.nodeId);
     res.json({ success: true, data: metrics });
   } catch (error) { next(error); }

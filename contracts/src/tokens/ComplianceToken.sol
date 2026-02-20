@@ -359,6 +359,7 @@ contract ComplianceToken {
         returns (bool)
     {
         require(bytes(reason).length > 0, "ComplianceToken: reason required");
+        require(!_frozen[to], "ComplianceToken: recipient frozen");
 
         // Skip compliance checks
         require(_balances[from] >= amount, "ComplianceToken: insufficient balance");

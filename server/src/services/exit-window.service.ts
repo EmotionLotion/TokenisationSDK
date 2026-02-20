@@ -5,6 +5,7 @@
  * Data persisted in DB (exit_window_schedules, exit_windows, exit_redemptions).
  */
 
+import crypto from 'crypto';
 import { eq, and, sql } from 'drizzle-orm';
 import { db, exitWindowSchedules, exitWindows, exitRedemptions } from '../config/database.js';
 import { logger } from '../middleware/logger.js';
@@ -112,7 +113,7 @@ export async function createSchedule(
   nextOpen.setDate(1);
 
   const schedule: ExitWindowSchedule = {
-    id: `sched-${assetId}`,
+    id: crypto.randomUUID(),
     assetId,
     ...input,
     nextWindowOpens: nextOpen.toISOString(),
@@ -217,4 +218,69 @@ export async function updateWindowStatus(windowId: string, status: ExitWindow['s
   await (db as any).update(exitWindows)
     .set({ status })
     .where(eq(exitWindows.id, windowId));
+}
+
+/**
+ * Process time-based window transitions:
+ * - scheduled -> open  when current time >= opensAt
+ * - open     -> closed when current time >= closesAt
+ *
+ * Optionally scoped to a single assetId.
+ */
+export async function processWindowTransitions(assetId?: string): Promise<{ opened: number; closed: number }> {
+  const now = new Date();
+  let opened = 0;
+  let closed = 0;
+
+  // Get schedules (all active, or filtered by assetId)
+  let scheduleRows: any[];
+  if (assetId) {
+    scheduleRows = await (db as any).select().from(exitWindowSchedules)
+      .where(and(eq(exitWindowSchedules.assetId, assetId), eq(exitWindowSchedules.active, 1)));
+  } else {
+    scheduleRows = await (db as any).select().from(exitWindowSchedules)
+      .where(eq(exitWindowSchedules.active, 1));
+  }
+
+  for (const schedule of scheduleRows) {
+    // Get all windows for this schedule
+    const windowRows = await (db as any).select().from(exitWindows)
+      .where(eq(exitWindows.scheduleId, schedule.id));
+
+    for (const row of windowRows) {
+      const w = rowToWindow(row);
+      const opensAt = new Date(w.opensAt);
+      const closesAt = new Date(w.closesAt);
+
+      if (w.status === 'scheduled' && now >= opensAt) {
+        await updateWindowStatus(w.id, 'open');
+        opened++;
+        logger.info('Exit window opened', { windowId: w.id, assetId: w.assetId, opensAt: w.opensAt });
+      } else if (w.status === 'open' && now >= closesAt) {
+        await updateWindowStatus(w.id, 'closed');
+        closed++;
+        logger.info('Exit window closed', { windowId: w.id, assetId: w.assetId, closesAt: w.closesAt });
+      }
+    }
+  }
+
+  if (opened > 0 || closed > 0) {
+    logger.info('Exit window transitions processed', { opened, closed });
+  }
+
+  return { opened, closed };
+}
+
+/**
+ * Register the exit-window transition handler with the scheduler.
+ * Call this once at application startup.
+ */
+export function registerExitWindowSchedulerJob(): void {
+  // Dynamic import to avoid circular dependencies at module load time
+  import('./scheduler.service.js').then(({ registerJobHandler }) => {
+    registerJobHandler('exit-window.transitions', async (_job) => {
+      const result = await processWindowTransitions();
+      return result as unknown as Record<string, unknown>;
+    });
+  });
 }

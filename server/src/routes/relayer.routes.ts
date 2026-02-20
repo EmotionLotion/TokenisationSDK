@@ -257,7 +257,7 @@ relayerRouter.post('/nonce/:chainId/:address/reset', apiKeyMiddleware, async (re
     }
 
     const chainId = parseInt(req.params.chainId);
-    relayerService.resetNonceCache(chainId, req.params.address);
+    await relayerService.resetNonceCache(chainId, req.params.address);
 
     res.json({ success: true });
   } catch (error) {

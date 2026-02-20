@@ -149,37 +149,120 @@ export class DLDModule {
   constructor(private http: HttpClient) {}
 
   // ============================================
-  // Title Deed Verification
+  // Title Registration & Verification
   // ============================================
 
   /**
-   * Verify a title deed with Dubai Land Department.
+   * Register a new DLD title.
+   */
+  async registerTitle(input: {
+    projectId: string;
+    dldTitleNumber: string;
+    propertyType: 'land' | 'building' | 'unit';
+    emirate?: string;
+    area?: string;
+    plotNumber?: string;
+    buildingName?: string;
+    unitNumber?: string;
+    propertyDetails?: Record<string, unknown>;
+  }): Promise<TitleDeed> {
+    const response = await this.http.post<TitleDeed>(
+      '/api/v1/dld/titles',
+      input
+    );
+    return response.data;
+  }
+
+  /**
+   * List DLD titles with optional filters.
+   */
+  async listTitles(params?: {
+    projectId?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PaginatedResponse<TitleDeed>> {
+    return this.http.list<TitleDeed>(
+      '/api/v1/dld/titles',
+      params as Record<string, string | number | boolean | undefined>
+    );
+  }
+
+  /**
+   * Get a DLD title by ID.
+   */
+  async getTitle(id: string): Promise<TitleDeed> {
+    const response = await this.http.get<TitleDeed>(
+      `/api/v1/dld/titles/${encodeURIComponent(id)}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Update a DLD title.
+   */
+  async updateTitle(id: string, input: {
+    status?: 'pending' | 'verified' | 'disputed' | 'expired';
+    propertyDetails?: Record<string, unknown>;
+  }): Promise<TitleDeed> {
+    const response = await this.http.patch<TitleDeed>(
+      `/api/v1/dld/titles/${encodeURIComponent(id)}`,
+      input
+    );
+    return response.data;
+  }
+
+  /**
+   * Verify a title deed against Dubai Land Department.
    */
   async verify(input: VerifyTitleDeedInput): Promise<TitleDeed> {
     const validated = validate(VerifyTitleDeedInputSchema, input);
+    // The server expects POST /titles/:id/verify with the title ID in the URL.
+    // Extract the deedNumber/id from input to build the correct URL.
+    const titleId = (validated as Record<string, unknown>).deedNumber || (validated as Record<string, unknown>).titleId || (validated as Record<string, unknown>).id;
     const response = await this.http.post<TitleDeed>(
-      '/api/v1/dld/verify',
+      `/api/v1/dld/titles/${encodeURIComponent(String(titleId))}/verify`,
       validated
     );
     return response.data;
   }
 
   /**
-   * Get title deed by deed number.
+   * Verify a title on-chain via Chainlink Functions.
    */
-  async getTitleDeed(deedNumber: string): Promise<TitleDeed> {
-    const response = await this.http.get<TitleDeed>(
-      `/api/v1/dld/deeds/${encodeURIComponent(deedNumber)}`
+  async verifyOnChain(id: string): Promise<TitleDeed> {
+    const response = await this.http.post<TitleDeed>(
+      `/api/v1/dld/titles/${encodeURIComponent(id)}/verify-onchain`
     );
     return response.data;
   }
 
   /**
-   * Get property by ID.
+   * Get title deed by deed number (alias for getTitle).
+   */
+  async getTitleDeed(deedNumber: string): Promise<TitleDeed> {
+    const response = await this.http.get<TitleDeed>(
+      `/api/v1/dld/titles/${encodeURIComponent(deedNumber)}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get property by ID (alias for getTitle).
    */
   async getProperty(propertyId: string): Promise<TitleDeed> {
     const response = await this.http.get<TitleDeed>(
-      `/api/v1/dld/properties/${encodeURIComponent(propertyId)}`
+      `/api/v1/dld/titles/${encodeURIComponent(propertyId)}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Check if a title is clear (no disputes, liens, etc.).
+   */
+  async checkTitleClear(id: string): Promise<{ clear: boolean; issues: string[] }> {
+    const response = await this.http.get<{ clear: boolean; issues: string[] }>(
+      `/api/v1/dld/titles/${encodeURIComponent(id)}/check-clear`
     );
     return response.data;
   }
@@ -190,6 +273,8 @@ export class DLDModule {
 
   /**
    * Check if a property is eligible for tokenization.
+   * Note: This is a higher-level SDK abstraction; the server may not expose
+   * a dedicated tokenization-check endpoint. The URL is kept under the DLD prefix.
    */
   async canTokenize(input: CheckTokenizationEligibilityInput): Promise<TokenizationEligibility> {
     const validated = validate(CheckTokenizationEligibilityInputSchema, input);
@@ -246,7 +331,7 @@ export class DLDModule {
     params?: { limit?: number; offset?: number }
   ): Promise<PaginatedResponse<Valuation>> {
     return this.http.list<Valuation>(
-      `/api/v1/dld/properties/${encodeURIComponent(propertyId)}/valuations`,
+      `/api/v1/dld/titles/${encodeURIComponent(propertyId)}/valuations`,
       params as Record<string, string | number | boolean | undefined>
     );
   }
@@ -267,20 +352,104 @@ export class DLDModule {
   }
 
   /**
-   * Get events for a specific property.
+   * Ingest a DLD event (webhook from DLD or manual).
+   */
+  async ingestEvent(input: {
+    dldTitleId: string;
+    eventType: string;
+    eventData: Record<string, unknown>;
+    dldEventId?: string;
+    occurredAt?: string;
+  }): Promise<DldEvent> {
+    const response = await this.http.post<DldEvent>(
+      '/api/v1/dld/events',
+      input
+    );
+    return response.data;
+  }
+
+  /**
+   * Process a specific DLD event.
+   */
+  async processEvent(eventId: string): Promise<DldEvent> {
+    const response = await this.http.post<DldEvent>(
+      `/api/v1/dld/events/${encodeURIComponent(eventId)}/process`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get events for a specific title.
    */
   async getPropertyEvents(
     propertyId: string,
     params?: { limit?: number; offset?: number }
   ): Promise<PaginatedResponse<DldEvent>> {
     return this.http.list<DldEvent>(
-      `/api/v1/dld/properties/${encodeURIComponent(propertyId)}/events`,
+      `/api/v1/dld/titles/${encodeURIComponent(propertyId)}/events`,
       params as Record<string, string | number | boolean | undefined>
     );
   }
 
   // ============================================
-  // Search & Discovery
+  // Sync Jobs
+  // ============================================
+
+  /**
+   * Create a DLD sync job.
+   */
+  async createSyncJob(input: {
+    jobType: 'poll' | 'reconcile' | 'manual';
+    config?: Record<string, unknown>;
+  }): Promise<{ id: string; status: string }> {
+    const response = await this.http.post<{ id: string; status: string }>(
+      '/api/v1/dld/sync-jobs',
+      input
+    );
+    return response.data;
+  }
+
+  /**
+   * List DLD sync jobs.
+   */
+  async listSyncJobs(params?: {
+    status?: string;
+    jobType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PaginatedResponse<{ id: string; status: string; jobType: string }>> {
+    return this.http.list<{ id: string; status: string; jobType: string }>(
+      '/api/v1/dld/sync-jobs',
+      params as Record<string, string | number | boolean | undefined>
+    );
+  }
+
+  /**
+   * Execute a DLD sync job.
+   */
+  async executeSyncJob(jobId: string): Promise<{ id: string; status: string }> {
+    const response = await this.http.post<{ id: string; status: string }>(
+      `/api/v1/dld/sync-jobs/${encodeURIComponent(jobId)}/execute`
+    );
+    return response.data;
+  }
+
+  // ============================================
+  // Lookup
+  // ============================================
+
+  /**
+   * Lookup a title by DLD title number.
+   */
+  async lookupByTitleNumber(dldTitleNumber: string): Promise<TitleDeed> {
+    const response = await this.http.get<TitleDeed>(
+      `/api/v1/dld/lookup/${encodeURIComponent(dldTitleNumber)}`
+    );
+    return response.data;
+  }
+
+  // ============================================
+  // Search & Discovery (higher-level abstractions)
   // ============================================
 
   /**
@@ -296,7 +465,7 @@ export class DLDModule {
     offset?: number;
   }): Promise<PaginatedResponse<PropertySummary>> {
     return this.http.list<PropertySummary>(
-      '/api/v1/dld/properties/search',
+      '/api/v1/dld/titles',
       query as Record<string, string | number | boolean | undefined>
     );
   }

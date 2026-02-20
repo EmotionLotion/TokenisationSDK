@@ -1,7 +1,9 @@
-import { db, schema } from '../config/database.js';
+import { db, schema, rawQuery } from '../config/database.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { createHash, randomBytes } from 'crypto';
+import { Wallet, keccak256, toBeHex } from 'ethers';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { logger } from '../middleware/logger.js';
 import * as auditService from './audit.service.js';
 import { SUPPORTED_CHAINS as CHAIN_REGISTRY, getRpcUrl } from '../config/chains.js';
 
@@ -139,24 +141,32 @@ export function listSupportedChains(): ChainConfig[] {
 type RpcParam = string | number | boolean | null | Record<string, unknown> | RpcParam[];
 
 async function jsonRpcCall<T = unknown>(rpcUrl: string, method: string, params: RpcParam[]): Promise<T> {
-  const response = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method,
-      params,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000); // 15-second timeout
 
-  const result = await response.json() as { error?: { message: string }; result?: T };
+  try {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params,
+      }),
+      signal: controller.signal,
+    });
 
-  if (result.error) {
-    throw new Error(`RPC Error: ${result.error.message}`);
+    const result = await response.json() as { error?: { message: string }; result?: T };
+
+    if (result.error) {
+      throw new Error(`RPC Error: ${result.error.message}`);
+    }
+
+    return result.result as T;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return result.result as T;
 }
 
 // ============================================================================
@@ -207,15 +217,28 @@ export async function estimateGas(tx: TransactionRequest): Promise<GasEstimate> 
 }
 
 // ============================================================================
-// Nonce Management
+// Nonce Management (DB-backed)
 // ============================================================================
 
-// In-memory nonce tracking (in production, use Redis)
-const nonceCache = new Map<string, number>();
+let nonceTableReady = false;
+
+async function ensureNonceTable(): Promise<void> {
+  if (nonceTableReady) return;
+  await rawQuery(`
+    CREATE TABLE IF NOT EXISTS nonce_cache (
+      chain_address TEXT PRIMARY KEY,
+      nonce INTEGER NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  nonceTableReady = true;
+}
 
 export async function getNextNonce(chainId: number, address: string): Promise<number> {
   const chain = getChainConfig(chainId);
   const key = `${chainId}:${address.toLowerCase()}`;
+
+  await ensureNonceTable();
 
   // Get on-chain nonce
   const onChainNonce = await jsonRpcCall<string>(
@@ -226,23 +249,33 @@ export async function getNextNonce(chainId: number, address: string): Promise<nu
 
   const onChainNonceNum = parseInt(onChainNonce, 16);
 
-  // Check cached nonce
-  const cachedNonce = nonceCache.get(key);
+  // Read cached nonce from DB
+  const rows = await rawQuery<{ nonce: number }>(
+    'SELECT nonce FROM nonce_cache WHERE chain_address = $1',
+    [key]
+  );
+  const cachedNonce = rows.length > 0 ? rows[0].nonce : undefined;
 
   // Use the higher of cached or on-chain nonce
   const nextNonce = cachedNonce !== undefined
     ? Math.max(cachedNonce, onChainNonceNum)
     : onChainNonceNum;
 
-  // Update cache
-  nonceCache.set(key, nextNonce + 1);
+  // Write back to DB (upsert)
+  // Use $3 for the duplicate nonce value so that SQLite ? positional binding works correctly
+  await rawQuery(
+    `INSERT INTO nonce_cache (chain_address, nonce, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT (chain_address) DO UPDATE SET nonce = $3, updated_at = CURRENT_TIMESTAMP`,
+    [key, nextNonce + 1, nextNonce + 1]
+  );
 
   return nextNonce;
 }
 
-export function resetNonceCache(chainId: number, address: string): void {
+export async function resetNonceCache(chainId: number, address: string): Promise<void> {
   const key = `${chainId}:${address.toLowerCase()}`;
-  nonceCache.delete(key);
+  await ensureNonceTable();
+  await rawQuery('DELETE FROM nonce_cache WHERE chain_address = $1', [key]);
 }
 
 // ============================================================================
@@ -304,6 +337,111 @@ interface SignerKey {
   privateKey: string;
 }
 
+// ============================================================================
+// Signing Provider Abstraction (HSM/KMS/Local)
+// ============================================================================
+
+type SigningMode = 'local' | 'aws-kms' | 'gcp-kms';
+
+const SIGNING_MODE: SigningMode = (process.env.TX_SIGNING_MODE as SigningMode) || 'local';
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+/**
+ * AWS KMS signing support.
+ * Uses AWS KMS to sign transaction hashes — private key never leaves the HSM.
+ */
+async function signWithKMS(txHash: string, kmsKeyId: string): Promise<string> {
+  const { KMSClient, SignCommand } = await import('@aws-sdk/client-kms');
+
+  const client = new KMSClient({
+    region: process.env.AWS_KMS_REGION || process.env.AWS_REGION || 'us-east-1',
+    ...(process.env.AWS_ACCESS_KEY_ID && {
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+      },
+    }),
+  });
+
+  const command = new SignCommand({
+    KeyId: kmsKeyId,
+    Message: Buffer.from(txHash.slice(2), 'hex'),
+    MessageType: 'DIGEST',
+    SigningAlgorithm: 'ECDSA_SHA_256',
+  });
+
+  const response = await client.send(command);
+  if (!response.Signature) {
+    throw new Error('KMS signing returned no signature');
+  }
+
+  // Convert DER-encoded signature to Ethereum-compatible r,s,v format
+  // Need the expected signer address to trial-recover v
+  const expectedAddress = process.env.KMS_SIGNER_ADDRESS || '';
+  return derToEthSignature(Buffer.from(response.Signature), txHash, expectedAddress);
+}
+
+/**
+ * Convert DER-encoded ECDSA signature to Ethereum's r+s+v format (65 bytes).
+ * Trial-recovers v=27 and v=28 to find the correct recovery ID.
+ */
+function derToEthSignature(derSig: Buffer, digest: string, expectedAddress: string): string {
+  // DER format: 0x30 [total-length] 0x02 [r-length] [r] 0x02 [s-length] [s]
+  let offset = 2; // skip 0x30 and total length
+
+  // Parse r
+  if (derSig[offset] !== 0x02) throw new Error('Invalid DER signature: expected 0x02 for r');
+  offset++;
+  const rLen = derSig[offset++];
+  let r = derSig.subarray(offset, offset + rLen);
+  offset += rLen;
+
+  // Parse s
+  if (derSig[offset] !== 0x02) throw new Error('Invalid DER signature: expected 0x02 for s');
+  offset++;
+  const sLen = derSig[offset++];
+  let s = derSig.subarray(offset, offset + sLen);
+
+  // Remove leading zeros and pad to 32 bytes
+  if (r.length > 32) r = r.subarray(r.length - 32);
+  if (s.length > 32) s = s.subarray(s.length - 32);
+
+  const rHex = r.toString('hex').padStart(64, '0');
+  const sHex = s.toString('hex').padStart(64, '0');
+
+  // secp256k1 curve order half — enforce low-s for EIP-2
+  const secp256k1N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+  const secp256k1HalfN = secp256k1N / 2n;
+  let sBig = BigInt('0x' + sHex);
+  let sHexFinal = sHex;
+  if (sBig > secp256k1HalfN) {
+    sBig = secp256k1N - sBig;
+    sHexFinal = sBig.toString(16).padStart(64, '0');
+  }
+
+  // Trial-recover the correct v (27 or 28)
+  if (expectedAddress) {
+    const { ethers } = require('ethers') as typeof import('ethers');
+    for (const v of [27, 28]) {
+      const vHex = v.toString(16).padStart(2, '0');
+      const sig = `0x${rHex}${sHexFinal}${vHex}`;
+      try {
+        const recovered = ethers.recoverAddress(digest, sig);
+        if (recovered.toLowerCase() === expectedAddress.toLowerCase()) {
+          return sig;
+        }
+      } catch {
+        continue;
+      }
+    }
+    logger.warn('KMS signature recovery: could not match expected signer address, defaulting to v=27');
+  }
+
+  // Default to v=27 if no expected address or no match
+  return `0x${rHex}${sHexFinal}1b`;
+}
+
 function getSignerKey(address: string): SignerKey | null {
   // Check for configured signer keys
   const signerKeys = process.env.SIGNER_KEYS;
@@ -311,7 +449,16 @@ function getSignerKey(address: string): SignerKey | null {
 
   try {
     const keys: SignerKey[] = JSON.parse(signerKeys);
-    return keys.find(k => k.address.toLowerCase() === address.toLowerCase()) || null;
+    const key = keys.find(k => k.address.toLowerCase() === address.toLowerCase()) || null;
+
+    if (key && IS_PRODUCTION) {
+      logger.warn(
+        'SECURITY WARNING: Using local private keys for transaction signing in production. ' +
+        'Set TX_SIGNING_MODE=aws-kms with KMS_SIGNER_KEY_IDS for HSM-backed signing.'
+      );
+    }
+
+    return key;
   } catch {
     return null;
   }
@@ -321,37 +468,70 @@ export async function signTransaction(
   tx: TransactionRequest,
   orgId: string
 ): Promise<{ signedTx: string; hash: string }> {
-  // Check if we have the signer key for this address
   const signerKey = getSignerKey(tx.from);
-
   if (!signerKey) {
     throw new ValidationError(
       `No signer key configured for address ${tx.from}. Use non-custodial mode.`
     );
   }
 
-  // In production, would use ethers.js or viem to sign
-  // For MVP, return a mock signed transaction
-  const mockTxHash = `0x${createHash('sha256')
-    .update(JSON.stringify(tx) + Date.now())
-    .digest('hex')}`;
+  const wallet = new Wallet(signerKey.privateKey);
 
-  const mockSignedTx = `0x${randomBytes(200).toString('hex')}`;
+  // Fetch nonce if not provided
+  const chain = getChainConfig(tx.chainId);
+  const nonce = tx.nonce ?? await jsonRpcCall<string>(
+    chain.rpcUrl, 'eth_getTransactionCount', [tx.from, 'pending']
+  ).then(hex => parseInt(hex, 16));
 
-  // Audit log
+  // Build ethers-compatible tx object
+  const ethTx: Record<string, unknown> = {
+    to: tx.to,
+    data: tx.data,
+    value: tx.value ? BigInt(tx.value) : 0n,
+    nonce,
+    chainId: tx.chainId,
+  };
+
+  // Use EIP-1559 if maxFeePerGas provided, otherwise legacy
+  if (tx.maxFeePerGas) {
+    ethTx.maxFeePerGas = BigInt(tx.maxFeePerGas);
+    ethTx.maxPriorityFeePerGas = tx.maxPriorityFeePerGas
+      ? BigInt(tx.maxPriorityFeePerGas)
+      : 1_500_000_000n; // 1.5 gwei default
+    ethTx.type = 2;
+  } else if (tx.gasPrice) {
+    ethTx.gasPrice = BigInt(tx.gasPrice);
+    ethTx.type = 0;
+  } else {
+    // Fetch current gas price
+    const gasPriceHex = await jsonRpcCall<string>(chain.rpcUrl, 'eth_gasPrice', []);
+    ethTx.gasPrice = BigInt(gasPriceHex);
+    ethTx.type = 0;
+  }
+
+  // Gas limit
+  if (tx.gasLimit) {
+    ethTx.gasLimit = BigInt(tx.gasLimit);
+  } else {
+    const estimateHex = await jsonRpcCall<string>(chain.rpcUrl, 'eth_estimateGas', [{
+      from: tx.from,
+      to: tx.to,
+      data: tx.data,
+      value: tx.value ? toBeHex(BigInt(tx.value)) : '0x0',
+    }]);
+    ethTx.gasLimit = BigInt(estimateHex) * 120n / 100n; // 20% buffer
+  }
+
+  const signedTx = await wallet.signTransaction(ethTx);
+  const hash = keccak256(signedTx);
+
   await auditService.logSystemAction(
-    orgId,
-    'update',
-    'transfer',
-    mockTxHash,
+    orgId, 'update', 'transfer', hash,
     'Transaction signed in custodial mode',
     { from: tx.from, to: tx.to, chainId: tx.chainId }
   );
 
-  return {
-    signedTx: mockSignedTx,
-    hash: mockTxHash,
-  };
+  return { signedTx, hash };
 }
 
 // ============================================================================

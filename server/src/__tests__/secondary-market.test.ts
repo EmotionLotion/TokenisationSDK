@@ -150,8 +150,8 @@ describe('Secondary Market Service', () => {
       const assetId = uniqueAssetId();
       const listing1 = await createListing(assetId, 'seller-1', '0xS1', { tokenAmount: 100, pricePerToken: 50 });
       await createListing(assetId, 'seller-2', '0xS2', { tokenAmount: 200, pricePerToken: 60 });
-      // Cancel one listing
-      await cancelListing(listing1.id);
+      // Cancel one listing (pass seller orgId for ownership check)
+      await cancelListing(listing1.id, 'seller-1');
 
       const activeListings = await getListings(assetId, { status: 'active' });
       expect(activeListings).toHaveLength(1);
@@ -280,7 +280,7 @@ describe('Secondary Market Service', () => {
         { tokenAmount: 50, pricePerToken: 25 },
       );
 
-      await cancelListing(listing.id);
+      await cancelListing(listing.id, 'seller-1');
 
       await expect(
         purchaseListing(listing.id, '0xBuyer1'),
@@ -308,7 +308,7 @@ describe('Secondary Market Service', () => {
         { tokenAmount: 50, pricePerToken: 25 },
       );
 
-      const result = await cancelListing(listing.id);
+      const result = await cancelListing(listing.id, 'seller-1');
       expect(result.success).toBe(true);
     });
 
@@ -319,7 +319,7 @@ describe('Secondary Market Service', () => {
         { tokenAmount: 50, pricePerToken: 25 },
       );
 
-      await cancelListing(listing.id);
+      await cancelListing(listing.id, 'seller-1');
 
       const cancelled = await getListings(assetId, { status: 'cancelled' });
       expect(cancelled).toHaveLength(1);
@@ -328,7 +328,7 @@ describe('Secondary Market Service', () => {
 
     it('throws on not-found listing', async () => {
       await expect(
-        cancelListing('lst-nonexistent-12345'),
+        cancelListing('lst-nonexistent-12345', 'any-org'),
       ).rejects.toThrow('Listing not found');
     });
 
@@ -338,10 +338,10 @@ describe('Secondary Market Service', () => {
         { tokenAmount: 50, pricePerToken: 25 },
       );
 
-      await cancelListing(listing.id);
+      await cancelListing(listing.id, 'seller-1');
 
       await expect(
-        cancelListing(listing.id),
+        cancelListing(listing.id, 'seller-1'),
       ).rejects.toThrow('Listing is not active');
     });
 
@@ -354,7 +354,7 @@ describe('Secondary Market Service', () => {
       await purchaseListing(listing.id, '0xBuyer1');
 
       await expect(
-        cancelListing(listing.id),
+        cancelListing(listing.id, 'seller-1'),
       ).rejects.toThrow('Listing is not active');
     });
   });

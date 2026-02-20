@@ -550,7 +550,7 @@ contract RealToken is ERC20, Ownable, Pausable, ReentrancyGuard, IToken {
      */
     function _isVerified(address userAddress) internal view returns (bool) {
         if (_identityRegistry == address(0)) {
-            return true; // No identity registry = no verification required
+            return false; // Fail-closed: no identity registry means no verification possible
         }
         return IIdentityRegistry(_identityRegistry).hasIdentity(userAddress);
     }

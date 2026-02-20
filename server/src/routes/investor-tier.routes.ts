@@ -84,6 +84,30 @@ investorTierRouter.post(
   },
 );
 
+// POST /investors/:investorId/tier
+investorTierRouter.post(
+  '/investors/:investorId/tier',
+  requireScope('admin'),
+  async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        tier: z.enum(['retail', 'qualified', 'professional', 'institutional']),
+        accreditationStatus: z.string().default('none'),
+        totalInvested: z.number().min(0).default(0),
+      });
+      const input = schema.parse(req.body);
+      const result = await tierService.assignTier(req.params.investorId, input);
+      res.json({ data: result });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
+      } else {
+        next(error);
+      }
+    }
+  },
+);
+
 // GET /investors/:investorId/tier
 investorTierRouter.get(
   '/investors/:investorId/tier',

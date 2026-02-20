@@ -242,13 +242,16 @@ describe('Investor Tier Service', () => {
     it('eligible result includes correct maxAllowedAmount', async () => {
       const assetId = uniqueAssetId();
       const investorId = uniqueInvestorId();
-      await seedInvestorTier(investorId, 'retail', 'none', 100000);
+      // Retail tier: maxInvestment=500,000, maxHoldingPercent=10%
+      // Effective holding limit = 500,000 * 10/100 = 50,000
+      // Seed with 20,000 invested so 20,000 + 10,000 = 30,000 <= 50,000 (within limit)
+      await seedInvestorTier(investorId, 'retail', 'none', 20000);
 
-      const result = await checkTierEligibility(assetId, investorId, 50000);
+      const result = await checkTierEligibility(assetId, investorId, 10000);
 
       expect(result.eligible).toBe(true);
-      // maxAllowed = 500,000 (max) - 100,000 (already invested) = 400,000
-      expect(result.maxAllowedAmount).toBe(400000);
+      // maxAllowed = 500,000 (maxInvestment) - 20,000 (already invested) = 480,000
+      expect(result.maxAllowedAmount).toBe(480000);
     });
 
     it('ineligible result has maxAllowedAmount=0', async () => {

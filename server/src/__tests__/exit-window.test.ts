@@ -55,7 +55,8 @@ describe('Exit Window Service', () => {
         noticePeriodDays: 30,
       });
 
-      expect(schedule.id).toBe(`sched-${assetId}`);
+      // Phase 2.5 fix: schedule IDs use randomUUID() to avoid collisions
+      expect(schedule.id).toBeTruthy();
       expect(schedule.assetId).toBe(assetId);
       expect(schedule.frequency).toBe('quarterly');
       expect(schedule.windowDurationDays).toBe(14);

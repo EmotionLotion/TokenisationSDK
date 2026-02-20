@@ -13,16 +13,25 @@ import type { ApiKeyRequest } from '../middleware/auth.js';
 
 export const secondaryMarketRouter = Router();
 
+const paginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 secondaryMarketRouter.get('/assets/:assetId/listings', requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
-    const { status, limit, offset } = req.query;
+    const { status } = req.query;
+    const { limit, offset } = paginationSchema.parse(req.query);
     const listings = await secondaryMarketService.getListings(req.params.assetId, {
       status: status as string | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit,
+      offset,
     });
     res.json({ data: listings });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error instanceof z.ZodError) return next(new ValidationError(error.errors.map(e => e.message).join(', ')));
+    next(error);
+  }
 });
 
 secondaryMarketRouter.post('/assets/:assetId/listings', requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
@@ -47,7 +56,8 @@ secondaryMarketRouter.post('/assets/:assetId/listings', requireScope('write'), a
 secondaryMarketRouter.post('/listings/:id/purchase', requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     const { buyerWallet } = z.object({ buyerWallet: z.string().min(1) }).parse(req.body);
-    const result = await secondaryMarketService.purchaseListing(req.params.id, buyerWallet);
+    const orgId = req.apiKey?.orgId || req.apiKey?.keyId || 'unknown';
+    const result = await secondaryMarketService.purchaseListing(req.params.id, buyerWallet, orgId);
     res.json({ data: result });
   } catch (error) {
     if (error instanceof z.ZodError) next(new ValidationError(error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')));
@@ -57,7 +67,8 @@ secondaryMarketRouter.post('/listings/:id/purchase', requireScope('write'), asyn
 
 secondaryMarketRouter.post('/listings/:id/cancel', requireScope('write'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
-    const result = await secondaryMarketService.cancelListing(req.params.id);
+    const orgId = req.apiKey?.orgId || req.apiKey?.keyId || 'unknown';
+    const result = await secondaryMarketService.cancelListing(req.params.id, orgId);
     res.json({ data: result });
   } catch (error) { next(error); }
 });
