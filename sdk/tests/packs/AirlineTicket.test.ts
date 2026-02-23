@@ -26,7 +26,7 @@ import {
   AirlineEventType,
   type ActorContext,
   type FlightSegment,
-} from '../../src/packs/AirlineTicket.js';
+} from '@tokenisation/core';
 
 describe('AirlineTicketEngine', () => {
   let engine: AirlineTicketEngine;

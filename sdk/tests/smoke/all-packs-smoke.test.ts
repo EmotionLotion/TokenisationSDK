@@ -22,7 +22,7 @@ import {
   TransferReason,
   type ActorContext as AirlineActor,
   type FlightSegment,
-} from '../../src/packs/AirlineTicket.js';
+} from '@tokenisation/core';
 
 // --- Hotel ---
 import {
@@ -31,7 +31,7 @@ import {
   HotelReservationStatus,
   HotelRole,
   type ActorContext as HotelActor,
-} from '../../src/packs/HotelReservation.js';
+} from '@tokenisation/core';
 
 // --- Car Rental ---
 import {
@@ -41,7 +41,7 @@ import {
   DepositStatus,
   RentalRole,
   type ActorContext as CarActor,
-} from '../../src/packs/CarRental.js';
+} from '@tokenisation/core';
 
 // --- Concert ---
 import {
@@ -50,10 +50,10 @@ import {
   ConcertTicketStatus,
   VenueRole,
   type ActorContext as ConcertActor,
-} from '../../src/packs/ConcertTicket.js';
+} from '@tokenisation/core';
 
 // --- Real Estate ---
-import { TokenisationSDK, RightType, LifecycleState } from '../../src/SDK.js';
+import { TokenisationSDK, RightType, LifecycleState } from '@tokenisation/core';
 
 function futureDate(days: number): string {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();

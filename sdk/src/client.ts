@@ -2,342 +2,194 @@
  * Tokenisation SDK - Client Entry Point
  *
  * Browser-safe exports for frontend applications.
- * This entry point excludes server-only modules like:
- * - SecretsManager (AWS, Vault credentials)
- * - AdminAPI (system management)
- * - DatabaseAdapter (direct DB access)
- * - AuditLog (server-side logging)
- *
- * Use this import for React, Vue, or any browser application:
- * ```typescript
- * import { TokenisationSDK, ComplianceEngine } from '@tokenisation/sdk/client';
- * ```
  *
  * @packageDocumentation
  */
 
-// Main SDK (browser-safe subset)
-export { TokenisationSDK } from './SDK.js';
-export type { SDKConfig, AssetManager, PartyManager, EvidenceManager, TokenManager } from './SDK.js';
+// Re-export core (browser-safe modules, models, plugins, errors, utils)
+export * from '@tokenisation/core';
 
-// API Client (Stripe-like interface)
-export { ApiClient, createApiClient, TokenizationError } from './ApiClient.js';
-
-// OAuth Token Manager
+// Re-export compliance (explicit to avoid name collisions with core)
 export {
-  OAuthTokenManager,
-  createOAuthTokenManager,
-  createOAuthFetch,
-} from './auth/OAuthTokenManager.js';
-export type {
-  OAuthTokenManagerConfig,
-  TokenResponse as OAuthTokenResponse,
-  OAuthTokenManagerEvents,
-} from './auth/OAuthTokenManager.js';
+  ComplianceService,
+  createComplianceService,
+  RuleConditionType,
+  JurisdictionPlugin,
+  createJurisdictionPlugin,
+  KYCCompliancePlugin,
+  createKYCCompliancePlugin,
+  KycPlugin,
+  createKycPlugin,
+  SumsubProvider,
+  MockKYCProvider,
+  ClaimType,
+  ClaimBitmask,
+  RequirementMasks,
+  ClaimsService,
+  DenyReason,
+  PolicyRegistry,
+  UAE_REAL_ESTATE_POLICY,
+} from '@tokenisation/compliance';
 
-// Pagination Utilities
+// Re-export realestate (explicit to avoid name collisions with core)
+// Colliding names kept from core: AssetPackConfig, CreateScheduleInput, DldEvent,
+// InvestorTier, RealEstateMetadata, RealEstateMetadataSchema, RedemptionRequest,
+// ValidationError.
+
 export {
-  paginate,
-  collectAll,
-  collectBatches,
-  Paginator,
-  createCursorFetcher,
-  createPageFetcher,
-  sleep,
-} from './utils/pagination.js';
-export type {
-  PaginatedResponse as PaginationResponse,
-  PageInfo,
-  PaginationOptions,
-} from './utils/pagination.js';
+  // --- Models ---
+  // RealEstateMetadataSchema — skipped (collides with core)
+  // RealEstateMetadata (type) — skipped (collides with core)
 
-// Error Classes
-export {
-  // Base class
-  SDKError,
-  // Specialized errors
-  AuthenticationError,
-  ValidationError,
-  ComplianceError,
-  ContractError,
-  NetworkError,
-  OracleError,
-  AssetError,
-  StorageError,
-  // Error codes
-  ErrorCode,
-  // Utilities
-  isSDKError,
-  hasErrorCode,
-  wrapError,
-  getErrorMessage,
-  formatErrorForUser,
-} from './errors/index.js';
-export type { ErrorCodeType } from './errors/index.js';
+  // --- Validation ---
+  // ValidationError — skipped (collides with core)
+  parseOrThrow,
+  createPropertyInputSchema,
+  type CreatePropertyInput,
+  updatePropertyInputSchema,
+  type UpdatePropertyInput,
+  propertyUnitInputSchema,
+  type PropertyUnitInput,
+  maintenanceRequestInputSchema,
+  type MaintenanceRequestInput,
+  expenseInputSchema,
+  type ExpenseInput,
+  navValuationInputSchema,
+  type NAVValuationInput,
+  createListingInputSchema,
+  type CreateListingInput,
+  assignTierInputSchema,
+  type AssignTierInput,
+  checkEligibilityInputSchema,
+  type CheckEligibilityInput,
+  createScheduleInputSchema,
+  // CreateScheduleInput (type) — skipped (collides with core)
+  redemptionRequestInputSchema,
+  type RedemptionRequestInput,
+  dldRegisterTitleInputSchema,
+  type DLDRegisterTitleInput,
+  dldIngestEventInputSchema,
+  type DLDIngestEventInput,
+  dldCreateSyncJobInputSchema,
+  type DLDCreateSyncJobInput,
 
-// Core types and interfaces
-export {
-  LifecycleEngine,
-  EventStore,
-  PolicyEvaluator,
-  VALID_TRANSITIONS,
-  EventType,
-  ok,
-  err,
-  RightModelSchema,
-  BaseEventSchema,
-  JurisdictionSchema,
-  ValidityPeriodSchema,
-  TransferabilityRulesSchema,
-  TransferContextSchema,
-} from './core/index.js';
+  // --- Packs: Lifecycle ---
+  RealEstateLifecycleStates,
+  type RealEstateLifecycleState,
+  REAL_ESTATE_LIFECYCLE,
+  mapCoreStateToRealEstate,
+  mapRealEstateToCoreState,
+  mapStakeStageToState,
+  mapStateToStakeStage,
+  registerRealEstateLifecycle,
 
-export type {
-  RightModel,
-  BaseEvent,
-  Jurisdiction,
-  ValidityPeriod,
-  TransferabilityRules,
-  TransferContext,
-  Result,
-  ILifecycleEngine,
-  IEventStore,
-  IPluginRegistry,
-  IJurisdictionPlugin,
-  ICompliancePlugin,
-  IOraclePlugin,
-  IStoragePlugin,
-  IChainPlugin,
-  ITokenAdapter,
-  PluginType,
-  AnyPlugin,
-  StateTransitionRequest,
-  StateTransitionResult,
-  TransitionGuard,
-  JurisdictionCheckResult,
-  ComplianceCheckResult,
-  ComplianceViolation,
-  PartyComplianceStatus,
-  OracleDataPoint,
-  OracleRequest,
-  StorageMetadata,
-  TransactionReceipt,
-  TransactionLog,
-  ChainConfig as CoreChainConfig,
-  TokenInfo,
-  EventQueryOptions,
-  PolicyEvaluationResult,
-  PolicyContext,
-} from './core/index.js';
+  // --- Packs: Real Estate Pack ---
+  // AssetPackConfig — skipped (collides with core)
+  type CreateRealEstatePackOptions,
+  dubaiRealEstatePack,
+  adgmRealEstatePack,
+  genericRealEstatePack,
+  createRealEstatePack,
+  baseLifecycleRules,
+  baseComplianceRules,
+  baseRequiredVerifications,
+  baseDistributionSchedule,
+  baseGovernanceSettings,
+  baseMetadataSchema,
+  baseDefaults,
+  dubaiLifecycleRules,
+  varaComplianceRules,
+  dldVerifications,
+  dubaiMetadataSchema,
+  adgmComplianceRules,
+  adgmVerifications,
 
-// Models (browser-safe)
-export * from './models/index.js';
+  // --- Packs: UAE Real Estate ---
+  type UAERealEstateConfig,
+  UAERealEstatePack,
+  createUAERealEstateToken,
 
-// Auth Plugins (browser-safe)
-export {
-  SIWEAuthPlugin,
-  createSIWEAuthPlugin,
-  MetaMaskPlugin,
-  createMetaMaskPlugin,
-  WalletConnectPlugin,
-  createWalletConnectPlugin,
-} from './plugins/auth/index.js';
-export type {
-  SIWEAuthConfig,
-  AuthSession,
-  WalletConnection,
-  MetaMaskPluginConfig,
-  ChainParams,
-  MetaMaskEventType,
-  WalletConnectPluginConfig,
-  WalletConnectEventType,
-} from './plugins/auth/index.js';
+  // --- Packs: DLD Condition Evaluator ---
+  type DLDConditionEvaluatorConfig,
+  DLDConditionEvaluator,
 
-// Browser Storage Plugin
-export { BrowserStoragePlugin } from './plugins/BrowserStoragePlugin.js';
-export { BrowserEventStore } from './plugins/BrowserEventStore.js';
+  // --- Packs: VARA Condition Evaluator ---
+  type VARAComplianceStatus,
+  type VARARiskCategory,
+  type VARAComplianceCheckResult,
+  type IVARAServiceProvider,
+  type VARAConditionEvaluatorConfig,
+  VARAConditionEvaluator,
 
-// Compliance Plugins (browser-safe)
-export { JurisdictionPlugin } from './plugins/compliance/JurisdictionPlugin.js';
-
-// Asset Abstraction Layer
-export {
-  AssetType,
-  InvestorClass,
-  LiquidityProfile,
-  FractionalizationType,
-  AssetDescriptorSchema,
-  resolveTokenStandard,
-  getAssetTypeDescription,
-  getJurisdictionInfo,
-} from './core/AssetAbstraction.js';
-export type {
-  AssetDescriptor,
-  IssuedAsset,
-  ResolvedTokenConfig,
-} from './core/AssetAbstraction.js';
-
-// Custody & Recovery (read-only client operations)
-export {
-  CustodyType,
-  RecoveryReason,
-  OverrideType,
-  ApprovalStatus,
-} from './core/CustodyManager.js';
-export type {
-  CustodyArrangement,
-  RecoveryRequest,
-  RecoveryApproval,
-  OverrideRequest,
-  OverrideApproval,
-  Delegation as CustodyDelegation,
-  DelegatedPermission,
-  DelegationConstraint,
-} from './core/CustodyManager.js';
-
-// Indexing (read-only client operations)
-export {
-  IndexedEventType,
-} from './core/IndexingEngine.js';
-export type {
-  IndexedEvent,
-  BalanceRecord,
-  TransferRecord,
-  HolderStats,
-  AssetStats,
-  ComplianceReport,
-  TransferQueryOptions,
-  IndexerEventQueryOptions,
-} from './core/IndexingEngine.js';
-
-// Contract Adapters (browser-safe - just interfaces/types for viewing)
-export type {
-  ERC20AdapterConfig,
-  ERC721AdapterConfig,
-  ERC1155AdapterConfig,
-  TokenTypeInfo,
-  TokenComplianceRules,
-} from './contracts/index.js';
-
-// Reference Packs (configuration only, no server operations)
-export * from './packs/index.js';
-
-// Pre-built UI Components
-export * from './components/index.js';
-
-// Extension Modules (browser-safe subset)
-export {
-  HookPriority,
-  DistributionType,
-  AllocationStrategy,
-  VotingStrategy,
-  VoteType,
-  ProposalType,
-  EscrowType,
-  EscrowStatus,
-  ReleaseConditionType,
-} from './SDK.js';
-
-export type {
-  RightTypeBehavior,
-  StateDefinition,
-  TransitionDefinition,
-  HookEvent,
-  HookHandler,
-  DistributionSchedule,
-  DistributionEvent,
-  Proposal,
-  VoteRecord,
-  Delegation,
-  Escrow,
-  Milestone,
-} from './SDK.js';
-
-// Core enums
-export {
-  LifecycleState,
-  RightType,
-  TransferabilityMode,
-  EvidenceType,
-  EvidenceStatus,
-  PartyRole,
-  PartyType,
-} from './SDK.js';
-
-// SDK Modules (for browser use via BrowserHttpClient)
-export {
-  ProjectsModule,
-  InvestorsModule,
-  TokensModule,
-  TransfersModule,
-  ComplianceModule,
-  AssetsModule,
-  EventsModule,
-  WebhooksModule,
-  AuditModule,
-  GovernanceModule,
-  EscrowModule,
-  CashFlowModule,
+  // --- Modules: DLD Client ---
+  type TitleDeedStatus,
+  type PropertyType,
+  type OwnershipType,
+  type Owner,
+  type TitleDeed,
+  type TokenizationEligibility,
+  type TokenizationNotification,
+  type Valuation,
+  // DldEvent — skipped (collides with core)
+  type PropertySummary,
   DLDModule,
+
+  // --- Modules: Property ---
+  PropertyModule,
+  type PropertyModuleSummary,
+
+  // --- Modules: NAV ---
+  NAVModule,
+  type NAVRecord,
+  type ValuationSource,
+  type NAVWithSources,
+  type NAVHistoryResponse,
+  type ManualValuationInput,
+
+  // --- Modules: Investor Tier ---
+  InvestorTierModule,
+  // InvestorTier (type) — skipped (collides with core)
+  type InvestorPlan,
+  type TierEligibilityResult,
+  type TierViolation,
+  type InvestorTierInfo,
+
+  // --- Modules: Exit Window ---
+  ExitWindowModule,
+  type ExitWindow,
+  type ExitWindowSchedule,
+  // RedemptionRequest — skipped (collides with core)
+
+  // --- Modules: Secondary Market ---
+  SecondaryMarketModule,
+  type SecondaryListing,
+  type PurchaseResult,
+  type SecondaryMarketCreateListingInput,
+
+  // --- Modules: Legal ---
   LegalModule,
-} from './modules/index.js';
+  type ConfigureKYCInput,
+  type KYCConfiguration,
+  type VerificationSession,
+  type VerificationStatus,
+  type FreezeResult,
+  type UnfreezeResult,
 
-// Browser HTTP Client (for React/browser integrations with JWT auth)
-export {
-  BrowserHttpClient,
-  BrowserHttpError,
-} from './utils/browser-http.js';
-export type {
-  BrowserHttpClientConfig,
-  BrowserRequestOptions,
-} from './utils/browser-http.js';
-
-// Offline / Network utilities
-export { NetworkDetector } from './offline/NetworkDetector.js';
-export type { NetworkStatus, NetworkStatusCallback, NetworkDetectorOptions } from './offline/NetworkDetector.js';
-export { SyncManager } from './offline/SyncManager.js';
-export type { SyncProgress, SyncStatus, SyncManagerOptions, SyncProgressCallback, SyncStatusCallback } from './offline/SyncManager.js';
-export { OfflineQueue } from './offline/OfflineQueue.js';
-export type { QueuedOperation } from './offline/OfflineQueue.js';
-
-// API Types (for type-safe API calls)
-export type {
-  TokenizationSDKConfig,
-  PaginatedResponse,
-  ApiResponse,
-  ApiError,
-  Organization,
-  User,
-  Role,
-  ApiKey,
-  Project,
-  Document,
-  Asset,
-  AssetState,
-  Investor,
-  InvestorWallet,
-  InvestorStatus,
-  InvestorClassification,
-  RiskTier,
-  KycStatus,
-  Token,
-  TokenTranche,
-  TokenStatus,
-  Policy,
-  PolicyRule,
-  ComplianceDecision,
-  Transfer,
-  TransferStatus,
-  CreateTransferInput,
-  Settlement,
-  FinalityStatus,
-  WebhookEndpoint,
-  WebhookDelivery,
-  LedgerPosition,
-  LedgerEvent,
-  DldTitle,
-  DldEvent,
-  EventMessage,
-  EventStatus,
-  ChainConfig,
-} from './types.js';
+  // --- Providers: DLD ---
+  type IDLDProvider,
+  type DLDProviderConfig,
+  type DLDProviderFactory,
+  type DLDProviderTitleDeedResult,
+  type DLDProviderTokenizationEligibility,
+  type DLDProviderTokenizationNotification,
+  type TokenizationNotificationResult,
+  type ValuationResult,
+  type ValuationType,
+  type DLDProviderOwner,
+  type PropertyLocation,
+  type DLDProviderTitleDeedStatus,
+  type DLDProviderPropertyType,
+  type DLDProviderOwnershipType,
+  MockDLDProvider,
+  createMockDLDProvider,
+} from '@tokenisation/realestate';

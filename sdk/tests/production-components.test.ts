@@ -25,7 +25,7 @@ import {
   type ReconciliationConfig,
   type Discrepancy,
   type ReconciliationReport,
-} from '../src/services/ReconciliationService.js';
+} from '@tokenisation/chains';
 
 describe('ReconciliationService', () => {
   let serverProvider: MockServerDataProvider;
@@ -193,7 +193,7 @@ import {
   OperationType,
   ProposalStatus,
   type Signer,
-} from '../src/services/MultisigGovernance.js';
+} from '@tokenisation/chains';
 
 describe('MultisigGovernance', () => {
   let multisig: MultisigWallet;
@@ -443,8 +443,8 @@ import {
   IdempotentOperationsManager,
   IdempotentCashFlowEngine,
   OperationType as IdempotentOpType,
-} from '../src/modules/IdempotentOperations.js';
-import { CashFlowEngine, DistributionType, DistributionFrequency } from '../src/modules/CashFlow.js';
+} from '@tokenisation/core';
+import { CashFlowEngine, DistributionType, DistributionFrequency } from '@tokenisation/core';
 
 describe('IdempotentOperations', () => {
   let idempotentOps: IdempotentOperationsManager;
@@ -625,7 +625,7 @@ import {
   JobPriority,
   MemoryJobStore,
   createDistributionQueue,
-} from '../src/queue/JobQueue.js';
+} from '@tokenisation/core';
 
 describe('JobQueue', () => {
   let queue: JobQueue<{ value: number }, { result: string }>;

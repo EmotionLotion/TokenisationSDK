@@ -17,7 +17,7 @@ import {
   OracleHealthStatus,
   createOracleService,
   createDevelopmentOracleService,
-} from '../src/services/OracleService.js';
+} from '@tokenisation/chains';
 
 describe('Oracle Fail-Safe Tests', () => {
   let oracleService: OracleService;

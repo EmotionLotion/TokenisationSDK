@@ -30,13 +30,12 @@ import {
   TransferabilityMode,
   EventType,
   ComplianceAction,
-  type RightModel,
-} from '../../src/core/types.js';
-import { ComplianceEngine, type ComplianceEngineConfig } from '../../src/core/ComplianceEngine.js';
-import { LifecycleEngine } from '../../src/core/LifecycleEngine.js';
-import { EventStore } from '../../src/core/EventStore.js';
-import { receiptChain } from '../../src/core/DecisionReceipt.js';
-import type { ICompliancePlugin, PartyComplianceStatus } from '../../src/core/interfaces.js';
+  ComplianceEngine,
+  LifecycleEngine,
+  EventStore,
+  receiptChain,
+} from '@tokenisation/core';
+import type { RightModel, ComplianceEngineConfig, ICompliancePlugin, PartyComplianceStatus } from '@tokenisation/core';
 
 // ============================================================================
 // AIRLINE TICKET IMPORTS
@@ -49,13 +48,11 @@ import {
   AirlineRole,
   TransferReason,
   AirlineEventType,
-  type ActorContext,
-  type FlightSegment,
-} from '../../src/packs/AirlineTicket.js';
-import {
   AirlineTicketState,
   AirlineTicketErrorCode,
-} from '../../src/packs/AirlineTicketStateMachine.js';
+  type ActorContext,
+  type FlightSegment,
+} from '@tokenisation/core';
 
 // ============================================================================
 // REAL ESTATE IMPORTS
@@ -67,13 +64,9 @@ import {
   DistributionFrequency,
   AllocationStrategy,
   type HolderSnapshot,
-} from '../../src/modules/CashFlow.js';
-import {
   RedemptionEngine,
   RedemptionType,
   RedemptionStatus,
-} from '../../src/modules/Redemption.js';
-import {
   createParty,
   addKycRecord,
   type Party,
@@ -81,7 +74,7 @@ import {
   PartyType,
   VerificationLevel,
   AccreditationStatus,
-} from '../../src/models/Party.js';
+} from '@tokenisation/core';
 
 // ============================================================================
 // SHARED INFRASTRUCTURE

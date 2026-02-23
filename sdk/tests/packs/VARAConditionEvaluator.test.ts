@@ -18,8 +18,8 @@ import {
   type IVARAServiceProvider,
   type VARAComplianceStatus,
   type VARARiskCategory,
-} from '../../src/packs/VARAConditionEvaluator.js';
-import type { CustomConditionContext } from '../../src/core/interfaces.js';
+} from '@tokenisation/realestate';
+import type { CustomConditionContext } from '@tokenisation/core';
 
 // ============================================================================
 // Mock VARA Service Provider

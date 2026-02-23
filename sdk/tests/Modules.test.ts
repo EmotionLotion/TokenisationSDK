@@ -11,19 +11,19 @@ import {
   DistributionType,
   DistributionFrequency,
   AllocationStrategy,
-} from '../src/modules/CashFlow.js';
+} from '@tokenisation/core';
 import {
   GovernanceEngine,
   ProposalType,
   VotingStrategy,
   VoteType,
   QuorumType,
-} from '../src/modules/Governance.js';
+} from '@tokenisation/core';
 import {
   EscrowEngine,
   EscrowType,
   EscrowStatus,
-} from '../src/modules/Escrow.js';
+} from '@tokenisation/core';
 
 describe('CashFlowEngine', () => {
   let engine: CashFlowEngine;

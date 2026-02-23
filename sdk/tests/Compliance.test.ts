@@ -8,12 +8,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createMockJurisdictionPlugin,
   createMockCompliancePlugin,
-  createJurisdictionPlugin,
   type IJurisdictionPlugin,
   type ICompliancePlugin,
-} from '../src/plugins/index.js';
-import { RightType, LifecycleState, TransferabilityMode } from '../src/core/index.js';
-import type { Asset } from '../src/models/index.js';
+} from '@tokenisation/core';
+import { createJurisdictionPlugin } from '@tokenisation/compliance';
+import { RightType, LifecycleState, TransferabilityMode } from '@tokenisation/core';
+import type { Asset } from '@tokenisation/core';
 
 describe('Mock Jurisdiction Plugin', () => {
   let plugin: IJurisdictionPlugin;

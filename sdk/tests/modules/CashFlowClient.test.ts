@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CashFlowModule } from '../../src/modules/CashFlowClient.js';
+import { CashFlowModule } from '@tokenisation/core';
 
 function createMockHttp() {
   return {
@@ -17,12 +17,12 @@ function createMockHttp() {
 }
 
 // Mock validation functions
-vi.mock('../../src/modules/validation.js', () => ({
+vi.mock('../../../packages/core/src/modules/validation.js', () => ({
   validate: (_schema: any, data: any) => data,
   UUIDSchema: { parse: (v: string) => v },
 }));
 
-vi.mock('../../src/modules/validation-governance.js', () => ({
+vi.mock('../../../packages/core/src/modules/validation-governance.js', () => ({
   CreateScheduleInputSchema: {},
   UpdateScheduleInputSchema: {},
   ExecuteDistributionInputSchema: {},

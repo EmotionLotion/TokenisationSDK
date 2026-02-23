@@ -16,16 +16,16 @@ import {
   EventType,
   RightType,
   TransferabilityMode,
-} from '../src/core/index.js';
-import type { RightModel } from '../src/core/index.js';
+} from '@tokenisation/core';
+import type { RightModel } from '@tokenisation/core';
 
 // Services
 import {
   ComplianceService,
   RuleConditionType,
-} from '../src/services/ComplianceService.js';
-import { OracleService, createOracleService, createDevelopmentOracleService } from '../src/services/OracleService.js';
-import { TaxWithholdingService, DistributionTaxType } from '../src/services/TaxWithholdingService.js';
+} from '@tokenisation/compliance';
+import { OracleService, createOracleService, createDevelopmentOracleService } from '@tokenisation/chains';
+import { TaxWithholdingService, DistributionTaxType } from '@tokenisation/core';
 
 // Models
 import {
@@ -36,7 +36,7 @@ import {
   PartyType,
   VerificationLevel,
   AccreditationStatus,
-} from '../src/models/Party.js';
+} from '@tokenisation/core';
 
 // Modules
 import {
@@ -44,15 +44,15 @@ import {
   DistributionType,
   DistributionFrequency,
   AllocationStrategy,
-} from '../src/modules/CashFlow.js';
+} from '@tokenisation/core';
 import {
   GovernanceEngine,
   ProposalType,
   VoteType,
   VotingStrategy,
   QuorumType,
-} from '../src/modules/Governance.js';
-import { EscrowEngine } from '../src/modules/Escrow.js';
+} from '@tokenisation/core';
+import { EscrowEngine } from '@tokenisation/core';
 
 // =============================================================================
 // HELPER FUNCTIONS

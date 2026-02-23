@@ -11,7 +11,7 @@ import {
   type RightModel,
   RightType,
   TransferabilityMode,
-} from '../src/core/index.js';
+} from '@tokenisation/core';
 
 describe('LifecycleEngine', () => {
   let engine: LifecycleEngine;

@@ -29,7 +29,7 @@ import {
   ConcertTicketEventType,
   type ActorContext,
   type ConcertTicketMetadata,
-} from '../../src/packs/ConcertTicket.js';
+} from '@tokenisation/core';
 
 describe('ConcertTicketEngine', () => {
   let engine: ConcertTicketEngine;

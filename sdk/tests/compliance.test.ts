@@ -12,9 +12,9 @@ import {
   createComplianceService,
   RuleConditionType,
   type Ruleset,
-} from '../src/services/ComplianceService.js';
-import { createParty, addKycRecord, type Party, PartyRole, PartyType, VerificationLevel, AccreditationStatus } from '../src/models/Party.js';
-import { RightType, LifecycleState, TransferabilityMode, type RightModel } from '../src/core/types.js';
+} from '@tokenisation/compliance';
+import { createParty, addKycRecord, type Party, PartyRole, PartyType, VerificationLevel, AccreditationStatus } from '@tokenisation/core';
+import { RightType, LifecycleState, TransferabilityMode, type RightModel } from '@tokenisation/core';
 
 describe('ComplianceService - Transfer Scenarios', () => {
   let service: ComplianceService;

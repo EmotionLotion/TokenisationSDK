@@ -18,11 +18,11 @@ import {
   type RightModel,
   type ComplianceContext,
   type PolicyDecision,
-} from '../src/core/types.js';
-import { ComplianceEngine } from '../src/core/ComplianceEngine.js';
-import { EventStore } from '../src/core/EventStore.js';
-import type { ICompliancePlugin, PartyComplianceStatus, ComplianceCheckResult } from '../src/core/interfaces.js';
-import { RuleConditionType } from '../src/services/ComplianceService.js';
+} from '@tokenisation/core';
+import { ComplianceEngine } from '@tokenisation/core';
+import { EventStore } from '@tokenisation/core';
+import type { ICompliancePlugin, PartyComplianceStatus, ComplianceCheckResult } from '@tokenisation/core';
+import { RuleConditionType } from '@tokenisation/compliance';
 
 // ============================================================================
 // TEST FIXTURES

@@ -10,20 +10,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 // Custom Condition Infrastructure
-import { CustomConditionRegistry } from '../../src/core/CustomConditionRegistry.js';
+import { CustomConditionRegistry, LifecycleState, RightType, TransferabilityMode } from '@tokenisation/core';
+import type { CustomConditionContext, RightModel, PaginatedResponse } from '@tokenisation/core';
+
+// Realestate evaluators and types
 import {
   DLDConditionEvaluator,
   type DLDConditionEvaluatorConfig,
-} from '../../src/packs/DLDConditionEvaluator.js';
-import {
   VARAConditionEvaluator,
   type VARAConditionEvaluatorConfig,
   type IVARAServiceProvider,
   type VARAComplianceStatus,
   type VARARiskCategory,
-} from '../../src/packs/VARAConditionEvaluator.js';
-
-// DLD types
+} from '@tokenisation/realestate';
 import type {
   DLDModule,
   TitleDeed,
@@ -33,19 +32,7 @@ import type {
   TitleDeedStatus,
   PropertyType,
   OwnershipType,
-} from '../../src/modules/DLDClient.js';
-import type { PaginatedResponse } from '../../src/types.js';
-
-// Core types
-import {
-  LifecycleState,
-  RightType,
-  TransferabilityMode,
-} from '../../src/core/types.js';
-import type {
-  CustomConditionContext,
-  RightModel,
-} from '../../src/core/interfaces.js';
+} from '@tokenisation/realestate';
 
 // ============================================================================
 // MOCK IMPLEMENTATIONS

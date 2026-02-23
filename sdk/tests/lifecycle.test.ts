@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { LifecycleEngine, EventStore, LifecycleState, EventType, RightType, TransferabilityMode } from '../src/core/index.js';
-import type { RightModel } from '../src/core/index.js';
+import { LifecycleEngine, EventStore, LifecycleState, EventType, RightType, TransferabilityMode } from '@tokenisation/core';
+import type { RightModel } from '@tokenisation/core';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('LifecycleEngine', () => {

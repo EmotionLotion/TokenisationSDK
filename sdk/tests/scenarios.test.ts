@@ -23,13 +23,13 @@ import {
   ComplianceAction,
   type RightModel,
   type PolicyDecision,
-} from '../src/core/types.js';
-import { ComplianceEngine, type ComplianceEngineConfig } from '../src/core/ComplianceEngine.js';
-import { LifecycleEngine } from '../src/core/LifecycleEngine.js';
-import { EventStore } from '../src/core/EventStore.js';
-import { createReceipt, receiptChain, type DecisionReceipt } from '../src/core/DecisionReceipt.js';
-import type { IJurisdictionPlugin, ICompliancePlugin, PartyComplianceStatus } from '../src/core/interfaces.js';
-import { AssetType, InvestorClass } from '../src/core/AssetAbstraction.js';
+} from '@tokenisation/core';
+import { ComplianceEngine, type ComplianceEngineConfig } from '@tokenisation/core';
+import { LifecycleEngine } from '@tokenisation/core';
+import { EventStore } from '@tokenisation/core';
+import { createReceipt, receiptChain, type DecisionReceipt } from '@tokenisation/core';
+import type { IJurisdictionPlugin, ICompliancePlugin, PartyComplianceStatus } from '@tokenisation/core';
+import { AssetType, InvestorClass } from '@tokenisation/core';
 import {
   createParty,
   addKycRecord,
@@ -37,7 +37,7 @@ import {
   PartyRole,
   PartyType,
   VerificationLevel,
-} from '../src/models/Party.js';
+} from '@tokenisation/core';
 
 // ============================================================================
 // TEST FIXTURES

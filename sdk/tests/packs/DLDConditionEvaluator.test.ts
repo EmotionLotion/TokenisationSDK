@@ -10,10 +10,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DLDConditionEvaluator } from '../../src/packs/DLDConditionEvaluator.js';
-import type { DLDConditionEvaluatorConfig } from '../../src/packs/DLDConditionEvaluator.js';
-import type { CustomConditionContext } from '../../src/core/interfaces.js';
-import type { DLDModule } from '../../src/modules/DLDClient.js';
+import { DLDConditionEvaluator, type DLDConditionEvaluatorConfig, type DLDModule } from '@tokenisation/realestate';
+import type { CustomConditionContext } from '@tokenisation/core';
 
 // ============================================================================
 // Mock DLDModule

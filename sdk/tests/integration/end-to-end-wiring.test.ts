@@ -18,14 +18,13 @@ import {
   AuditChainManager,
   PortableComplianceRegistry,
   FlightLandingOracle,
-} from '../../src/orchestration/index.js';
+  OracleService,
+  ComplianceAction,
+} from '@tokenisation/core';
 import type {
   IAuditLog,
   SagaDefinition,
-} from '../../src/orchestration/index.js';
-
-// Oracle service
-import { OracleService } from '../../src/services/OracleService.js';
+} from '@tokenisation/core';
 
 // Pack engines
 import {
@@ -33,32 +32,29 @@ import {
   TicketClass,
   AirlineRole,
   TransferReason,
-} from '../../src/packs/AirlineTicket.js';
-import type { ActorContext as AirlineActorContext } from '../../src/packs/AirlineTicket.js';
+  type ActorContext as AirlineActorContext,
+} from '@tokenisation/core';
 
 import {
   HotelReservationEngine,
   RoomType,
   HotelRole,
-} from '../../src/packs/HotelReservation.js';
-import type { ActorContext as HotelActorContext } from '../../src/packs/HotelReservation.js';
+  type ActorContext as HotelActorContext,
+} from '@tokenisation/core';
 
 import {
   CarRentalEngine,
   VehicleCategory,
   RentalRole,
-} from '../../src/packs/CarRental.js';
-import type { ActorContext as CarActorContext } from '../../src/packs/CarRental.js';
+  type ActorContext as CarActorContext,
+} from '@tokenisation/core';
 
 import {
   ConcertTicketEngine,
   SeatingTier,
   VenueRole,
-} from '../../src/packs/ConcertTicket.js';
-import type { ActorContext as ConcertActorContext } from '../../src/packs/ConcertTicket.js';
-
-// Compliance types
-import { ComplianceAction } from '../../src/core/types.js';
+  type ActorContext as ConcertActorContext,
+} from '@tokenisation/core';
 
 // ============================================================================
 // HELPERS

@@ -28,12 +28,8 @@ import {
   skipIfNoAnvil,
   hasAnvilAndRpc,
 } from './chainlink-fork-setup.js';
-import { DataFeedPlugin } from '../../src/plugins/chainlink/DataFeedPlugin.js';
-import { DataFeedBridge } from '../../src/bridges/DataFeedBridge.js';
-import { OracleService, OracleFailSafeMode } from '../../src/services/OracleService.js';
-import { ComplianceEngine } from '../../src/core/ComplianceEngine.js';
-import { ComplianceAction } from '../../src/core/types.js';
-import { chainRegistry } from '../../src/plugins/chain/ChainRegistry.js';
+import { DataFeedPlugin, DataFeedBridge, chainRegistry } from '@tokenisation/chains';
+import { OracleService, OracleFailSafeMode, ComplianceEngine, ComplianceAction } from '@tokenisation/core';
 
 // ============================================================================
 // ABI fragments for direct contract calls

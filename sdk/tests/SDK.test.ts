@@ -11,7 +11,7 @@ import {
   PartyRole,
   RightType,
   LifecycleState,
-} from '../src/index.js';
+} from '@tokenisation/sdk';
 
 describe('TokenisationSDK', () => {
   describe('Initialization', () => {
@@ -53,9 +53,8 @@ describe('TokenisationSDK', () => {
       const sdk = new TokenisationSDK();
       expect(sdk.engine).toBeDefined();
       expect(sdk.plugins).toBeDefined();
-      expect(sdk.compliance).toBeDefined();
+      // compliance and oracle services moved to @tokenisation/compliance and @tokenisation/chains
       expect(sdk.verification).toBeDefined();
-      expect(sdk.oracle).toBeDefined();
       expect(sdk.indexer).toBeDefined();
       expect(sdk.events).toBeDefined();
     });

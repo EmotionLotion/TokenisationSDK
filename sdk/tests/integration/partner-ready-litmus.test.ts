@@ -22,7 +22,14 @@ import {
   FlightLandingOracle,
   PortableComplianceRegistry,
   AuditChainManager,
-} from '../../src/orchestration/index.js';
+  OracleService,
+  OracleFailSafeMode,
+  OracleHealthStatus,
+  createReceipt,
+  verifyReceiptSignature,
+  ReceiptChain,
+  ComplianceAction,
+} from '@tokenisation/core';
 import type {
   ICrossPackEventBus,
   IAuditLog,
@@ -32,26 +39,10 @@ import type {
   FlightLandingData,
   PortableReceipt,
   ChainedAuditEntry,
-} from '../../src/orchestration/index.js';
-
-// Oracle
-import {
-  OracleService,
-  OracleFailSafeMode,
-  OracleHealthStatus,
-} from '../../src/services/OracleService.js';
-
-// Decision receipt
-import {
-  createReceipt,
-  verifyReceiptSignature,
-  ReceiptChain,
-} from '../../src/core/DecisionReceipt.js';
-import type { DecisionReceipt } from '../../src/core/DecisionReceipt.js';
-
-// Types
-import { ComplianceAction } from '../../src/core/types.js';
-import type { PolicyDecision, ComplianceContext } from '../../src/core/types.js';
+  DecisionReceipt,
+  PolicyDecision,
+  ComplianceContext,
+} from '@tokenisation/core';
 
 // ============================================================================
 // HELPERS

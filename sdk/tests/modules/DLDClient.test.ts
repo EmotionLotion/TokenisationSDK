@@ -6,8 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DLDModule } from '../../src/modules/DLDClient.js';
-import { ValidationError } from '../../src/validation/real-estate.js';
+import { DLDModule, ValidationError } from '@tokenisation/realestate';
 
 function createMockHttp() {
   return {

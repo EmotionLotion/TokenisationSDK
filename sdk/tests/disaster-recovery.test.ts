@@ -19,10 +19,10 @@ import {
   SafeFailMode,
   createDisasterRecoveryService,
   createDevelopmentDisasterRecoveryService,
-} from '../src/core/DisasterRecovery.js';
-import { EventStore } from '../src/core/EventStore.js';
-import { LifecycleState, RightType, TransferabilityMode, EventType } from '../src/core/types.js';
-import type { RightModel } from '../src/core/types.js';
+} from '@tokenisation/core';
+import { EventStore } from '@tokenisation/core';
+import { LifecycleState, RightType, TransferabilityMode, EventType } from '@tokenisation/core';
+import type { RightModel } from '@tokenisation/core';
 
 // ============================================================================
 // TEST FIXTURES

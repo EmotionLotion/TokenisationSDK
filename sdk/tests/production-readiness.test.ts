@@ -35,14 +35,14 @@ import {
   RightType,
   TransferabilityMode,
   ComplianceAction,
-} from '../src/core/index.js';
-import type { RightModel, PolicyDecision } from '../src/core/index.js';
-import { ComplianceEngine, ComplianceEngineConfig } from '../src/core/ComplianceEngine.js';
-import { DecisionReceipt, receiptChain, hashReceipt, verifyReceipt } from '../src/core/DecisionReceipt.js';
-import { hashPolicy } from '../src/core/PolicyHash.js';
+} from '@tokenisation/core';
+import type { RightModel, PolicyDecision } from '@tokenisation/core';
+import { ComplianceEngine, ComplianceEngineConfig } from '@tokenisation/core';
+import { DecisionReceipt, receiptChain, hashReceipt, verifyReceipt } from '@tokenisation/core';
+import { hashPolicy } from '@tokenisation/core';
 
 // Services
-import { ComplianceService, RuleConditionType } from '../src/services/ComplianceService.js';
+import { ComplianceService, RuleConditionType } from '@tokenisation/compliance';
 
 // Models
 import {
@@ -52,10 +52,10 @@ import {
   PartyRole,
   PartyType,
   VerificationLevel,
-} from '../src/models/Party.js';
+} from '@tokenisation/core';
 
 // Interfaces
-import type { IJurisdictionPlugin, ICompliancePlugin, PartyComplianceStatus } from '../src/core/interfaces.js';
+import type { IJurisdictionPlugin, ICompliancePlugin, PartyComplianceStatus } from '@tokenisation/core';
 
 // =============================================================================
 // TEST FIXTURES

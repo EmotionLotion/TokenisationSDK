@@ -1,0 +1,219 @@
+/**
+ * Pack A: UAE Real Estate
+ *
+ * Reference implementation for tokenizing UAE real estate assets.
+ * Type: OWNERSHIP Right
+ *
+ * This is a backward-compatible wrapper around the unified real-estate.pack.ts.
+ * For new implementations, prefer using dubaiRealEstatePack directly.
+ *
+ * Flow: Define (Apartment) -> Verify (Deed) -> Mint (ERC-20 Share) -> Enforce (Whitelist) -> Distribute (Rent)
+ */
+
+import { TokenisationSDK, RightType, LifecycleState, PartyRole, PartyType } from '@tokenisation/core';
+import { EvidenceType } from '@tokenisation/core';
+import type { RealEstateMetadata } from '../models/RealEstateMetadata.js';
+import { RuleConditionType } from '@tokenisation/compliance';
+import { dubaiRealEstatePack } from './real-estate.pack.js';
+
+/**
+ * UAE Real Estate Pack configuration
+ */
+export interface UAERealEstateConfig {
+  /** Property name */
+  name: string;
+
+  /** Property description */
+  description?: string;
+
+  /** Property details */
+  property: {
+    type: 'RESIDENTIAL' | 'COMMERCIAL' | 'INDUSTRIAL' | 'LAND';
+    address: {
+      street: string;
+      city: string;
+      postalCode: string;
+    };
+    areaSqm: number;
+    deedNumber?: string;
+  };
+
+  /** Valuation */
+  valuation: {
+    amount: string; // In AED
+    date: string;
+  };
+
+  /** Token configuration */
+  token: {
+    totalSupply: string;
+    decimals: number;
+    symbol: string;
+  };
+
+  /** Issuer information */
+  issuer: {
+    name: string;
+    email?: string;
+  };
+}
+
+/**
+ * UAE Real Estate Pack
+ *
+ * Demonstrates the full tokenization flow for UAE real estate.
+ * Uses the unified dubaiRealEstatePack internally for configuration.
+ *
+ * @deprecated For new implementations, use dubaiRealEstatePack from './real-estate.pack.js'
+ */
+export class UAERealEstatePack {
+  private sdk: TokenisationSDK;
+  private config: UAERealEstateConfig;
+
+  /** Access the underlying pack configuration */
+  static readonly pack = dubaiRealEstatePack;
+
+  constructor(sdk: TokenisationSDK, config: UAERealEstateConfig) {
+    this.sdk = sdk;
+    this.config = config;
+  }
+
+  /**
+   * Get the blocked jurisdictions from the unified pack
+   */
+  static getBlockedJurisdictions(): string[] {
+    return dubaiRealEstatePack.defaults.blockedJurisdictions;
+  }
+
+  /**
+   * Get compliance rules from the unified pack
+   */
+  static getComplianceRules() {
+    return dubaiRealEstatePack.complianceRules;
+  }
+
+  /**
+   * Get lifecycle rules from the unified pack
+   */
+  static getLifecycleRules() {
+    return dubaiRealEstatePack.lifecycleRules;
+  }
+
+  /**
+   * Execute the full tokenization flow
+   */
+  async execute(): Promise<{
+    assetId: string;
+    issuerId: string;
+    verifierId: string;
+    deedEvidenceId: string;
+  }> {
+    // Step 1: Create Issuer
+    const issuer = this.sdk.parties_.create({
+      type: PartyType.ORGANIZATION,
+      roles: [PartyRole.ISSUER],
+      name: this.config.issuer.name,
+      email: this.config.issuer.email,
+      jurisdiction: 'AE',
+    });
+
+    // Create Verifier (e.g., Dubai Land Department)
+    const verifier = this.sdk.parties_.create({
+      type: PartyType.ORGANIZATION,
+      roles: [PartyRole.VERIFIER],
+      name: 'Dubai Land Department',
+      jurisdiction: 'AE',
+    });
+
+    // Step 2: Create Asset with Real Estate Metadata
+    const metadata: RealEstateMetadata = {
+      assetType: 'REAL_ESTATE',
+      propertyType: this.config.property.type,
+      address: {
+        street: this.config.property.address.street,
+        city: this.config.property.address.city,
+        postalCode: this.config.property.address.postalCode,
+        country: 'AE',
+      },
+      area: {
+        value: this.config.property.areaSqm,
+        unit: 'SQM',
+      },
+      deedNumber: this.config.property.deedNumber,
+      valuationAmount: this.config.valuation.amount,
+      valuationCurrency: 'AED',
+      valuationDate: this.config.valuation.date,
+    };
+
+    // Use blocked jurisdictions from unified pack
+    const asset = await this.sdk.assets.create({
+      name: this.config.name,
+      description: this.config.description,
+      rightType: RightType.OWNERSHIP,
+      jurisdiction: {
+        countryCode: 'AE',
+        regulatoryFramework: 'UAE_VARA',
+        accreditedOnly: false,
+        blockedJurisdictions: dubaiRealEstatePack.defaults.blockedJurisdictions,
+      },
+      issuerId: issuer.id,
+      typedMetadata: metadata,
+    });
+
+    // Step 3: Add Deed Evidence
+    const deedEvidence = this.sdk.evidence.create({
+      assetId: asset.id,
+      type: EvidenceType.LEGAL_DOCUMENT,
+      title: 'Property Title Deed',
+      description: `Title deed for ${this.config.name}`,
+      contentHash: 'sha256:' + Buffer.from(asset.id + 'deed').toString('hex').slice(0, 64),
+      source: {
+        type: 'GOVERNMENT_REGISTRY',
+        identifier: 'dubai-land-department',
+        name: 'Dubai Land Department',
+        trusted: true,
+        reputationScore: 100,
+      },
+    });
+
+    // Step 4: Verify Evidence
+    await this.sdk.evidence.verify(deedEvidence.id, verifier.id, 'DOCUMENT_REVIEW');
+
+    // Step 5: Submit for Verification
+    await this.sdk.assets.transition(
+      asset.id,
+      LifecycleState.PENDING_VERIFICATION,
+      issuer.id
+    );
+
+    // Step 6: Verify Asset
+    await this.sdk.assets.verify(asset.id, verifier.id);
+
+    // Step 7: Activate Asset
+    await this.sdk.assets.activate(asset.id, issuer.id);
+
+    // [LAYER] Compliance ruleset registration — use ComplianceService from @tokenisation/compliance
+    // sdk.compliance.registerRuleset(...) — register via ComplianceService externally
+
+    return {
+      assetId: asset.id,
+      issuerId: issuer.id,
+      verifierId: verifier.id,
+      deedEvidenceId: deedEvidence.id,
+    };
+  }
+}
+
+/**
+ * Quick start helper for UAE Real Estate tokenization
+ *
+ * @deprecated For new implementations, use dubaiRealEstatePack from './real-estate.pack.js'
+ */
+export async function createUAERealEstateToken(
+  sdk: TokenisationSDK,
+  config: UAERealEstateConfig
+): Promise<string> {
+  const pack = new UAERealEstatePack(sdk, config);
+  const result = await pack.execute();
+  return result.assetId;
+}

@@ -6,8 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SecondaryMarketModule } from '../../src/modules/SecondaryMarketModule.js';
-import { ValidationError } from '../../src/validation/real-estate.js';
+import { SecondaryMarketModule, ValidationError } from '@tokenisation/realestate';
 
 // ---------------------------------------------------------------------------
 // Mock HttpClient

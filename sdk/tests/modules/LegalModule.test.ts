@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LegalModule } from '../../src/modules/LegalModule.js';
+import { LegalModule } from '@tokenisation/realestate';
 
 function createMockHttp() {
   return {

@@ -21,8 +21,8 @@ import {
   validateToResult,
   isValidAddress,
   isValidAmount,
-} from '../src/contracts/validation.js';
-import { ValidationError } from '../src/errors/index.js';
+} from '@tokenisation/chains';
+import { ValidationError } from '@tokenisation/core';
 
 describe('Adapter Validation Schemas', () => {
   describe('EthereumAddressSchema', () => {

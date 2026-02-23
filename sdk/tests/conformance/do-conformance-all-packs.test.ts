@@ -25,7 +25,7 @@ import {
   AirlineEventType,
   type ActorContext as AirlineActor,
   type FlightSegment,
-} from '../../src/packs/AirlineTicket.js';
+} from '@tokenisation/core';
 
 // --- Hotel ---
 import {
@@ -36,7 +36,7 @@ import {
   HotelEventType,
   type ActorContext as HotelActor,
   type HotelReservationMetadata,
-} from '../../src/packs/HotelReservation.js';
+} from '@tokenisation/core';
 
 // --- Car Rental ---
 import {
@@ -48,7 +48,7 @@ import {
   CarRentalEventType,
   type ActorContext as CarActor,
   type CarRentalMetadata,
-} from '../../src/packs/CarRental.js';
+} from '@tokenisation/core';
 
 // --- Concert ---
 import {
@@ -59,10 +59,10 @@ import {
   ConcertTicketEventType,
   type ActorContext as ConcertActor,
   type ConcertTicketMetadata,
-} from '../../src/packs/ConcertTicket.js';
+} from '@tokenisation/core';
 
 // --- Real Estate (core SDK) ---
-import { TokenisationSDK, RightType, LifecycleState } from '../../src/SDK.js';
+import { TokenisationSDK, RightType, LifecycleState } from '@tokenisation/core';
 
 // =============================================================================
 // SHARED FIXTURES

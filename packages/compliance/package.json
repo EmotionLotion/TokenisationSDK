@@ -1,0 +1,32 @@
+{
+  "name": "@tokenisation/compliance",
+  "version": "1.0.0",
+  "description": "KYC/AML, identity claims, jurisdiction enforcement, policy evaluation",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tokenisation/core": "workspace:*",
+    "uuid": "^9.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.3.0"
+  },
+  "files": ["dist", "README.md", "LICENSE"]
+}

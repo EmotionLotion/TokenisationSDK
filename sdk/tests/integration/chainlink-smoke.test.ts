@@ -17,20 +17,19 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OracleService, OracleFailSafeMode } from '../../src/services/OracleService.js';
-import { ComplianceEngine } from '../../src/core/ComplianceEngine.js';
-import { DataFeedBridge } from '../../src/bridges/DataFeedBridge.js';
-import { FlightDataFunctionsBridge } from '../../src/bridges/FlightDataFunctionsBridge.js';
-import { AutomationLifecycleManager } from '../../src/bridges/AutomationLifecycleManager.js';
-import { CCIPSettlementProvider } from '../../src/providers/settlement/CCIPSettlementProvider.js';
-import { CrossPackEventBus } from '../../src/orchestration/CrossPackEventBus.js';
-import { AutomationTaskType } from '../../src/plugins/chainlink/AutomationPlugin.js';
-import type { DataFeedPlugin, PriceData } from '../../src/plugins/chainlink/DataFeedPlugin.js';
-import type { ChainlinkFunctionsPlugin, FunctionsResponse } from '../../src/plugins/chainlink/FunctionsPlugin.js';
-import type { CCIPBridgePlugin, CCIPTransferResult } from '../../src/plugins/chainlink/CCIPBridgePlugin.js';
-import type { ChainlinkAutomationPlugin, AutomationTask } from '../../src/plugins/chainlink/AutomationPlugin.js';
-import { ComplianceAction } from '../../src/core/types.js';
-import type { IProofOfReservePlugin } from '../../src/core/interfaces.js';
+import { OracleService, OracleFailSafeMode, ComplianceEngine, ComplianceAction, CrossPackEventBus } from '@tokenisation/core';
+import type { IProofOfReservePlugin } from '@tokenisation/core';
+import {
+  DataFeedBridge,
+  FlightDataFunctionsBridge,
+  AutomationLifecycleManager,
+  CCIPSettlementProvider,
+  AutomationTaskType,
+} from '@tokenisation/chains';
+import type { DataFeedPlugin, PriceData } from '@tokenisation/chains';
+import type { ChainlinkFunctionsPlugin, FunctionsResponse } from '@tokenisation/chains';
+import type { CCIPBridgePlugin, CCIPTransferResult } from '@tokenisation/chains';
+import type { ChainlinkAutomationPlugin, AutomationTask } from '@tokenisation/chains';
 
 // ============================================================================
 // Mock Helpers

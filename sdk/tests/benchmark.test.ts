@@ -15,10 +15,10 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   ComplianceService,
   RuleConditionType,
-} from '../src/services/ComplianceService.js';
-import { createParty, addKycRecord, PartyRole, PartyType, VerificationLevel } from '../src/models/Party.js';
-import { RightType, LifecycleState, TransferabilityMode, type RightModel } from '../src/core/types.js';
-import { LifecycleEngine, EventStore } from '../src/core/index.js';
+} from '@tokenisation/compliance';
+import { createParty, addKycRecord, PartyRole, PartyType, VerificationLevel } from '@tokenisation/core';
+import { RightType, LifecycleState, TransferabilityMode, type RightModel } from '@tokenisation/core';
+import { LifecycleEngine, EventStore } from '@tokenisation/core';
 
 // ============================================================================
 // BENCHMARK UTILITIES

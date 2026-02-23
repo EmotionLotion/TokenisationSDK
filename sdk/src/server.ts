@@ -2,196 +2,650 @@
  * Tokenisation SDK - Server Entry Point
  *
  * Backend-only exports for Node.js server applications.
- * This entry point includes sensitive modules that should NEVER be used in browsers:
- * - SecretsManager (AWS, Vault, environment credentials)
- * - AdminAPI (system management, user administration)
- * - DatabaseAdapter (direct database access)
- * - AuditLog (server-side audit logging)
- * - WebhookQueue (server-side webhook processing)
- *
- * Use this import for Express, NestJS, or any Node.js backend:
- * ```typescript
- * import { SecretsManager, AdminAPIService } from '@tokenisation/sdk/server';
- * ```
- *
- * WARNING: Do not import this module in browser code. Use '@tokenisation/sdk/client' instead.
  *
  * @packageDocumentation
  */
 
-// Warn if running in browser
 if (typeof window !== 'undefined') {
   console.warn(
     '[@tokenisation/sdk/server] WARNING: Server-only module imported in browser environment. ' +
-    'This may expose sensitive functionality. Use "@tokenisation/sdk/client" for browser applications.'
+    'Use "@tokenisation/sdk/client" for browser applications.'
   );
 }
 
-// ============================================================================
-// RE-EXPORT ALL CLIENT MODULES (server can use everything client can)
-// ============================================================================
-export * from './client.js';
+// Re-export core
+export * from '@tokenisation/core';
 
-// ============================================================================
-// SERVER-ONLY MODULES
-// ============================================================================
-
-// Secrets Management (AWS, Vault, Environment)
-export { SecretsManager } from './secrets/SecretsManager.js';
-
-// Database Adapters
+// Re-export compliance (explicit to avoid name collisions with core)
 export {
-  InMemoryDatabaseAdapter,
-  PostgresDatabaseAdapter,
-  MongoDatabaseAdapter,
-  createDatabaseAdapter,
-} from './storage/DatabaseAdapter.js';
-export type {
-  IDatabaseAdapter,
-  ITransaction,
-  QueryOptions,
-  WhereClause,
-  DatabaseRecord,
-  PostgresConfig,
-  MongoConfig,
-  DatabaseType,
-} from './storage/DatabaseAdapter.js';
+  ComplianceService,
+  createComplianceService,
+  RuleConditionType,
+  JurisdictionPlugin,
+  createJurisdictionPlugin,
+  KYCCompliancePlugin,
+  createKYCCompliancePlugin,
+  KycPlugin,
+  createKycPlugin,
+  SumsubProvider,
+  MockKYCProvider,
+  ClaimType,
+  ClaimBitmask,
+  RequirementMasks,
+  ClaimsService,
+  DenyReason,
+  PolicyRegistry,
+  UAE_REAL_ESTATE_POLICY,
+} from '@tokenisation/compliance';
 
-// Storage Plugins (S3, IPFS)
-export { S3StoragePlugin } from './plugins/storage/S3StoragePlugin.js';
-export { IPFSStoragePlugin } from './plugins/storage/IPFSStoragePlugin.js';
+// Re-export chains (explicit to avoid name collisions with core)
+// Colliding names kept from core: BalanceRecord, ChainConfig, EthereumAddressSchema,
+// Signature, SigningRequest, TransferRecord, VerificationResult.
 
-// Admin API
-export { AdminAPIService, createAdminRouterHandlers } from './api/AdminAPI.js';
-export type {
-  SystemStats,
-  ApiKey as AdminApiKey,
-  User as AdminUser,
-  ComplianceReport,
-  AssetAnalytics,
-  CreateApiKeyParams,
-  AdminRouterConfig,
-} from './api/AdminAPI.js';
-
-// API Plugins
-export { ApiStoragePlugin } from './plugins/api/ApiStoragePlugin.js';
-export { ApiEventStore } from './plugins/api/ApiEventStore.js';
-
-// Audit Logging
-export { AuditLogService, createAuditLogger, AuditAction } from './audit/AuditLog.js';
-export type {
-  AuditEntry,
-  AuditQueryOptions,
-  AuditContext,
-} from './audit/AuditLog.js';
-
-// Webhook Queue
-export { WebhookQueue, getWebhookQueue, configureWebhookQueue, InMemoryWebhookStore } from './queue/WebhookQueue.js';
-export type {
-  WebhookDelivery as QueueWebhookDelivery,
-  WebhookEvent,
-  WebhookEndpoint as QueueWebhookEndpoint,
-  WebhookQueueConfig,
-  IWebhookStore,
-} from './queue/WebhookQueue.js';
-
-// Rate Limiting Middleware
 export {
-  RateLimiter,
-  createRateLimitHeaders,
-  createRateLimitMiddleware,
-  InMemoryRateLimitStore,
-  RedisRateLimitStore,
-  standardApiLimiter,
-  strictLimiter,
-  authLimiter,
-  webhookLimiter,
-} from './middleware/RateLimiter.js';
-export type {
-  RateLimitConfig,
-  RateLimitResult,
-  RateLimitInfo,
-  RateLimitHeaders,
-  IRateLimitStore,
-} from './middleware/RateLimiter.js';
+  // --- Chain plugins ---
+  EVMChainPlugin,
+  createEVMChainPlugin,
+  createBasePlugin,
+  createPolygonPlugin,
+  createEthereumPlugin,
+  type EVMChainPluginConfig,
+  ChainRegistry,
+  chainRegistry,
+  BASE_MAINNET,
+  POLYGON_MAINNET,
+  ETHEREUM_MAINNET,
+  BASE_SEPOLIA,
+  POLYGON_AMOY,
+  SEPOLIA,
+  DEFAULT_CHAINS,
 
-// Full Custody Manager (with write operations)
-export {
-  CustodyManager,
-  custodyManager,
-} from './core/CustodyManager.js';
+  // --- Chainlink plugins ---
+  RpcUrlSchema,
+  PrivateKeySchema,
+  ChainIdSchema,
+  FlexibleChainIdSchema,
+  BaseChainlinkConfigSchema,
+  DataFeedConfigSchema,
+  AutomationConfigSchema,
+  CCIPBridgeConfigSchema,
+  LinkManagerConfigSchema,
+  FunctionsConfigSchema,
+  OracleMonitorConfigSchema,
+  validateChainlinkConfig,
+  validateDataFeedConfig,
+  validateAutomationConfig,
+  validateCCIPBridgeConfig,
+  validateLinkManagerConfig,
+  validateFunctionsConfig,
+  validateOracleMonitorConfig,
+  isChainlinkSupportedChain,
+  getChainlinkChainName,
+  isTestnet,
+  SUPPORTED_CHAINLINK_CHAINS,
+  type BaseChainlinkConfig,
+  type ValidatedDataFeedConfig,
+  type ValidatedAutomationConfig,
+  type ValidatedCCIPBridgeConfig,
+  type ValidatedLinkManagerConfig,
+  type ValidatedFunctionsConfig,
+  type ValidatedOracleMonitorConfig,
+  type SupportedChainlinkChainId,
 
-// Full Indexing Engine (with indexing operations)
-export {
-  IndexingEngine,
-  indexingEngine,
-} from './core/IndexingEngine.js';
+  DataFeedPlugin,
+  createDataFeedPlugin,
+  createBaseDataFeedPlugin,
+  createPolygonDataFeedPlugin,
+  createEthereumDataFeedPlugin,
+  type DataFeedPluginConfig,
+  type PriceData,
 
-// Services (server-side operations)
-export {
-  AssetIssuanceService,
-  AssetIssuanceError,
-} from './services/AssetIssuanceService.js';
-export type {
-  AssetIssuanceServiceOptions,
-} from './services/AssetIssuanceService.js';
+  CCIPBridgePlugin,
+  createCCIPBridgePlugin,
+  createBaseCCIPBridge,
+  createPolygonCCIPBridge,
+  createEthereumCCIPBridge,
+  type CCIPBridgeConfig,
+  type CCIPMessage,
+  type CCIPTransferParams,
+  type CCIPTransferResult,
 
-export { ComplianceService } from './services/ComplianceService.js';
-export { VerificationService } from './services/VerificationService.js';
-export { OracleService } from './services/OracleService.js';
-export { IndexingService } from './services/IndexingService.js';
-export { DeploymentService } from './services/DeploymentService.js';
-export { AttestationService } from './services/AttestationService.js';
-export { TaxWithholdingService } from './services/TaxWithholdingService.js';
-export { getHealthCheck } from './services/HealthCheck.js';
+  ChainlinkFunctionsPlugin,
+  createFunctionsPlugin,
+  createBaseSepoliaFunctionsPlugin,
+  createSepoliaFunctionsPlugin,
+  type FunctionsPluginConfig,
+  type FunctionsRequest,
+  type FunctionsResponse,
+  type SafetyScoreResult,
+  type CarbonOffsetResult,
+  type DLDVerificationResult,
 
-// Contract Adapters (full implementation for server-side operations)
-export {
+  LinkManagerPlugin,
+  createLinkManager,
+  createSepoliaLinkManager,
+  createBaseSepoliaLinkManager,
+  type LinkManagerConfig,
+  type LinkBalanceAlert,
+  type SubscriptionBalance,
+  type UpkeepBalance,
+  type FundingEstimate,
+
+  ChainlinkAutomationPlugin,
+  createAutomationPlugin,
+  createSepoliaAutomationPlugin,
+  createBaseSepoliaAutomationPlugin,
+  TriggerType,
+  AutomationTaskType,
+  type AutomationPluginConfig,
+  type UpkeepRegistration,
+  type UpkeepInfo,
+  type AutomationTask,
+  type PerformanceLog,
+
+  OracleMonitorPlugin,
+  createOracleMonitor,
+  createSepoliaOracleMonitor,
+  createBaseSepoliaOracleMonitor,
+  OracleType,
+  HealthStatus,
+  AlertSeverity,
+  type OracleMonitorConfig,
+  type MonitoredOracle,
+  type OracleHealthCheck,
+  type OracleAlert,
+  type WebhookPayload,
+
+  OracleAggregator,
+  createOracleAggregator,
+  createPrimaryFallbackAggregator,
+  createConsensusAggregator,
+  AggregationStrategy,
+  type OracleSource,
+  type OracleAggregatorConfig,
+  type AggregatedResult,
+
+  ChainlinkAcePlugin,
+  createAcePlugin,
+  createBaseSepoliaAcePlugin,
+  createSepoliaAcePlugin,
+  createMumbaiAcePlugin,
+  type AcePluginConfig,
+  type PolicyResult,
+  type FullComplianceResult,
+
+  ProofOfReservePlugin,
+  createProofOfReservePlugin,
+  createBaseSepoliaPoRPlugin,
+  createSepoliaPoRPlugin,
+  ReserveStatus,
+  type ProofOfReservePluginConfig,
+  type ReserveCheckResult,
+  type ReserveConfig,
+  type MintAllowance,
+
+  DecoPlugin,
+  createDecoPlugin,
+  createSepoliaDecoPlugin,
+  createBaseSepoliaDecoPlugin,
+  DecoProofType,
+  DecoSessionStatus,
+  type DecoPluginConfig,
+  type DecoProofRequest,
+  type DecoProofResult,
+  type DecoDataSource,
+
+  CCIDPlugin,
+  createCCIDPlugin,
+  createSepoliaCCIDPlugin,
+  createBaseSepoliaCCIDPlugin,
+  CCIDVertical,
+  DEFAULT_VERTICAL_REQUIREMENTS,
+  type CCIDPluginConfig,
+  type CCIDIdentity,
+  type CCIDEligibilityResult,
+  type VerticalRequirements,
+  type VerticalClearance,
+  type ChainLink,
+
+  // --- Services ---
+  DeploymentService,
+  createDeploymentService,
+  SUPPORTED_CHAINS,
+  type SupportedChainName,
+  type DeploymentConfig,
+  type DeployedContracts,
+  type DeploymentResult,
+  type TokenDeploymentParams,
+  CHAINLINK_ETH_USD_FEEDS,
+
+  ProductionDeploymentService,
+  createProductionDeployment,
+  createProductionDeploymentFromEnv,
+  NETWORKS,
+  FACTORY_ADDRESSES,
+  type NetworkName,
+  type ProductionDeploymentConfig,
+  type TokenDeployParams,
+  type DeploymentRecord,
+  type ContractVerificationResult,
+
+  GasEstimator,
+  type GasOperation,
+  type GasEstimate,
+  type GasEstimatorConfig,
+
+  OracleService,
+  createOracleService,
+  createDevelopmentOracleService,
+  OracleFailSafeMode,
+  OracleHealthStatus,
+  type OracleConfig,
+  type NAVData,
+  type PriceFeedData,
+  type OracleHealthReport,
+
+  ReconciliationService,
+  ReconciliationType,
+  ReconciliationStatus,
+  DiscrepancyType,
+  DiscrepancySeverity,
+  type Discrepancy,
+  type ReconciliationReport,
+  type ReconciliationConfig,
+  type IServerDataProvider,
+  type IChainDataProvider,
+  type IReconciliationAlertHandler,
+  ScheduledReconciliation,
+  type ScheduledReconciliationConfig,
+  MockServerDataProvider,
+  MockChainDataProvider,
+
+  OperationType,
+  ProposalStatus,
+  SignatureType,
+  type MultisigProposal,
+  type MultisigConfig,
+  type TimelockConfig,
+  MultisigWallet,
+  TimelockController,
+  type IGnosisSafeAdapter,
+  MockGnosisSafeAdapter,
+  type Signer as MultisigSigner,
+
+  // --- Contracts ---
   ERC20Adapter,
+  type ERC20AdapterConfig,
   ERC721Adapter,
+  type ERC721AdapterConfig,
   ERC1155Adapter,
-  ERC1410Adapter,
-  ERC4626Adapter,
+  type ERC1155AdapterConfig,
+  type TokenTypeInfo,
+  type TokenComplianceRules,
   SoulboundAdapter,
-} from './contracts/index.js';
+  type SoulboundAdapterConfig,
+  type SoulboundTokenData,
+  type ReputationTier,
+  DEFAULT_REPUTATION_TIERS,
+  createMockSoulboundAdapter,
+  ERC1410Adapter,
+  type ERC1410AdapterConfig,
+  type PartitionInfo,
+  type PartitionTransferResult,
+  type TransferCheckResult,
+  STANDARD_PARTITIONS,
+  ERC4626Adapter,
+  type ERC4626AdapterConfig,
+  type VaultState,
+  type DepositPreview,
+  type WithdrawPreview,
+  type VaultPosition,
 
-// Chainlink Plugins
-export { DataFeedPlugin } from './plugins/chainlink/DataFeedPlugin.js';
-export { ChainlinkAutomationPlugin, createAutomationPlugin } from './plugins/chainlink/AutomationPlugin.js';
-export { CCIPBridgePlugin } from './plugins/chainlink/CCIPBridgePlugin.js';
-export { ChainlinkFunctionsPlugin } from './plugins/chainlink/FunctionsPlugin.js';
-export { OracleMonitorPlugin } from './plugins/chainlink/OracleMonitorPlugin.js';
-export { OracleAggregator } from './plugins/chainlink/OracleAggregator.js';
-export { LinkManagerPlugin } from './plugins/chainlink/LinkManagerPlugin.js';
+  abis,
+  ComplianceTokenAbi,
+  IdentityRegistryAbi,
+  DividendDistributorAbi,
+  ModularComplianceAbi,
+  ClaimTopicsRegistryAbi,
+  TrustedIssuersRegistryAbi,
+  OracleRegistryAbi,
+  ChainlinkPriceFeedAbi,
+  TokenFactoryAbi,
+  type ContractName,
 
-// Chain Plugins
-export { EVMChainPlugin } from './plugins/chain/EVMChainPlugin.js';
-export { ChainRegistry } from './plugins/chain/ChainRegistry.js';
+  ComplianceTokenContract,
+  COMPLIANCE_TOKEN_ABI,
+  IDENTITY_REGISTRY_ABI,
 
-// Compliance Plugins (full server-side)
-export { KYCCompliancePlugin } from './plugins/compliance/KYCCompliancePlugin.js';
-export { MockCompliancePlugin } from './plugins/mocks/MockCompliancePlugin.js';
+  // --- Account Abstraction ---
+  type PackedUserOperation,
+  type UserOperation,
+  type UnsignedUserOperation,
+  type PartialUserOperation,
+  type UserOperationReceipt,
+  type UserOperationLog,
+  type UserOperationByHash,
+  type UserOperationGasEstimate,
+  type UserOperationCall,
+  type UserOperationCalls,
+  packAccountGasLimits,
+  unpackAccountGasLimits,
+  packGasFees,
+  unpackGasFees,
+  packInitCode,
+  unpackInitCode,
+  packPaymasterAndData,
+  packUserOperation,
+  unpackUserOperation,
+  type ISmartAccount,
+  type IMultiSigSmartAccount,
+  type ISessionKeyAccount,
+  type SmartAccountType,
+  type SmartAccountState,
+  type SmartAccountInfo,
+  type SmartAccountConfig,
+  type SessionKeyConfig,
+  type IBundler,
+  type BundlerStatus,
+  type BundlerConfig,
+  type BundlerChainConfig,
+  type BundlerGasPrices,
+  type SupportedEntryPoint,
+  type SendUserOperationOptions,
+  type IPaymaster,
+  type PaymasterType,
+  type PaymasterData,
+  type SponsorshipResult,
+  type TokenPaymasterQuote,
+  type VerifyingPaymasterConfig,
+  type TokenPaymasterConfig,
+  type SponsorPaymasterConfig,
+  type SponsorshipPolicy,
+  UserOperationBuilder,
+  createUserOperationBuilder,
+  type UserOperationBuilderConfig,
+  type ExecuteOptions,
+  SmartAccountFactory,
+  createSmartAccountFactory,
+  ENTRY_POINTS,
+  ACCOUNT_FACTORIES,
+  type SmartAccountFactoryConfig,
+  type CreateAccountParams,
+  AbstractBundler,
+  PimlicoBundler,
+  createPimlicoBundler,
+  type PimlicoConfig,
+  BiconomyBundler,
+  createBiconomyBundler,
+  type BiconomyConfig,
+  AlchemyBundler,
+  createAlchemyBundler,
+  type AlchemyConfig,
+  VerifyingPaymaster,
+  createVerifyingPaymaster,
+  SponsorPaymaster,
+  createSponsorPaymaster,
+  AAModule,
+  createAAModule,
+  type AAModuleConfig,
+  type CreateSmartAccountOptions,
 
-// Carbon Plugins
-export { CarbonOraclePlugin } from './plugins/carbon/CarbonOraclePlugin.js';
+  // --- Custody providers ---
+  MockCustodyProvider,
+  type MockCustodyProviderConfig,
+  type IMPCProvider,
+  type MPCKeyShare,
+  type MPCKeyGenParams,
+  type MPCSigningSession,
+  type MPCSigningSessionRequest,
+  type MPCSigningSessionStatus,
+  type MPCSigningParticipant,
+  type MPCProviderCapabilities,
+  type MPCProviderConfig,
+  type TypedData,
+  type TypedDataDomain,
+  type TypedDataType,
+  type TypedDataTypes,
+  MPCSigner,
+  createMPCSigner,
+  type MPCSignerConfig,
+  AbstractMPCProvider,
+  FireblocksCustodyProvider,
+  createFireblocksProvider,
+  type FireblocksConfig,
+  LitProtocolCustodyProvider,
+  createLitProtocolProvider,
+  type LitProtocolConfig,
+  Web3AuthCustodyProvider,
+  createWeb3AuthProvider,
+  type Web3AuthConfig,
 
-// Mock Providers (for testing)
-export * from './providers/index.js';
+  // --- ZKP ---
+  type ZKProofType,
+  type ZKProof,
+  type Groth16Proof,
+  type ZKPublicSignals,
+  type CircuitArtifacts,
+  type VerificationKey,
+  type ZKPPluginConfig,
+  type ProofInput,
+  type AgeProofInput,
+  type AccreditationProofInput,
+  type JurisdictionProofInput,
+  type KYCStatusProofInput,
+  type ZKClaim,
+  type ClaimsMerkleTree,
+  PROOF_TYPE_BYTES32,
+  ZKPPlugin,
+  createZKPPlugin,
+  CircuitManager,
+  createCircuitManager,
 
-// Extension Modules (full server-side)
+  // --- Connectors: Signing ---
+  type DocumentFormat,
+  type SignerRole,
+  type RecipientType,
+  type AuthMethod,
+  type SignatureTab,
+  type SignerWithTabs,
+  type SigningDocument,
+  type EnvelopeStatus,
+  type SignerStatus,
+  type SigningResult,
+  type SignedDocument,
+  type CompletionCertificate,
+  type SigningWebhookEvent,
+  type SigningWebhookPayload,
+  type SigningProvider,
+  SigningError,
+  DocuSignConnector,
+  type DocuSignConfig,
+  type DocuSignEnvironment,
+
+  // --- Connectors: Wallet Pass ---
+  type PassType,
+  type TransitType,
+  type BarcodeFormat,
+  type PassField,
+  type PassBarcode,
+  type PassLocation,
+  type PassBeacon,
+  type PassNFC,
+  type WalletPassData,
+  type AppleWalletConfig,
+  type GooglePayConfig,
+  type ApplePassResult,
+  type GooglePassResult,
+  type WalletPassProvider,
+  WalletPassError,
+  AppleWalletProvider,
+  GooglePayProvider,
+  type WalletPlatform,
+  createWalletPassProvider,
+  isWalletPlatformSupported,
+
+  // --- Factories ---
+  createChainlinkWiredSDK,
+  type ChainlinkWiringConfig,
+  type ChainlinkWiredSDK,
+
+  // --- Bridges ---
+  DataFeedBridge,
+  type DataFeedBridgeConfig,
+  AutomationLifecycleManager,
+  type AutomationLifecycleConfig,
+  FlightDataFunctionsBridge,
+} from '@tokenisation/chains';
+
+// Re-export realestate (explicit to avoid name collisions with core)
+// Colliding names kept from core: AssetPackConfig, CreateScheduleInput, DldEvent,
+// InvestorTier, RealEstateMetadata, RealEstateMetadataSchema, RedemptionRequest,
+// ValidationError.
+
 export {
-  RightTypeRegistry,
-  rightTypeRegistry,
-  StateMachine,
-  HookManager,
-  hookManager,
-  CashFlowEngine,
-  GovernanceEngine,
-  EscrowEngine,
-} from './SDK.js';
+  // --- Models ---
+  // RealEstateMetadataSchema — skipped (collides with core)
+  // RealEstateMetadata (type) — skipped (collides with core)
 
-// Ahoy Ecosystem (server-side)
-export * from './ahoy/index.js';
+  // --- Validation ---
+  // ValidationError — skipped (collides with core)
+  parseOrThrow,
+  createPropertyInputSchema,
+  type CreatePropertyInput,
+  updatePropertyInputSchema,
+  type UpdatePropertyInput,
+  propertyUnitInputSchema,
+  type PropertyUnitInput,
+  maintenanceRequestInputSchema,
+  type MaintenanceRequestInput,
+  expenseInputSchema,
+  type ExpenseInput,
+  navValuationInputSchema,
+  type NAVValuationInput,
+  createListingInputSchema,
+  type CreateListingInput,
+  assignTierInputSchema,
+  type AssignTierInput,
+  checkEligibilityInputSchema,
+  type CheckEligibilityInput,
+  createScheduleInputSchema,
+  redemptionRequestInputSchema,
+  type RedemptionRequestInput,
+  dldRegisterTitleInputSchema,
+  type DLDRegisterTitleInput,
+  dldIngestEventInputSchema,
+  type DLDIngestEventInput,
+  dldCreateSyncJobInputSchema,
+  type DLDCreateSyncJobInput,
 
-// HTTP Utilities
-export { HttpClient } from './utils/http.js';
+  // --- Packs: Lifecycle ---
+  RealEstateLifecycleStates,
+  type RealEstateLifecycleState,
+  REAL_ESTATE_LIFECYCLE,
+
+  // --- Packs: Real Estate Pack ---
+  type CreateRealEstatePackOptions,
+  dubaiRealEstatePack,
+  adgmRealEstatePack,
+  genericRealEstatePack,
+  createRealEstatePack,
+  baseLifecycleRules,
+  baseComplianceRules,
+  baseRequiredVerifications,
+  baseDistributionSchedule,
+  baseGovernanceSettings,
+  baseMetadataSchema,
+  baseDefaults,
+  dubaiLifecycleRules,
+  varaComplianceRules,
+  dldVerifications,
+  dubaiMetadataSchema,
+  adgmComplianceRules,
+  adgmVerifications,
+
+  // --- Packs: UAE Real Estate ---
+  type UAERealEstateConfig,
+  UAERealEstatePack,
+  createUAERealEstateToken,
+
+  // --- Packs: DLD Condition Evaluator ---
+  type DLDConditionEvaluatorConfig,
+  DLDConditionEvaluator,
+
+  // --- Packs: VARA Condition Evaluator ---
+  type VARAComplianceStatus,
+  type VARARiskCategory,
+  type VARAComplianceCheckResult,
+  type IVARAServiceProvider,
+  type VARAConditionEvaluatorConfig,
+  VARAConditionEvaluator,
+
+  // --- Modules: DLD Client ---
+  type TitleDeedStatus,
+  type PropertyType,
+  type OwnershipType,
+  type Owner,
+  type TitleDeed,
+  type TokenizationEligibility,
+  type TokenizationNotification,
+  type Valuation,
+  type PropertySummary,
+  DLDModule,
+
+  // --- Modules: Property ---
+  PropertyModule,
+  type PropertyModuleSummary,
+
+  // --- Modules: NAV ---
+  NAVModule,
+  type NAVRecord,
+  type ValuationSource,
+  type NAVWithSources,
+  type NAVHistoryResponse,
+  type ManualValuationInput,
+
+  // --- Modules: Investor Tier ---
+  InvestorTierModule,
+  type InvestorPlan,
+  type TierEligibilityResult,
+  type TierViolation,
+  type InvestorTierInfo,
+
+  // --- Modules: Exit Window ---
+  ExitWindowModule,
+  type ExitWindow,
+  type ExitWindowSchedule,
+
+  // --- Modules: Secondary Market ---
+  SecondaryMarketModule,
+  type SecondaryListing,
+  type PurchaseResult,
+  type SecondaryMarketCreateListingInput,
+
+  // --- Modules: Legal ---
+  LegalModule,
+  type ConfigureKYCInput,
+  type KYCConfiguration,
+  type VerificationSession,
+  type VerificationStatus,
+  type FreezeResult,
+  type UnfreezeResult,
+
+  // --- Providers: DLD ---
+  type IDLDProvider,
+  type DLDProviderConfig,
+  type DLDProviderFactory,
+  type DLDProviderTitleDeedResult,
+  type DLDProviderTokenizationEligibility,
+  type DLDProviderTokenizationNotification,
+  type TokenizationNotificationResult,
+  type ValuationResult,
+  type ValuationType,
+  type DLDProviderOwner,
+  type PropertyLocation,
+  type DLDProviderTitleDeedStatus,
+  type DLDProviderPropertyType,
+  type DLDProviderOwnershipType,
+  MockDLDProvider,
+  createMockDLDProvider,
+} from '@tokenisation/realestate';

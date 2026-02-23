@@ -11,15 +11,15 @@ import {
   SUPPORTED_CHAINS,
   CHAINLINK_ETH_USD_FEEDS,
   type DeploymentConfig,
-} from '../src/services/DeploymentService.js';
+} from '@tokenisation/chains';
 import {
   createIndexingService,
   type IndexingService,
-} from '../src/services/IndexingService.js';
+} from '@tokenisation/core';
 import {
   OracleService,
   createDevelopmentOracleService,
-} from '../src/services/OracleService.js';
+} from '@tokenisation/chains';
 
 describe('DeploymentService', () => {
   describe('Configuration', () => {

@@ -29,7 +29,7 @@ import {
   HotelEventType,
   type ActorContext,
   type HotelReservationMetadata,
-} from '../../src/packs/HotelReservation.js';
+} from '@tokenisation/core';
 
 describe('HotelReservationEngine', () => {
   let engine: HotelReservationEngine;

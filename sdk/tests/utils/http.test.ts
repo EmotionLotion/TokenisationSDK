@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { HttpClient, TokenizationError } from '../../src/utils/http.js';
+import { HttpClient, TokenizationError } from '@tokenisation/core';
 
 // ---------------------------------------------------------------------------
 // Helpers

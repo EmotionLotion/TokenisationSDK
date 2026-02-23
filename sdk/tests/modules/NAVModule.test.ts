@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NAVModule } from '../../src/modules/NAVModule.js';
-import { ValidationError } from '../../src/validation/real-estate.js';
+import { NAVModule, ValidationError } from '@tokenisation/realestate';
 
 // ---------------------------------------------------------------------------
 // Mock HttpClient

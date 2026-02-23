@@ -14,8 +14,8 @@ import {
   PartyRole,
   EvidenceType,
   EvidenceStatus,
-} from '../src/models/index.js';
-import { RightType, LifecycleState, TransferabilityMode } from '../src/core/index.js';
+} from '@tokenisation/core';
+import { RightType, LifecycleState, TransferabilityMode } from '@tokenisation/core';
 
 describe('Asset Model', () => {
   const testIssuerId = uuidv4();

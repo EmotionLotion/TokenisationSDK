@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PropertyModule } from '../../src/modules/PropertyModule.js';
-import { ValidationError } from '../../src/validation/real-estate.js';
+import { PropertyModule, ValidationError } from '@tokenisation/realestate';
 
 // ---------------------------------------------------------------------------
 // Mock HttpClient

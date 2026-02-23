@@ -21,7 +21,7 @@ import {
   RecoveryReason,
   IndexingEngine,
   IndexedEventType,
-} from '../../src/index.js';
+} from '@tokenisation/sdk';
 
 describe('E2E: Complete Asset Lifecycle', () => {
   let sdk: TokenisationSDK;

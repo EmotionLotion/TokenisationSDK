@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GovernanceModule } from '../../src/modules/GovernanceClient.js';
+import { GovernanceModule } from '@tokenisation/core';
 
 function createMockHttp() {
   return {
@@ -17,13 +17,13 @@ function createMockHttp() {
 }
 
 // Mock the validation module since GovernanceModule uses validate()
-vi.mock('../../src/modules/validation.js', () => ({
+vi.mock('../../../packages/core/src/modules/validation.js', () => ({
   validate: (_schema: any, data: any) => data,
   UUIDSchema: { parse: (v: string) => v },
   PaginationSchema: { parse: (v: any) => v },
 }));
 
-vi.mock('../../src/modules/validation-governance.js', () => ({
+vi.mock('../../../packages/core/src/modules/validation-governance.js', () => ({
   CreateProposalInputSchema: {},
   UpdateProposalInputSchema: {},
   CastVoteInputSchema: {},

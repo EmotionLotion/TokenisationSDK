@@ -16,12 +16,12 @@ import {
   TokenStandard,
   getAssetTypeDescription,
   getJurisdictionInfo,
-} from '../src/core/AssetAbstraction.js';
+} from '@tokenisation/core';
 import {
   AssetIssuanceService,
   AssetIssuanceError,
-} from '../src/services/AssetIssuanceService.js';
-import { RightType, TransferabilityMode } from '../src/core/types.js';
+} from '@tokenisation/core';
+import { RightType, TransferabilityMode } from '@tokenisation/core';
 
 describe('Asset Abstraction Layer', () => {
   describe('resolveTokenStandard', () => {

@@ -6,8 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { InvestorTierModule } from '../../src/modules/InvestorTierModule.js';
-import { ValidationError } from '../../src/validation/real-estate.js';
+import { InvestorTierModule, ValidationError } from '@tokenisation/realestate';
 
 // ---------------------------------------------------------------------------
 // Mock HttpClient

@@ -6,8 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ExitWindowModule } from '../../src/modules/ExitWindowModule.js';
-import { ValidationError } from '../../src/validation/real-estate.js';
+import { ExitWindowModule, ValidationError } from '@tokenisation/realestate';
 
 function createMockHttp() {
   return {

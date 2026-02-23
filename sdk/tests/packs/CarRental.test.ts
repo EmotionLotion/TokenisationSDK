@@ -30,7 +30,7 @@ import {
   CarRentalEventType,
   type ActorContext,
   type CarRentalMetadata,
-} from '../../src/packs/CarRental.js';
+} from '@tokenisation/core';
 
 describe('CarRentalEngine', () => {
   let engine: CarRentalEngine;

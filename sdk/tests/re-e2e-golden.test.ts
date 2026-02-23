@@ -30,13 +30,13 @@ import {
   EventType,
   ComplianceAction,
   type RightModel,
-} from '../src/core/types.js';
-import { ComplianceEngine, type ComplianceEngineConfig } from '../src/core/ComplianceEngine.js';
-import { LifecycleEngine } from '../src/core/LifecycleEngine.js';
-import { EventStore } from '../src/core/EventStore.js';
-import { receiptChain } from '../src/core/DecisionReceipt.js';
-import type { ICompliancePlugin, PartyComplianceStatus } from '../src/core/interfaces.js';
-import { AssetType, InvestorClass } from '../src/core/AssetAbstraction.js';
+} from '@tokenisation/core';
+import { ComplianceEngine, type ComplianceEngineConfig } from '@tokenisation/core';
+import { LifecycleEngine } from '@tokenisation/core';
+import { EventStore } from '@tokenisation/core';
+import { receiptChain } from '@tokenisation/core';
+import type { ICompliancePlugin, PartyComplianceStatus } from '@tokenisation/core';
+import { AssetType, InvestorClass } from '@tokenisation/core';
 
 // Modules
 import {
@@ -45,12 +45,12 @@ import {
   DistributionFrequency,
   AllocationStrategy,
   type HolderSnapshot,
-} from '../src/modules/CashFlow.js';
+} from '@tokenisation/core';
 import {
   RedemptionEngine,
   RedemptionType,
   RedemptionStatus,
-} from '../src/modules/Redemption.js';
+} from '@tokenisation/core';
 
 // Models
 import {
@@ -61,7 +61,7 @@ import {
   PartyType,
   VerificationLevel,
   AccreditationStatus,
-} from '../src/models/Party.js';
+} from '@tokenisation/core';
 
 // ============================================================================
 // TEST CONFIGURATION

@@ -17,14 +17,14 @@ import {
   SagaOrchestrator,
   SagaExecutionStatus,
   UnifiedAuditLog,
-} from '../../src/orchestration/index.js';
+} from '@tokenisation/core';
 import type {
   IIdentityRegistry,
   ICrossPackEventBus,
   IAuditLog,
   CrossPackEvent,
   SagaDefinition,
-} from '../../src/orchestration/index.js';
+} from '@tokenisation/core';
 
 // Pack engines
 import {
@@ -32,32 +32,32 @@ import {
   TicketClass,
   TicketStatus,
   AirlineRole,
-} from '../../src/packs/AirlineTicket.js';
-import type { ActorContext as AirlineActorContext } from '../../src/packs/AirlineTicket.js';
+  type ActorContext as AirlineActorContext,
+} from '@tokenisation/core';
 
 import {
   HotelReservationEngine,
   RoomType,
   HotelReservationStatus,
   HotelRole,
-} from '../../src/packs/HotelReservation.js';
-import type { ActorContext as HotelActorContext } from '../../src/packs/HotelReservation.js';
+  type ActorContext as HotelActorContext,
+} from '@tokenisation/core';
 
 import {
   CarRentalEngine,
   VehicleCategory,
   CarRentalStatus,
   RentalRole,
-} from '../../src/packs/CarRental.js';
-import type { ActorContext as CarActorContext } from '../../src/packs/CarRental.js';
+  type ActorContext as CarActorContext,
+} from '@tokenisation/core';
 
 import {
   ConcertTicketEngine,
   SeatingTier,
   ConcertTicketStatus,
   VenueRole,
-} from '../../src/packs/ConcertTicket.js';
-import type { ActorContext as ConcertActorContext } from '../../src/packs/ConcertTicket.js';
+  type ActorContext as ConcertActorContext,
+} from '@tokenisation/core';
 
 // ============================================================================
 // HELPERS
