@@ -4,7 +4,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)
 ![Solidity](https://img.shields.io/badge/Solidity-0.8.22-363636.svg)
 ![ERC-3643](https://img.shields.io/badge/ERC--3643-Compliant-green.svg)
 
@@ -48,8 +48,8 @@ git clone https://github.com/EmotionLotion/TokenisationSDK.git
 cd TokenisationSDK
 pnpm install
 
-# Build the SDK
-pnpm --filter @tokenisation/sdk build
+# Build all packages (topological order: core → compliance → chains → realestate → sdk)
+pnpm -r run build
 
 # Start the API server (SQLite — zero config)
 cp server/.env.example server/.env
@@ -76,6 +76,27 @@ curl -X POST http://localhost:3001/api/v1/assets \
   -H "Content-Type: application/json" \
   -H "X-Dev-Org-Id: dev-org-1" \
   -d '{"name": "Test Asset", "rightType": "OWNERSHIP", "jurisdiction": {"countryCode": "US"}}'
+```
+
+---
+
+## Packages
+
+The SDK is split into 4 layered packages. Use only what you need:
+
+| Package | Description | Use When |
+|---------|-------------|----------|
+| **`@tokenisation/core`** | Asset-class-agnostic foundation — lifecycle engine, asset packs, API client, plugins, offline support | Building any tokenized asset (airline tickets, loyalty points, etc.) |
+| **`@tokenisation/compliance`** | KYC/AML, identity claims, jurisdiction enforcement, policy registry | You need compliance workflows (Sumsub KYC, OFAC screening) |
+| **`@tokenisation/chains`** | EVM chain plugins, Chainlink oracles, smart contracts, account abstraction, ZKP, custody | You need on-chain deployment, oracle feeds, or MPC custody |
+| **`@tokenisation/realestate`** | UAE real estate packs (Dubai, ADGM), DLD integration, NAV, investor tiers | Building a real estate tokenization platform |
+| **`@tokenisation/sdk`** | Umbrella — re-exports all 4 packages | You want everything (backward-compatible) |
+
+```bash
+# Install only what you need
+pnpm add @tokenisation/core                    # Minimal — any asset class
+pnpm add @tokenisation/core @tokenisation/compliance   # + KYC/AML
+pnpm add @tokenisation/sdk                     # Everything
 ```
 
 ---
@@ -145,25 +166,54 @@ Pre-built asset packs with lifecycle state machines, compliance rules, and UI co
 
 ## Architecture
 
+### Package Hierarchy
+
+```
+@tokenisation/core           (0 workspace deps — foundation)
+    ├──────────┐
+    v           v
+@compliance   @chains        (each depends only on @core)
+    ├──────────┘
+    v
+@realestate                  (depends on @core + @compliance)
+    |
+    v
+@tokenisation/sdk            (umbrella — re-exports all 4)
+```
+
+Partners building non-real-estate apps (airline tickets, loyalty points, etc.) can import **only `@tokenisation/core`** without pulling in real estate, compliance providers, or blockchain dependencies.
+
+### System Overview
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Applications                              │
+│                     Applications                             │
 │   UI Dashboard  │  CLI  │  Server (Express)  │  Examples     │
 └───────────────┼───────┼────────────────────┼────────────────┘
                 │       │                    │
 ┌───────────────▼───────▼────────────────────▼────────────────┐
-│                      SDK Core                                │
+│              @tokenisation/sdk (umbrella)                     │
 │                                                              │
-│  ApiClient ─── Projects │ Assets │ Investors │ Tokens        │
-│                Transfers │ Compliance │ Webhooks │ Governance │
-│                Escrow │ CashFlow │ Audit │ Events │ Tickets  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  @tokenisation/core                                    │  │
+│  │  ApiClient, LifecycleEngine, PolicyEvaluator,          │  │
+│  │  StateMachine, 13 Asset Packs, CashFlow, Governance,   │  │
+│  │  Escrow, Modules, Plugins, Offline, Orchestration      │  │
+│  └────────────────────────────────────────────────────────┘  │
 │                                                              │
-│  Token Adapters ── ERC-3643 │ ERC-20 │ ERC-721 │ ERC-1155   │
+│  ┌──────────────────────┐  ┌─────────────────────────────┐  │
+│  │  @tokenisation/      │  │  @tokenisation/chains       │  │
+│  │    compliance        │  │  EVMChainPlugin, Chainlink,  │  │
+│  │  KYC, AML, Claims,   │  │  Contracts, AA, ZKP,        │  │
+│  │  Jurisdiction,       │  │  Deployment, Custody,        │  │
+│  │  PolicyRegistry      │  │  MultisigGovernance          │  │
+│  └──────────────────────┘  └─────────────────────────────┘  │
 │                                                              │
-│  Plugins ── MetaMask │ WalletConnect │ Chainlink │ SIWE      │
-│             S3/IPFS │ Oracle Aggregator │ CCIP Bridge        │
-│                                                              │
-│  Asset Packs ── 13 vertical templates with state machines    │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  @tokenisation/realestate                              │  │
+│  │  UAE Packs (Dubai, ADGM), DLD Client, NAV Module,      │  │
+│  │  InvestorTier, ExitWindow, SecondaryMarket, Legal       │  │
+│  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
@@ -256,35 +306,47 @@ See [`server/README.md`](server/README.md) for the full endpoint catalog.
 
 ```
 TokenisationSDK/
-├── sdk/                          # TypeScript SDK (@tokenisation/sdk)
-│   ├── src/
-│   │   ├── ApiClient.ts          # Stripe-like API client
-│   │   ├── modules/              # 27 API modules
-│   │   ├── plugins/              # Wallet, oracle, storage, Chainlink plugins
-│   │   ├── contracts/adapters/   # Token standard adapters
-│   │   ├── packs/                # 13 pre-built asset templates
-│   │   ├── components/           # Pre-built React components + verticals
-│   │   └── core/                 # Lifecycle engine, event store
-│   └── tests/
-├── sdk-react/                   # React SDK (@tokenisation/sdk-react)
-├── sdk-react-native/            # React Native SDK (@tokenisation/sdk-react-native)
-├── server/                       # Express API Server
-│   ├── src/routes/               # 50 route files
-│   ├── src/services/             # 30+ service modules
-│   ├── src/middleware/           # Auth, rate limiting, idempotency
-│   └── src/db/                   # Drizzle ORM (PostgreSQL + SQLite)
-├── contracts/                    # Solidity Smart Contracts (Foundry)
-│   └── src/                     # 46 contracts: tokens, compliance, governance, oracles
-├── ui/                           # Admin Dashboard (Vite + React + Tailwind)
-├── ui-kit/                       # Shared UI component library (50+ components)
-├── packages/
-│   ├── create-tokenised-asset/   # Project scaffolding CLI
-│   └── conformance-suite/        # Integration tests
-├── examples/                     # Demo applications
+├── packages/                        # Layered SDK packages
+│   ├── core/                        # @tokenisation/core — asset-class-agnostic foundation
+│   │   └── src/                     #   LifecycleEngine, ApiClient, StateMachine, Asset Packs,
+│   │                                #   CashFlow, Governance, Escrow, Plugins, Offline, etc.
+│   ├── compliance/                  # @tokenisation/compliance — KYC/AML, identity claims
+│   │   └── src/                     #   ComplianceService, KYC plugins, Jurisdiction, Claims
+│   ├── chains/                      # @tokenisation/chains — blockchain interaction
+│   │   └── src/                     #   EVMChainPlugin, Chainlink, Contracts, AA, ZKP,
+│   │                                #   Deployment, Custody, MultisigGovernance
+│   ├── realestate/                  # @tokenisation/realestate — UAE real estate vertical
+│   │   └── src/                     #   DLD Client, NAV, InvestorTier, ExitWindow,
+│   │                                #   SecondaryMarket, Legal, UAE/ADGM/Dubai Packs
+│   ├── create-tokenised-asset/      # Project scaffolding CLI (npx create-tokenised-asset)
+│   └── conformance-suite/           # Integration / conformance tests
+│
+├── sdk/                             # @tokenisation/sdk — umbrella (re-exports all 4 packages)
+│   ├── src/                         #   index.ts, client.ts, server.ts (thin re-exports)
+│   └── tests/                       #   1126 unit tests
+├── sdk-react/                       # @tokenisation/sdk-react — React bindings
+├── sdk-react-native/                # @tokenisation/sdk-react-native — React Native
+│
+├── server/                          # Express API Server
+│   ├── src/routes/                  #   50+ route files
+│   ├── src/services/                #   30+ service modules
+│   ├── src/middleware/              #   Auth, rate limiting, idempotency
+│   └── src/db/                      #   Drizzle ORM (PostgreSQL + SQLite)
+├── contracts/                       # Solidity Smart Contracts (Foundry)
+│   └── src/                         #   46 contracts: tokens, compliance, governance, oracles
+│
+├── apps/                            # Full applications
+│   └── real-estate/                 #   Reference real estate tokenization app
+├── ui/                              # Admin Dashboard (Vite + React + Tailwind)
+├── ui-kit/                          # Shared UI component library (50+ components)
+├── website/                         # Marketing / docs site
+│
+├── examples/                        # Demo applications
 │   ├── real-estate-demo/
 │   ├── chainlink-starter/
 │   └── showcase/
-└── deploy/                       # Kubernetes, Terraform, Helm
+├── docs/                            # Architecture docs, guides, recipes
+└── deploy/                          # Kubernetes, Terraform, Helm
 ```
 
 ---
@@ -292,8 +354,11 @@ TokenisationSDK/
 ## Testing
 
 ```bash
-# SDK unit tests
+# SDK unit tests (1126 tests)
 pnpm --filter @tokenisation/sdk test
+
+# Typecheck all packages
+pnpm -r run typecheck
 
 # Smart contract tests (108 tests across 5 suites)
 cd contracts && forge test
