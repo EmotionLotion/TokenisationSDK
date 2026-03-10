@@ -5,31 +5,71 @@ title: Architecture Overview
 
 # Architecture Overview
 
-The AHOY Tokenisation Platform is a monorepo that provides end-to-end infrastructure for tokenising real-world assets. This document describes the high-level architecture, package structure, server internals, and multi-chain deployment model.
+The Tokenisation SDK is a monorepo that provides end-to-end infrastructure for tokenising real-world assets. Designed like Stripe or Google Cloud client libraries — a thin, generic core with opt-in vertical packages.
 
 ## Monorepo Structure
 
-The platform is organised as a pnpm workspace with the following top-level packages:
+The platform is organised as a pnpm workspace. The SDK is split into layered packages with a clear dependency hierarchy:
 
 ```
 tokenisation-sdk/
-  server/           @tokenisation/server     Express API server
-  sdk/              @tokenisation/sdk        TypeScript SDK (Stripe-like client)
-  sdk-react/        @tokenisation/sdk-react  React hooks and context providers
-  sdk-react-native/ @tokenisation/sdk-react-native  React Native bindings
-  ui-kit/           @tokenisation/ui-kit     Drop-in React components
-  ui/               Dashboard application
-  contracts/        Solidity smart contracts (Foundry)
   packages/
-    conformance-suite/   Protocol conformance tests
+    core/               @tokenisation/core              Foundation (engines, errors, API client, plugins)
+    compliance/         @tokenisation/compliance         KYC/AML, identity claims, jurisdiction enforcement
+    chains/             @tokenisation/chains             Blockchain, contracts, Chainlink, AA, ZKP, custody
+    realestate/         @tokenisation/realestate         Real estate vertical (DLD, VARA, NAV, property mgmt)
+    compute/            @tokenisation/compute            GPU compute vertical (nodes, clusters, benchmarks)
+    pack-travel/        @tokenisation/pack-travel        Travel vertical (airline, hotel, car rental, concert)
+    pack-loyalty/       @tokenisation/pack-loyalty       Loyalty vertical (Ahoy ecosystem, behavior scores)
+    pack-securities/    @tokenisation/pack-securities    Securities vertical (US Reg D)
+    pack-supply-chain/  @tokenisation/pack-supply-chain  Supply chain (warehouse receipts, physical assets)
+    conformance-suite/     Protocol conformance tests
     create-tokenised-asset/  CLI scaffolding tool
-    sdk-playground/      Interactive SDK explorer
-  website/          Documentation site (Docusaurus)
-  e2e/              End-to-end Playwright tests
-  docker/           Docker configuration
-  policies/         YAML/JSON compliance policy definitions
-  scripts/          Build and deployment scripts
+    sdk-playground/        Interactive SDK explorer
+  sdk/                @tokenisation/sdk              Umbrella re-export of all packages
+  server/             @tokenisation/server           Express API server (dynamic vertical loading)
+  sdk-react/          @tokenisation/sdk-react        React hooks and context providers
+  sdk-react-native/   @tokenisation/sdk-react-native React Native bindings
+  ui-kit/             @tokenisation/ui-kit           Drop-in React components
+  ui/                 Dashboard application
+  contracts/          Solidity smart contracts (Foundry)
+  website/            Documentation site (Docusaurus)
+  e2e/                End-to-end Playwright tests
+  docker/             Docker configuration
+  policies/           YAML/JSON compliance policy definitions
+  scripts/            Build and deployment scripts
 ```
+
+### Package Dependency Graph
+
+```
+@tokenisation/core                    ← Foundation (zero domain logic)
+    ↑              ↑
+@tokenisation/compliance  @tokenisation/chains   ← Independent domain layers
+    ↑              ↑
+┌───────────────────────────────────┐
+│  Vertical Packages (opt-in)      │
+│  @tokenisation/realestate        │
+│  @tokenisation/compute           │
+│  @tokenisation/pack-travel       │
+│  @tokenisation/pack-loyalty      │
+│  @tokenisation/pack-securities   │
+│  @tokenisation/pack-supply-chain │
+└───────────────────────────────────┘
+    ↑
+@tokenisation/sdk                     ← Umbrella (unchanged public API)
+```
+
+Build order: `core` → `compliance` | `chains` (parallel) → verticals (parallel) → `sdk`
+
+### Adding a New Vertical
+
+1. Create `packages/pack-<name>/` with `package.json`, `tsconfig.json`, `src/index.ts`
+2. Depend only on `@tokenisation/core` (and optionally `compliance`/`chains`)
+3. Export a `PackManifest` from `src/manifest.ts`
+4. Register packs, workflows, and policies via `PackActivationContext`
+5. Add server routes via the `ServerPlugin` interface
+6. No changes to core required
 
 ## Server Architecture
 
@@ -113,7 +153,7 @@ The server integrates with OpenTelemetry for:
 
 ## SDK Architecture
 
-The TypeScript SDK (`@tokenisation/sdk`) provides two interfaces:
+The TypeScript SDK is split into four packages (`@tokenisation/core`, `@tokenisation/compliance`, `@tokenisation/chains`, `@tokenisation/realestate`) with `@tokenisation/sdk` as the umbrella re-export. It provides two interfaces:
 
 ### ApiClient (Stripe-like)
 
@@ -139,19 +179,17 @@ const asset = await sdk.assets.create({ ... });
 await sdk.tokens.mint(asset.id, recipientAddress, amount);
 ```
 
-### SDK Sub-packages
+### SDK Packages
 
-The SDK exposes multiple entry points for tree-shaking:
+The SDK is organised into four independently installable packages:
 
-- `@tokenisation/sdk` -- Full SDK (server and client)
-- `@tokenisation/sdk/client` -- Browser-safe exports only
-- `@tokenisation/sdk/server` -- Server-only exports (secrets, admin API)
-- `@tokenisation/sdk/core` -- Lifecycle engine, compliance engine, state machine
-- `@tokenisation/sdk/models` -- Domain models and types
-- `@tokenisation/sdk/plugins` -- Jurisdiction, KYC, and storage plugins
-- `@tokenisation/sdk/contracts` -- Contract ABIs and interaction helpers
-- `@tokenisation/sdk/packs` -- Pre-built asset packs (real estate, airline tickets, hotels, etc.)
-- `@tokenisation/sdk/errors` -- Typed error classes
+| Package | Install | What's Inside |
+|---------|---------|--------------|
+| `@tokenisation/core` | `pnpm add @tokenisation/core` | Engines, API client, errors (51 codes), types, plugins, providers, state machines, pagination, validation, offline, orchestration |
+| `@tokenisation/compliance` | `pnpm add @tokenisation/compliance` | ComplianceService, JurisdictionPlugin, KYC plugins/providers (Sumsub, Mock), identity claims, policy registry |
+| `@tokenisation/chains` | `pnpm add @tokenisation/chains` | EVM chain plugins, contract adapters (ERC-20/721/1155/1410/4626/SBT), Chainlink (11 plugins), deployment/gas/oracle services, ERC-4337 AA, MPC custody, ZKP |
+| `@tokenisation/realestate` | `pnpm add @tokenisation/realestate` | 11-state lifecycle, DLD/VARA condition evaluators, Dubai/ADGM/Generic packs, property/NAV/secondary market modules, 14 Zod schemas |
+| `@tokenisation/sdk` | `pnpm add @tokenisation/sdk` | Umbrella — re-exports everything from the four packages above (backward-compatible) |
 
 ## React SDK
 

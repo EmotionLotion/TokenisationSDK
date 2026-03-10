@@ -177,7 +177,13 @@ export {
 } from './components/SeatSelectionMap.js';
 
 // ============================================================================
+// UI Kit
+// ============================================================================
+
+// export * from './ui-kit/index.js'; // excluded: requires lucide-react
+
+// ============================================================================
 // React Hooks
 // ============================================================================
 
-export * from './hooks/index.js';
+// export * from './hooks/index.js'; // excluded: requires @tokenisation/sdk-react

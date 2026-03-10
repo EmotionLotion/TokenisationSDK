@@ -49,5 +49,9 @@ export * from './providers/dld/index.js';
 // Components
 export * from './components/index.js';
 
-// React Hooks
-export * from './hooks/index.js';
+// UI Kit — excluded from main build (requires lucide-react)
+// export * from './ui-kit/index.js';
+
+// React Hooks — excluded from main build (requires @tokenisation/sdk-react)
+// Import directly from '@tokenisation/realestate/hooks' if needed
+// export * from './hooks/index.js';
