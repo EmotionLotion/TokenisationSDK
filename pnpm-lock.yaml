@@ -126,6 +126,28 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
+  packages/compute:
+    dependencies:
+      '@tokenisation/compliance':
+        specifier: workspace:*
+        version: link:../compliance
+      '@tokenisation/core':
+        specifier: workspace:*
+        version: link:../core
+      uuid:
+        specifier: ^9
+        version: 9.0.1
+      zod:
+        specifier: ^3.22.4
+        version: 3.25.76
+    devDependencies:
+      '@types/uuid':
+        specifier: ^9
+        version: 9.0.8
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
   packages/conformance-suite:
     dependencies:
       '@tokenisation/sdk':
@@ -301,6 +323,9 @@ importers:
       '@tokenisation/compliance':
         specifier: workspace:*
         version: link:../packages/compliance
+      '@tokenisation/compute':
+        specifier: workspace:*
+        version: link:../packages/compute
       '@tokenisation/core':
         specifier: workspace:*
         version: link:../packages/core
@@ -22114,6 +22139,7 @@ snapshots:
     dependencies:
       '@tokenisation/chains': link:packages/chains
       '@tokenisation/compliance': link:packages/compliance
+      '@tokenisation/compute': link:packages/compute
       '@tokenisation/core': link:packages/core
       '@tokenisation/realestate': link:packages/realestate
       commander: 11.1.0
@@ -22138,6 +22164,7 @@ snapshots:
     dependencies:
       '@tokenisation/chains': link:packages/chains
       '@tokenisation/compliance': link:packages/compliance
+      '@tokenisation/compute': link:packages/compute
       '@tokenisation/core': link:packages/core
       '@tokenisation/realestate': link:packages/realestate
       commander: 11.1.0

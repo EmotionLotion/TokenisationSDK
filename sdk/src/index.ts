@@ -718,3 +718,118 @@ export {
   MockDLDProvider,
   createMockDLDProvider,
 } from '@tokenisation/realestate';
+
+// ─── @tokenisation/compute ──────────────────────────────────────────────────
+// GPU compute infrastructure: nodes, clusters, benchmarks, utilization, revenue.
+
+export {
+  // --- Models ---
+  ComputeMetadataSchema,
+  type ComputeMetadata,
+  GPUModelEnum,
+  type GPUModel,
+  InterconnectEnum,
+  type Interconnect,
+  DatacenterTierEnum,
+  type DatacenterTier,
+
+  // --- Validation ---
+  // ValidationError — skipped (collides with core + realestate)
+  // parseOrThrow — skipped (collides with realestate)
+  registerNodeInputSchema,
+  type RegisterNodeInput,
+  updateNodeInputSchema,
+  type UpdateNodeInput,
+  createClusterInputSchema,
+  type CreateClusterInput,
+  updateClusterInputSchema,
+  type UpdateClusterInput,
+  submitBenchmarkInputSchema,
+  type SubmitBenchmarkInput,
+  reportUtilizationInputSchema,
+  type ReportUtilizationInput,
+  recordRevenueInputSchema,
+  type RecordRevenueInput,
+  distributionRequestInputSchema,
+  type DistributionRequestInput,
+  createComputeListingInputSchema,
+  type CreateComputeListingInput,
+
+  // --- Packs: Lifecycle ---
+  ComputeLifecycleStates,
+  type ComputeLifecycleState,
+  COMPUTE_LIFECYCLE,
+  mapCoreStateToCompute,
+  mapComputeToCoreState,
+  registerComputeLifecycle,
+
+  // --- Packs: Compute Pack ---
+  type ComputePackConfig,
+  type CreateComputePackOptions,
+  gpuComputePack,
+  enterpriseComputePack,
+  consumerComputePack,
+  createComputePack,
+  // Base configs exported with compute prefix to avoid collision with realestate bases
+  baseLifecycleRules as computeBaseLifecycleRules,
+  baseComplianceRules as computeBaseComplianceRules,
+  baseRequiredVerifications as computeBaseRequiredVerifications,
+  baseDistributionSchedule as computeBaseDistributionSchedule,
+  baseGovernanceSettings as computeBaseGovernanceSettings,
+  baseMetadataSchema as computeBaseMetadataSchema,
+  baseDefaults as computeBaseDefaults,
+  computeSpecificRules,
+  enterpriseComplianceRules as computeEnterpriseComplianceRules,
+  enterpriseVerifications as computeEnterpriseVerifications,
+  enterpriseMetadataSchema as computeEnterpriseMetadataSchema,
+  consumerComplianceRules as computeConsumerComplianceRules,
+  consumerMetadataSchema as computeConsumerMetadataSchema,
+
+  // --- Packs: Hardware Condition Evaluator ---
+  type HardwareConditionEvaluatorConfig,
+  HardwareConditionEvaluator,
+
+  // --- Modules: GPU Node ---
+  GPUNodeModule,
+  type GPUNode,
+  type NodeStatus,
+  type NodeHealthCheck,
+  type NodeSummary,
+
+  // --- Modules: Cluster ---
+  ClusterModule,
+  type GPUCluster,
+  type ClusterPerformance,
+
+  // --- Modules: Benchmark ---
+  BenchmarkModule,
+  type BenchmarkSuite,
+  type BenchmarkStatus,
+  type BenchmarkResult,
+  type BenchmarkComparison,
+
+  // --- Modules: Utilization ---
+  UtilizationModule,
+  type UtilizationSnapshot,
+  type UtilizationSummary,
+  type FleetUtilization,
+
+  // --- Modules: Revenue ---
+  RevenueModule,
+  type RevenueSource,
+  type RevenueRecord,
+  type RevenueSummary,
+  type Distribution,
+
+  // --- Modules: Secondary Market ---
+  ComputeSecondaryMarketModule,
+  type ComputeListing,
+  type ComputePurchaseResult,
+
+  // --- Providers: Benchmark ---
+  type IBenchmarkProvider,
+  type BenchmarkProviderConfig,
+  type BenchmarkVerificationRequest,
+  type BenchmarkVerificationResult,
+  MockBenchmarkProvider,
+} from '@tokenisation/compute';
