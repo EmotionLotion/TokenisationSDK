@@ -7,7 +7,8 @@
     "demo": "npx tsx src/index.ts",
     "demo:realestate": "npx tsx src/real-estate.ts",
     "demo:carbon": "npx tsx src/carbon-credits.ts",
-    "demo:loyalty": "npx tsx src/loyalty-points.ts"
+    "demo:loyalty": "npx tsx src/loyalty-points.ts",
+    "demo:api": "npx tsx src/api-demo.ts"
   },
   "dependencies": {
     "@tokenisation/sdk": "file:../../sdk"

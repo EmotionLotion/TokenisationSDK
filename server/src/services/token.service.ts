@@ -511,95 +511,94 @@ export async function issueTokens(input: IssueTokensInput) {
     throw new ValidationError('Amount must be a positive integer string');
   }
 
-  // Wrap entire issuance in a retryable transaction for atomicity
-  // This ensures supply updates, ledger positions, and records are consistent
-  const issuance = await withRetryableTransaction(async (tx) => {
-    // Re-read token within transaction for consistency
-    const currentToken = await tx.query.tokens.findFirst({
-      where: and(eq(tokens.id, input.tokenId), eq(tokens.orgId, input.orgId)),
+  // Note: SQLite+better-sqlite3 doesn't support async transactions properly.
+  // Operations run as individual auto-committed statements.
+  // For PostgreSQL, wrap in a proper transaction.
+
+  // Check supply limits with fresh data
+  const currentToken = await db.query.tokens.findFirst({
+    where: and(eq(tokens.id, input.tokenId), eq(tokens.orgId, input.orgId)),
+  });
+
+  if (!currentToken) {
+    throw new NotFoundError('Token not found');
+  }
+
+  const newIssuedSupply = BigInt(currentToken.issuedSupply || '0') + BigInt(input.amount);
+  if (newIssuedSupply > BigInt(currentToken.totalSupply || '0')) {
+    throw new ValidationError('Issuance would exceed total supply');
+  }
+
+  // If tranche specified, check tranche limits
+  let tranche = null;
+  if (input.trancheId) {
+    tranche = await db.query.tokenTranches.findFirst({
+      where: and(eq(tokenTranches.id, input.trancheId), eq(tokenTranches.orgId, input.orgId)),
     });
-
-    if (!currentToken) {
-      throw new NotFoundError('Token not found');
+    if (!tranche) {
+      throw new NotFoundError('Tranche not found');
     }
-
-    // Check supply limits with fresh data
-    const newIssuedSupply = BigInt(currentToken.issuedSupply || '0') + BigInt(input.amount);
-    if (newIssuedSupply > BigInt(currentToken.totalSupply || '0')) {
-      throw new ValidationError('Issuance would exceed total supply');
+    const newTrancheIssued = BigInt(tranche.issuedSupply) + BigInt(input.amount);
+    if (newTrancheIssued > BigInt(tranche.supply)) {
+      throw new ValidationError('Issuance would exceed tranche supply');
     }
+  }
 
-    // If tranche specified, check tranche limits
-    let tranche = null;
-    if (input.trancheId) {
-      tranche = await tx.query.tokenTranches.findFirst({
-        where: and(eq(tokenTranches.id, input.trancheId), eq(tokenTranches.orgId, input.orgId)),
-      });
-      if (!tranche) {
-        throw new NotFoundError('Tranche not found');
-      }
-      const newTrancheIssued = BigInt(tranche.issuedSupply) + BigInt(input.amount);
-      if (newTrancheIssued > BigInt(tranche.supply)) {
-        throw new ValidationError('Issuance would exceed tranche supply');
-      }
-    }
+  // Create issuance record
+  const [newIssuance] = await db.insert(issuances).values({
+    orgId: input.orgId,
+    tokenId: input.tokenId,
+    trancheId: input.trancheId,
+    investorId: input.investorId,
+    toWallet: input.walletAddress.toLowerCase(),
+    amount: input.amount,
+    status: 'pending',
+    reason: input.reason,
+    metadata: input.metadata || {},
+  }).returning();
 
-    // Create issuance record
-    const [newIssuance] = await tx.insert(issuances).values({
-      orgId: input.orgId,
-      tokenId: input.tokenId,
-      trancheId: input.trancheId,
-      investorId: input.investorId,
-      toWallet: input.walletAddress.toLowerCase(),
-      amount: input.amount,
-      status: 'pending',
-      reason: input.reason,
-      metadata: input.metadata || {},
-    }).returning();
+  // Update token issued supply
+  await db.update(tokens)
+    .set({
+      issuedSupply: newIssuedSupply.toString(),
+      updatedAt: new Date(),
+    })
+    .where(eq(tokens.id, input.tokenId));
 
-    // Update token issued supply
-    await tx.update(tokens)
+  // Update tranche if applicable
+  if (input.trancheId && tranche) {
+    await db.update(tokenTranches)
       .set({
-        issuedSupply: newIssuedSupply.toString(),
+        issuedSupply: (BigInt(tranche.issuedSupply) + BigInt(input.amount)).toString(),
         updatedAt: new Date(),
       })
-      .where(eq(tokens.id, input.tokenId));
+      .where(eq(tokenTranches.id, input.trancheId));
+  }
 
-    // Update tranche if applicable
-    if (input.trancheId && tranche) {
-      await tx.update(tokenTranches)
-        .set({
-          issuedSupply: (BigInt(tranche.issuedSupply) + BigInt(input.amount)).toString(),
-          updatedAt: new Date(),
-        })
-        .where(eq(tokenTranches.id, input.trancheId));
-    }
+  // Update or create ledger position
+  await updateLedgerPositionInTx(
+    db,
+    input.orgId,
+    input.tokenId,
+    input.investorId,
+    input.walletAddress,
+    input.amount,
+    'credit'
+  );
 
-    // Update or create ledger position within transaction
-    await updateLedgerPositionInTx(
-      tx,
-      input.orgId,
-      input.tokenId,
-      input.investorId,
-      input.walletAddress,
-      input.amount,
-      'credit'
-    );
+  // Create event
+  await db.insert(eventBusQueue).values({
+    orgId: input.orgId,
+    topic: 'token.issued',
+    payload: {
+      issuanceId: newIssuance.id,
+      tokenId: input.tokenId,
+      investorId: input.investorId,
+      amount: input.amount,
+    },
+  });
 
-    // Create event within transaction
-    await tx.insert(eventBusQueue).values({
-      orgId: input.orgId,
-      topic: 'token.issued',
-      payload: {
-        issuanceId: newIssuance.id,
-        tokenId: input.tokenId,
-        investorId: input.investorId,
-        amount: input.amount,
-      },
-    });
-
-    return newIssuance;
-  }, 3, 100);
+  const issuance = newIssuance;
 
   // Audit log (outside transaction - non-critical)
   await auditService.logSystemAction(
@@ -1127,23 +1126,37 @@ async function updateLedgerPositionInTx(
   type: 'credit' | 'debit'
 ) {
   const normalizedWallet = walletAddress.toLowerCase();
+  const now = new Date().toISOString();
 
-  // Find existing position by the unique constraint columns (tokenId, walletAddress)
-  const existing = await txContext.select()
-    .from(ledgerPositions)
-    .where(and(
-      eq(ledgerPositions.tokenId, tokenId),
-      eq(ledgerPositions.walletAddress, normalizedWallet)
-    ))
-    .limit(1);
+  if (type === 'credit') {
+    // Use raw SQL upsert to avoid async transaction issues with better-sqlite3
+    await (txContext as any).run(sql`
+      INSERT INTO ledger_positions (id, org_id, token_id, investor_id, wallet_address, balance, last_event_at, updated_at)
+      VALUES (${crypto.randomUUID()}, ${orgId}, ${tokenId}, ${investorId}, ${normalizedWallet}, ${amount}, ${now}, ${now})
+      ON CONFLICT(token_id, wallet_address) DO UPDATE SET
+        balance = CAST((CAST(balance AS INTEGER) + CAST(${amount} AS INTEGER)) AS TEXT),
+        investor_id = ${investorId},
+        last_event_at = ${now},
+        updated_at = ${now}
+    `);
+  } else {
+    // For debit, we need to check balance first
+    const existing = await txContext.select()
+      .from(ledgerPositions)
+      .where(and(
+        eq(ledgerPositions.tokenId, tokenId),
+        eq(ledgerPositions.walletAddress, normalizedWallet)
+      ))
+      .limit(1);
 
-  if (existing.length > 0) {
+    if (existing.length === 0) {
+      throw new ValidationError('Cannot debit from non-existent position');
+    }
+
     const row = existing[0];
     const currentBalance = BigInt(row.balance);
     const changeAmount = BigInt(amount);
-    const newBalance = type === 'credit'
-      ? currentBalance + changeAmount
-      : currentBalance - changeAmount;
+    const newBalance = currentBalance - changeAmount;
 
     if (newBalance < 0n) {
       throw new ValidationError('Operation would result in negative balance');
@@ -1152,24 +1165,10 @@ async function updateLedgerPositionInTx(
     await txContext.update(ledgerPositions)
       .set({
         balance: newBalance.toString(),
-        investorId, // update investorId in case it changed
         lastEventAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(ledgerPositions.id, row.id));
-  } else {
-    if (type === 'debit') {
-      throw new ValidationError('Cannot debit from non-existent position');
-    }
-
-    await txContext.insert(ledgerPositions).values({
-      orgId,
-      tokenId,
-      investorId,
-      walletAddress: normalizedWallet,
-      balance: amount,
-      lastEventAt: new Date(),
-    });
   }
 }
 

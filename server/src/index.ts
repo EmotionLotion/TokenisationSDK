@@ -243,6 +243,19 @@ app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, navRouter);
 // Redemption Workflow
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, redemptionRouter);
 
+// Organization info endpoint (SDK compatibility: /iam/me and /organization)
+const orgHandler = (req: any, res: any) => {
+  res.json({
+    id: req.apiKey?.orgId || 'unknown',
+    name: req.apiKey?.orgId || 'unknown',
+    slug: req.apiKey?.orgId || 'unknown',
+    status: 'active',
+    environment: process.env.NODE_ENV || 'development',
+  });
+};
+app.get('/api/v1/iam/me', apiKeyMiddleware, tenantContextMiddleware, orgHandler);
+app.get('/api/v1/organization', apiKeyMiddleware, tenantContextMiddleware, orgHandler);
+
 // Accreditation
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, accreditationRouter);
 

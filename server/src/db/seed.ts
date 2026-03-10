@@ -322,6 +322,103 @@ function initializeSqliteSchema(db: Database.Database): void {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (org_id) REFERENCES orgs(id)
     );
+
+    -- Real Estate vertical tables
+    CREATE TABLE IF NOT EXISTS dld_titles (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      asset_id TEXT,
+      external_title_deed_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'unknown',
+      snapshot TEXT DEFAULT '{}',
+      flags TEXT DEFAULT '[]',
+      owner_name TEXT,
+      property_type TEXT,
+      location TEXT DEFAULT '{}',
+      area REAL,
+      valuation_aed REAL,
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (asset_id) REFERENCES assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS dld_events (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      external_event_id TEXT,
+      title_deed_external_id TEXT NOT NULL,
+      dld_title_id TEXT,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      processed INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (dld_title_id) REFERENCES dld_titles(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS property_units (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      property_asset_id TEXT NOT NULL,
+      unit_number TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'apartment',
+      area REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'vacant',
+      monthly_rent TEXT,
+      currency TEXT NOT NULL DEFAULT 'AED',
+      metadata TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (property_asset_id) REFERENCES assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS nav_history (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL,
+      nav_per_token TEXT NOT NULL,
+      total_asset_value TEXT NOT NULL,
+      liabilities TEXT NOT NULL DEFAULT '0',
+      net_asset_value TEXT NOT NULL,
+      total_supply TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'AED',
+      source TEXT NOT NULL DEFAULT 'manual',
+      computed_at TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (org_id) REFERENCES orgs(id),
+      FOREIGN KEY (asset_id) REFERENCES assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS investor_plans (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      name TEXT NOT NULL,
+      min_investment TEXT NOT NULL,
+      max_investment TEXT NOT NULL,
+      max_holding_percent TEXT NOT NULL,
+      management_fee_percent TEXT NOT NULL DEFAULT '0',
+      performance_fee_percent TEXT NOT NULL DEFAULT '0',
+      lockup_days INTEGER NOT NULL,
+      accreditation_required INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'AED',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (asset_id) REFERENCES assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS exit_window_schedules (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      frequency TEXT NOT NULL,
+      window_duration_days INTEGER NOT NULL,
+      max_redemption_percent TEXT NOT NULL DEFAULT '5',
+      notice_period_days INTEGER NOT NULL,
+      next_window_opens TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (asset_id) REFERENCES assets(id)
+    );
   `);
 }
 
@@ -440,10 +537,8 @@ function generateInvestorData(orgId: string, partyId: string) {
     kycStatus: 'approved',
     amlStatus: 'cleared',
     taxCountry: 'AE',
-    jurisdictions: ['AE', 'US'],
-    metadata: JSON.stringify({
-      notes: 'Sample investor for sandbox testing',
-    }),
+    jurisdictions: JSON.stringify(['AE', 'US']),
+    metadata: JSON.stringify({ notes: 'Sample investor for sandbox testing' }),
   };
 }
 
@@ -500,7 +595,7 @@ function generateWebhookEndpoint(orgId: string) {
     orgId,
     name: 'Sample Webhook',
     url: 'https://webhook.site/sandbox',
-    events: ['transfer.created', 'transfer.completed', 'compliance.approved'],
+    events: JSON.stringify(['transfer.created', 'transfer.completed', 'compliance.approved']),
     status: 'active',
     secret: `whsec_${randomUUID().replace(/-/g, '')}`,
   };
@@ -681,11 +776,133 @@ async function seedMinimal(client: DbClient, orgId: string): Promise<void> {
   logger.info('Minimal seed data created');
 }
 
+async function seedRealEstateData(client: DbClient, orgId: string, assetId: string): Promise<void> {
+  logger.info('Creating real estate vertical data...');
+
+  // DLD Title
+  const titleId = randomUUID();
+  const deedNumber = 'DLD-2026-MH-12345';
+  try {
+    await client.query(
+      `INSERT INTO dld_titles (id, org_id, asset_id, external_title_deed_id, status, snapshot, flags, owner_name, property_type, location, area, valuation_aed, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        titleId, orgId, assetId,
+        deedNumber,
+        'verified',
+        JSON.stringify({
+          deedNumber,
+          propertyType: 'RESIDENTIAL',
+          ownershipType: 'FREEHOLD',
+          area: 1850,
+          location: { emirate: 'Dubai', community: 'Dubai Marina', building: 'Marina Heights', unit: '2501' },
+          registrationDate: '2025-06-15',
+        }),
+        JSON.stringify({ tokenizationApproved: true }),
+        'Marina Heights Development LLC',
+        'RESIDENTIAL',
+        JSON.stringify({ emirate: 'Dubai', community: 'Dubai Marina', building: 'Marina Heights' }),
+        1850,
+        10200000,
+        JSON.stringify({ source: 'seed' }),
+      ]
+    );
+  } catch (error) { /* ignore */ }
+
+  // DLD Events
+  for (const evt of ['title_registered', 'tokenization_approved']) {
+    try {
+      await client.query(
+        `INSERT INTO dld_events (id, org_id, external_event_id, title_deed_external_id, dld_title_id, type, payload, processed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [randomUUID(), orgId, `EVT-${randomUUID().slice(0, 8)}`, deedNumber, titleId, evt, JSON.stringify({ source: 'seed' }), 1]
+      );
+    } catch (error) { /* ignore */ }
+  }
+
+  // Property Units
+  const units = [
+    { number: '2501', type: 'penthouse', area: 280, status: 'occupied', monthlyRent: '45000' },
+    { number: '1801', type: 'apartment', area: 140, status: 'occupied', monthlyRent: '18000' },
+    { number: '1205', type: 'apartment', area: 85, status: 'vacant', monthlyRent: '12000' },
+    { number: 'G01', type: 'retail', area: 200, status: 'occupied', monthlyRent: '35000' },
+  ];
+  for (const unit of units) {
+    try {
+      await client.query(
+        `INSERT INTO property_units (id, org_id, property_asset_id, unit_number, type, area, status, monthly_rent, currency, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [randomUUID(), orgId, assetId, unit.number, unit.type, unit.area, unit.status, unit.monthlyRent, 'AED', JSON.stringify({})]
+      );
+    } catch (error) { /* ignore */ }
+  }
+
+  // NAV History
+  const navDates = [
+    { daysAgo: 90, value: '9500000' },
+    { daysAgo: 60, value: '9750000' },
+    { daysAgo: 30, value: '10000000' },
+    { daysAgo: 0, value: '10200000' },
+  ];
+  for (const nav of navDates) {
+    const computedAt = new Date(Date.now() - nav.daysAgo * 86400000).toISOString();
+    const netValue = String(Number(nav.value) - 500000);
+    const navPerToken = String((Number(nav.value) - 500000) / 1000000);
+    try {
+      await client.query(
+        `INSERT INTO nav_history (id, org_id, asset_id, total_asset_value, liabilities, net_asset_value, nav_per_token, total_supply, currency, source, computed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [randomUUID(), orgId, assetId, nav.value, '500000', netValue, navPerToken, '1000000', 'AED', 'manual', computedAt]
+      );
+    } catch (error) { /* ignore */ }
+  }
+
+  // Investor Tier Plans
+  try {
+    await client.query(
+      `INSERT INTO investor_plans (id, asset_id, tier, name, min_investment, max_investment, max_holding_percent, management_fee_percent, performance_fee_percent, lockup_days, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [randomUUID(), assetId, 'retail', 'Retail Tier', '50000', '500000', '10', '2', '0', 180, 'AED']
+    );
+    await client.query(
+      `INSERT INTO investor_plans (id, asset_id, tier, name, min_investment, max_investment, max_holding_percent, management_fee_percent, performance_fee_percent, lockup_days, accreditation_required, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [randomUUID(), assetId, 'professional', 'Professional Tier', '500000', '5000000', '25', '1.5', '10', 90, 1, 'AED']
+    );
+  } catch (error) { /* ignore */ }
+
+  // Exit Window Schedule
+  try {
+    const nextWindow = new Date(Date.now() + 30 * 86400000).toISOString();
+    await client.query(
+      `INSERT INTO exit_window_schedules (id, asset_id, frequency, window_duration_days, max_redemption_percent, notice_period_days, next_window_opens)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [randomUUID(), assetId, 'quarterly', 14, '5', 30, nextWindow]
+    );
+  } catch (error) { /* ignore */ }
+
+  logger.info('Real estate seed data created (DLD title, 4 units, NAV history, tiers, exit windows)');
+}
+
 async function seedFull(client: DbClient, orgId: string): Promise<void> {
   logger.info('Creating full seed data...');
 
   // First do minimal seed
   await seedMinimal(client, orgId);
+
+  // Get the asset ID we just created (for RE data)
+  let assetId: string | null = null;
+  try {
+    const result = await client.query('SELECT id FROM assets WHERE org_id = $1 LIMIT 1', [orgId]);
+    if (result.rows.length > 0) {
+      assetId = result.rows[0].id;
+    }
+  } catch (error) { /* ignore */ }
+
+  // Seed real estate vertical data
+  if (assetId) {
+    await seedRealEstateData(client, orgId, assetId);
+  }
 
   // Add more parties
   for (let i = 0; i < 5; i++) {

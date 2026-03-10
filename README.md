@@ -11,38 +11,26 @@ SDK for building compliant tokenized asset platforms — real estate, compute, a
 
 </div>
 
-## Install
+## Quick Start
 
 ```bash
 git clone https://github.com/EmotionLotion/TokenisationSDK.git
 cd TokenisationSDK
-pnpm install && pnpm -r run build
+pnpm quickstart
 ```
 
-## Quick Start
-
-Start the API server (SQLite, zero config):
+This installs, builds, seeds sample data (org, assets, investors, DLD titles, property units), and starts the server. The seed prints your API key — save it.
 
 ```bash
-cp server/.env.example server/.env
-cd server && pnpm dev
+# List assets
+curl -s http://localhost:3001/api/v1/assets \
+  -H "Authorization: Bearer YOUR_API_KEY" | jq .
 ```
-
-Create a tokenized asset:
-
-```bash
-curl -X POST http://localhost:3001/api/v1/assets \
-  -H "Content-Type: application/json" \
-  -H "X-Dev-Org-Id: dev-org-1" \
-  -d '{"name": "Marina Heights Unit 2501", "rightType": "OWNERSHIP", "jurisdiction": {"countryCode": "AE"}}'
-```
-
-Or use the TypeScript SDK:
 
 ```typescript
-import { createApiClient } from '@tokenisation/core';
+import { createApiClient } from '@tokenisation/sdk';
 
-const client = createApiClient({ apiKey: 'sk_test_xxx', baseUrl: 'http://localhost:3001' });
+const client = createApiClient({ apiKey: 'sk_test_...', baseUrl: 'http://localhost:3001' });
 
 const asset = await client.assets.create({
   name: 'Marina Heights Unit 2501',
@@ -80,6 +68,7 @@ Generic core + opt-in verticals. Install only what you need:
 - [Installation Guide](docs/getting-started/INSTALLATION.md)
 - [Quick Start Guide](docs/getting-started/QUICKSTART.md)
 - [API Reference](docs/api/SDK_REFERENCE.md)
+- [Real Estate Quickstart](docs/guides/REAL_ESTATE_QUICKSTART.md) — zero to working RE platform in 10 minutes
 - [Building a Real Estate App](docs/guides/BUILDING_REAL_ESTATE_APP.md)
 - [Compliance Guide](docs/guides/COMPLIANCE.md)
 

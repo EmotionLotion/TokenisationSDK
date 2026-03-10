@@ -32,7 +32,11 @@ const updateTokenSchema = z.object({
 });
 
 const deployTokenSchema = z.object({
-  deployerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
+  deployerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address').optional()
+    .default('0x0000000000000000000000000000000000000001'),
+  chainId: z.number().int().positive().optional(),
+  identityRegistryAddress: z.string().optional(),
+  complianceAddress: z.string().optional(),
   gasLimit: z.string().optional(),
   gasPrice: z.string().optional(),
   maxFeePerGas: z.string().optional(),
@@ -474,6 +478,25 @@ tokenRouter.get('/:tokenId/positions', apiKeyMiddleware, requireScope('read'), a
   } catch (error) {
     next(error);
   }
+});
+
+// Get balance by wallet address (SDK compatibility: /balances/:address)
+tokenRouter.get('/:tokenId/balances/:walletAddress', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) { throw new ValidationError('API key required'); }
+    const positions = await tokenService.listLedgerPositions(req.apiKey.orgId, {
+      tokenId: req.params.tokenId,
+    });
+    const wallet = req.params.walletAddress.toLowerCase();
+    const pos = positions.find((p: any) => (p.walletAddress || '').toLowerCase() === wallet);
+    res.json({
+      tokenId: req.params.tokenId,
+      walletAddress: req.params.walletAddress,
+      balance: pos?.balance || '0',
+      lockedBalance: '0',
+      availableBalance: pos?.balance || '0',
+    });
+  } catch (error) { next(error); }
 });
 
 // Get specific position

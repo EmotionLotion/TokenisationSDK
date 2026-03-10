@@ -16,6 +16,8 @@
     "scripts": {
         "build": "pnpm -r run build",
         "test": "pnpm -r run test",
+        "quickstart": "cd server && cp -n .env.example .env 2>/dev/null; cd .. && pnpm install && pnpm -r run build && cd server && pnpm db:seed && pnpm dev",
+        "quickstart:seed-only": "cd server && pnpm db:seed",
         "playground": "pnpm --filter @tokenisation/sdk-playground dev",
         "test:conformance": "pnpm run test --filter @tokenisation/conformance-suite",
         "test:e2e": "cd _infrastructure && playwright test",

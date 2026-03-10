@@ -87,11 +87,17 @@ assetRouter.get('/', async (req: AuthRequest, res, next) => {
       db.select({ count: sql<number>`count(*)` }).from(assets).where(whereClause),
     ]);
 
+    const total = Number(countResult[0]?.count || 0);
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
     res.json({
-      assets: assetList,
-      total: Number(countResult[0]?.count || 0),
-      page: parseInt(page as string),
-      limit: parseInt(limit as string),
+      data: assetList,
+      assets: assetList,  // backward compat
+      count: total,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      hasMore: pageNum * limitNum < total,
     });
   } catch (error) {
     next(error);
@@ -129,23 +135,23 @@ assetRouter.get('/:id', async (req: AuthRequest, res, next) => {
       });
     }
 
-    res.json({
-      asset: {
-        ...asset,
-        issuer: issuer ? {
-          id: issuer.id,
-          name: issuer.name,
-          type: issuer.type,
-        } : null,
-        balances: balances.reduce((acc, b) => ({
-          ...acc,
-          [b.holderId]: {
-            balance: b.balance,
-            holderName: b.holderName,
-          },
-        }), {}),
-      },
-    });
+    const enriched = {
+      ...asset,
+      issuer: issuer ? {
+        id: issuer.id,
+        name: issuer.name,
+        type: issuer.type,
+      } : null,
+      balances: balances.reduce((acc, b) => ({
+        ...acc,
+        [b.holderId]: {
+          balance: b.balance,
+          holderName: b.holderName,
+        },
+      }), {}),
+    };
+    // Return both top-level and wrapped for backward compat
+    res.json({ ...enriched, asset: enriched });
   } catch (error) {
     next(error);
   }
@@ -201,7 +207,8 @@ assetRouter.post('/', async (req: AuthRequest, res, next) => {
       timestamp: now,
     });
 
-    res.status(201).json({ asset });
+    // Return asset as both top-level fields and in 'asset' key for backward compat
+    res.status(201).json({ ...asset, asset });
   } catch (error) {
     if (error instanceof z.ZodError) {
       next(new ValidationError(error.errors.map(e => e.message).join(', ')));
@@ -325,6 +332,30 @@ assetRouter.post('/:id/transition', async (req: AuthRequest, res, next) => {
     }
   }
 });
+
+// Convenience transition endpoints (SDK compatibility)
+const transitionHelper = async (req: AuthRequest, res: any, next: any, toState: string) => {
+  try {
+    const { id } = req.params;
+    const existing = await db.query.assets.findFirst({
+      where: eq(assets.id, id),
+    });
+    if (!existing) { throw new NotFoundError('Asset'); }
+    const validNextStates = VALID_TRANSITIONS[existing.state] || [];
+    if (!validNextStates.includes(toState)) {
+      throw new ValidationError(`Invalid transition from ${existing.state} to ${toState}. Valid transitions: ${validNextStates.join(', ')}`);
+    }
+    const [updated] = await db.update(assets)
+      .set({ state: toState, updatedAt: new Date() })
+      .where(eq(assets.id, id))
+      .returning();
+    res.json({ success: true, newState: toState, asset: updated });
+  } catch (error) { next(error); }
+};
+
+assetRouter.post('/:id/activate', (req: AuthRequest, res, next) => transitionHelper(req, res, next, 'ACTIVE'));
+assetRouter.post('/:id/freeze', (req: AuthRequest, res, next) => transitionHelper(req, res, next, 'FROZEN'));
+assetRouter.post('/:id/verify', (req: AuthRequest, res, next) => transitionHelper(req, res, next, 'VERIFIED'));
 
 // Delete asset (only DRAFT)
 assetRouter.delete('/:id', async (req: AuthRequest, res, next) => {

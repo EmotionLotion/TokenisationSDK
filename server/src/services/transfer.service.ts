@@ -113,7 +113,7 @@ export async function createTransfer(input: CreateTransferInput): Promise<Transf
       throw new NotFoundError('Token not found');
     }
 
-    if (token.status !== 'active') {
+    if (token.status !== 'active' && token.status !== 'deployed') {
       throw new ValidationError(`Token is not active (status: ${token.status})`);
     }
 

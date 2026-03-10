@@ -1,0 +1,16 @@
+{
+  "name": "sdk-client-demo",
+  "version": "1.0.0",
+  "description": "Verify the SDK ApiClient works against the local server",
+  "type": "module",
+  "scripts": {
+    "demo": "npx tsx src/index.ts"
+  },
+  "dependencies": {
+    "@tokenisation/sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

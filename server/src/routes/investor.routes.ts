@@ -339,12 +339,20 @@ const createInvestorSchema = z.object({
   externalId: z.string().max(100).optional(),
   email: z.string().email(),
   phone: z.string().optional(),
-  type: z.enum(['individual', 'institutional', 'qualified', 'accredited']),
-  countryCode: z.string().length(2),
+  name: z.string().max(256).optional(),
+  type: z.enum(['individual', 'institutional', 'qualified', 'accredited', 'entity']),
+  countryCode: z.string().length(2).optional(),
+  jurisdiction: z.string().length(2).optional(),
   taxResidency: z.string().length(2).optional(),
   profile: z.record(z.unknown()).optional(),
   metadata: z.record(z.unknown()).optional(),
-});
+}).transform((data) => ({
+  ...data,
+  // Accept 'jurisdiction' as alias for 'countryCode' (SDK compatibility)
+  countryCode: data.countryCode || data.jurisdiction || 'US',
+  // Map 'entity' type to 'institutional' (SDK compatibility)
+  type: data.type === 'entity' ? 'institutional' as const : data.type,
+}));
 
 const updateInvestorSchema = z.object({
   email: z.string().email().optional(),

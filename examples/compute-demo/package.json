@@ -1,0 +1,13 @@
+{
+  "name": "gpu-compute-tokenization-demo",
+  "version": "1.0.0",
+  "description": "Demo: GPU compute node tokenization via the REST API",
+  "type": "module",
+  "scripts": {
+    "demo": "npx tsx src/index.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}
