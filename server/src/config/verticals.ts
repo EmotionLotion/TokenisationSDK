@@ -121,3 +121,60 @@ export function getEnabledVerticals(): Set<VerticalId> {
 export function isVerticalEnabled(id: VerticalId): boolean {
   return getEnabledVerticals().has(id);
 }
+
+// ============================================================================
+// SERVER PLUGIN INTERFACE
+//
+// Formalizes the pattern used in loadVerticalRoutes(). Third-party vertical
+// packages can implement this interface to register Express routes dynamically.
+// ============================================================================
+
+import type { Router, RequestHandler } from 'express';
+
+/**
+ * ServerPlugin — Interface for vertical route plugins.
+ *
+ * Each vertical package can export a server plugin that registers
+ * Express routes into the shared application.
+ *
+ * @example
+ * ```typescript
+ * // @tokenisation/pack-travel/src/server-plugin.ts
+ * export const travelServerPlugin: ServerPlugin = {
+ *   id: 'travel',
+ *   version: '1.0.0',
+ *   routes: [
+ *     { path: '/api/v1/tickets', router: ticketRouter },
+ *     { path: '/api/v1/flights', router: flightOracleRouter },
+ *   ],
+ * };
+ * ```
+ */
+export interface ServerPlugin {
+  /** Unique plugin identifier (matches VerticalId or custom) */
+  id: string;
+  /** Semver version */
+  version: string;
+  /** Routes to register */
+  routes: ServerPluginRoute[];
+  /** Called before routes are registered */
+  init?: (context: ServerPluginContext) => void | Promise<void>;
+  /** Called during graceful shutdown */
+  destroy?: () => void | Promise<void>;
+}
+
+export interface ServerPluginRoute {
+  /** Express path prefix (e.g., '/api/v1/tickets') */
+  path: string;
+  /** Express router */
+  router: Router;
+  /** Additional middleware to apply before the router */
+  middleware?: RequestHandler[];
+}
+
+export interface ServerPluginContext {
+  /** Logger instance */
+  logger: { info: (msg: string) => void; error: (msg: string) => void };
+  /** Database connection (if available) */
+  db?: unknown;
+}
