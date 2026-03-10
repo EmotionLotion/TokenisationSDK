@@ -40,11 +40,13 @@ This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participatin
    pnpm install
    ```
 
-5. **Build the SDK**
+5. **Build all packages**
 
    ```bash
-   pnpm --filter @tokenisation/sdk build
+   pnpm -r run build
    ```
+
+   Build order: `core` → `compliance` | `chains` → `realestate` → `sdk`
 
 6. **Run tests to verify setup**
 
@@ -85,7 +87,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `test` - Adding tests
 - `chore` - Maintenance tasks
 
-**Scopes:** `sdk`, `server`, `contracts`, `ui`, `ui-kit`, `sdk-react`, `sdk-react-native`, `examples`, `deploy`
+**Scopes:** `sdk`, `core`, `compliance`, `chains`, `realestate`, `server`, `contracts`, `ui`, `ui-kit`, `sdk-react`, `sdk-react-native`, `examples`, `deploy`
 
 **Examples:**
 ```
@@ -121,9 +123,11 @@ git merge upstream/main
 3. **Run checks locally**
 
    ```bash
-   # SDK tests + type check
-   pnpm --filter @tokenisation/sdk test
-   cd sdk && npx tsc --noEmit
+   # Build all SDK packages
+   pnpm -r run build
+
+   # Run all SDK tests
+   pnpm -r run test
 
    # Server type check
    cd server && npx tsc --noEmit
@@ -164,7 +168,11 @@ This project uses pnpm workspaces. Key packages:
 
 | Package | Path | Description |
 |---------|------|-------------|
-| `@tokenisation/sdk` | `sdk/` | Core TypeScript SDK |
+| `@tokenisation/core` | `packages/core/` | Foundation — engines, errors, types, plugins, API client |
+| `@tokenisation/compliance` | `packages/compliance/` | KYC/AML, identity claims, jurisdiction enforcement |
+| `@tokenisation/chains` | `packages/chains/` | Blockchain, smart contracts, Chainlink, AA, ZKP |
+| `@tokenisation/realestate` | `packages/realestate/` | UAE real estate with DLD/VARA (primary vertical) |
+| `@tokenisation/sdk` | `sdk/` | Umbrella re-export of all packages above |
 | `@tokenisation/sdk-react` | `sdk-react/` | React bindings |
 | `@tokenisation/sdk-react-native` | `sdk-react-native/` | React Native bindings |
 | Server | `server/` | Express API server |
@@ -173,6 +181,8 @@ This project uses pnpm workspaces. Key packages:
 | UI Kit | `ui-kit/` | Shared component library |
 | `@tokenisation/conformance-suite` | `packages/conformance-suite/` | Integration tests |
 | `create-tokenised-asset` | `packages/create-tokenised-asset/` | Scaffolding CLI |
+
+> **Dependency direction:** `core` ← `compliance` / `chains` ← `realestate` ← `sdk`. Changes to `core` may affect all downstream packages — test them with `pnpm -r run test`.
 
 ## Coding Standards
 
@@ -195,7 +205,7 @@ This project uses pnpm workspaces. Key packages:
 ### SDK Tests
 
 ```bash
-pnpm --filter @tokenisation/sdk test
+pnpm -r run test
 ```
 
 ### Contract Tests

@@ -34,7 +34,7 @@ import { projectRouter } from './routes/project.routes.js';
 import { complianceRouter } from './routes/compliance.routes.js';
 import { transferRouter } from './routes/transfer.routes.js';
 import { webhookRouter } from './routes/webhook.routes.js';
-import { dldRouter } from './routes/dld.routes.js';
+// Core routes (always loaded — generic tokenisation infrastructure)
 import { auditRouter } from './routes/audit.routes.js';
 import { ledgerRouter } from './routes/ledger.routes.js';
 import { investorRouter } from './routes/investor.routes.js';
@@ -58,35 +58,19 @@ import { issuanceRouter } from './routes/issuance.routes.js';
 import { exportRouter } from './routes/export.routes.js';
 import { transitionRouter } from './routes/transition.routes.js';
 import { oauthRouter } from './routes/oauth.routes.js';
-import { ticketRouter } from './routes/ticket.routes.js';
 import { gasRouter } from './routes/gas.routes.js';
 import { storageRouter } from './routes/storage.routes.js';
-// Vertical routes
-import { hotelRouter } from './routes/hotel.routes.js';
-import { carRentalRouter } from './routes/car-rental.routes.js';
-import { concertRouter } from './routes/concert.routes.js';
 import { metricsRouter } from './routes/metrics.routes.js';
 import { kycWebhookRouter } from './routes/kyc-webhook.routes.js';
-// Phase 1-5: New route imports
 import { schedulerRouter } from './routes/scheduler.routes.js';
 import { navRouter } from './routes/nav.routes.js';
-import { flightOracleRouter } from './routes/flight-oracle.routes.js';
 import { redemptionRouter } from './routes/redemption.routes.js';
-import { boardingPassRouter } from './routes/boarding-pass.routes.js';
 import { accreditationRouter } from './routes/accreditation.routes.js';
 import { sseRouter } from './routes/sse.routes.js';
 import { themeRouter } from './routes/theme.routes.js';
-// Hackathon Apps
-import { predictionMarketRouter } from './routes/prediction-market.routes.js';
-import { travelShieldRouter } from './routes/travel-shield.routes.js';
-import { proofOfFundsRouter } from './routes/proof-of-funds.routes.js';
-import { depinRouter } from './routes/depin.routes.js';
-import { propertyManagementRouter } from './routes/property-management.routes.js';
-import { gpuComputeRouter } from './routes/gpu-compute.routes.js';
-// Phase 2: Real Estate Hardening routes
-import { investorTierRouter } from './routes/investor-tier.routes.js';
-import { exitWindowRouter } from './routes/exit-window.routes.js';
-import { secondaryMarketRouter } from './routes/secondary-market.routes.js';
+
+// Vertical routes — dynamically imported based on ENABLED_VERTICALS
+// Only the code for enabled verticals is loaded into memory.
 
 import { isVerticalEnabled, getEnabledVerticals } from './config/verticals.js';
 import { validateChainConfig } from './config/chains.js';
@@ -250,96 +234,120 @@ app.use('/api/v1/export', apiKeyMiddleware, tenantContextMiddleware, exportRoute
 // State Transitions & Audit Trail
 app.use('/api/v1/transitions', apiKeyMiddleware, tenantContextMiddleware, transitionRouter);
 
-// Phase 2: Real Estate Hardening — Investor Tiers, Exit Windows, Secondary Market
-app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, investorTierRouter);
-app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, exitWindowRouter);
-app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, secondaryMarketRouter);
-
-// ============================================================================
-// Vertical Extension routes (conditionally loaded via ENABLED_VERTICALS)
-// ============================================================================
-
-// Airline Tickets (NFT Utility Tokens)
-if (isVerticalEnabled('airline')) {
-  app.use('/api/v1/tickets', apiKeyMiddleware, tenantContextMiddleware, ticketRouter);
-}
-
-// Vertical NFT Tokens
-if (isVerticalEnabled('hotel')) {
-  app.use('/api/v1/hotels', apiKeyMiddleware, tenantContextMiddleware, hotelRouter);
-}
-if (isVerticalEnabled('car-rental')) {
-  app.use('/api/v1/car-rentals', apiKeyMiddleware, tenantContextMiddleware, carRentalRouter);
-}
-if (isVerticalEnabled('concert')) {
-  app.use('/api/v1/concerts', apiKeyMiddleware, tenantContextMiddleware, concertRouter);
-}
-
 // Dashboard Metrics
 app.use('/api/v1/metrics', apiKeyMiddleware, tenantContextMiddleware, metricsRouter);
 
-// NAV & Valuation (Gap 4)
+// NAV & Valuation
 app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, navRouter);
 
-// Flight Oracle (Gap 5)
-if (isVerticalEnabled('airline')) {
-  app.use('/api/v1/flights', apiKeyMiddleware, tenantContextMiddleware, flightOracleRouter);
-}
-
-// Redemption Workflow (Gap 9)
+// Redemption Workflow
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, redemptionRouter);
 
-// Boarding Pass (Gap 16)
-if (isVerticalEnabled('airline')) {
-  app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, boardingPassRouter);
-}
-
-// Accreditation (Gap 17)
+// Accreditation
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, accreditationRouter);
 
-// Scheduler Admin (Gap 13)
+// Scheduler Admin
 app.use('/api/v1/scheduler', apiKeyMiddleware, tenantContextMiddleware, schedulerRouter);
 
-// White-Label Theming (Gap 6)
+// White-Label Theming
 app.use('/api/v1/themes', apiKeyMiddleware, tenantContextMiddleware, themeRouter);
 
-// Hackathon Apps
-if (isVerticalEnabled('prediction-market')) {
-  app.use('/api/v1/markets', apiKeyMiddleware, tenantContextMiddleware, predictionMarketRouter);
-}
-if (isVerticalEnabled('travel-shield')) {
-  app.use('/api/v1/policies', apiKeyMiddleware, tenantContextMiddleware, travelShieldRouter);
-}
-if (isVerticalEnabled('proof-of-funds')) {
-  app.use('/api/v1/proofs', apiKeyMiddleware, tenantContextMiddleware, proofOfFundsRouter);
-}
-if (isVerticalEnabled('depin')) {
-  app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, depinRouter);
-}
-
-// External Integrations (Real Estate)
-if (isVerticalEnabled('real-estate')) {
-  app.use('/api/v1/dld', apiKeyMiddleware, tenantContextMiddleware, dldRouter);
-  app.use('/api/v1/properties', apiKeyMiddleware, tenantContextMiddleware, propertyManagementRouter);
-}
-
-// GPU Compute Infrastructure
-if (isVerticalEnabled('gpu-compute')) {
-  app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, gpuComputeRouter);
-}
 app.use('/api/v1/datasources', apiKeyMiddleware, tenantContextMiddleware, datasourcesRouter);
+
+// ============================================================================
+// Vertical Extension routes (dynamically imported via ENABLED_VERTICALS)
+//
+// Only the code for enabled verticals is loaded into memory.
+// Set ENABLED_VERTICALS=real-estate,airline to load only those.
+// Set ENABLED_VERTICALS=none to load zero verticals (pure generic server).
+// Default (unset or *): all verticals loaded.
+// ============================================================================
+
+async function loadVerticalRoutes() {
+  const protectedMiddleware = [apiKeyMiddleware, tenantContextMiddleware] as const;
+
+  // Real Estate
+  if (isVerticalEnabled('real-estate')) {
+    const { dldRouter } = await import('./routes/dld.routes.js');
+    const { propertyManagementRouter } = await import('./routes/property-management.routes.js');
+    const { investorTierRouter } = await import('./routes/investor-tier.routes.js');
+    const { exitWindowRouter } = await import('./routes/exit-window.routes.js');
+    const { secondaryMarketRouter } = await import('./routes/secondary-market.routes.js');
+    app.use('/api/v1/dld', ...protectedMiddleware, dldRouter);
+    app.use('/api/v1/properties', ...protectedMiddleware, propertyManagementRouter);
+    app.use('/api/v1', ...protectedMiddleware, investorTierRouter);
+    app.use('/api/v1', ...protectedMiddleware, exitWindowRouter);
+    app.use('/api/v1', ...protectedMiddleware, secondaryMarketRouter);
+    logger.info('Loaded vertical: real-estate');
+  }
+
+  // Airline
+  if (isVerticalEnabled('airline')) {
+    const { ticketRouter } = await import('./routes/ticket.routes.js');
+    const { flightOracleRouter } = await import('./routes/flight-oracle.routes.js');
+    const { boardingPassRouter } = await import('./routes/boarding-pass.routes.js');
+    app.use('/api/v1/tickets', ...protectedMiddleware, ticketRouter);
+    app.use('/api/v1/flights', ...protectedMiddleware, flightOracleRouter);
+    app.use('/api/v1', ...protectedMiddleware, boardingPassRouter);
+    logger.info('Loaded vertical: airline');
+  }
+
+  // Hotel
+  if (isVerticalEnabled('hotel')) {
+    const { hotelRouter } = await import('./routes/hotel.routes.js');
+    app.use('/api/v1/hotels', ...protectedMiddleware, hotelRouter);
+    logger.info('Loaded vertical: hotel');
+  }
+
+  // Car Rental
+  if (isVerticalEnabled('car-rental')) {
+    const { carRentalRouter } = await import('./routes/car-rental.routes.js');
+    app.use('/api/v1/car-rentals', ...protectedMiddleware, carRentalRouter);
+    logger.info('Loaded vertical: car-rental');
+  }
+
+  // Concert
+  if (isVerticalEnabled('concert')) {
+    const { concertRouter } = await import('./routes/concert.routes.js');
+    app.use('/api/v1/concerts', ...protectedMiddleware, concertRouter);
+    logger.info('Loaded vertical: concert');
+  }
+
+  // GPU Compute
+  if (isVerticalEnabled('gpu-compute')) {
+    const { gpuComputeRouter } = await import('./routes/gpu-compute.routes.js');
+    app.use('/api/v1', ...protectedMiddleware, gpuComputeRouter);
+    logger.info('Loaded vertical: gpu-compute');
+  }
+
+  // Hackathon / Experimental verticals
+  if (isVerticalEnabled('prediction-market')) {
+    const { predictionMarketRouter } = await import('./routes/prediction-market.routes.js');
+    app.use('/api/v1/markets', ...protectedMiddleware, predictionMarketRouter);
+    logger.info('Loaded vertical: prediction-market');
+  }
+  if (isVerticalEnabled('travel-shield')) {
+    const { travelShieldRouter } = await import('./routes/travel-shield.routes.js');
+    app.use('/api/v1/policies', ...protectedMiddleware, travelShieldRouter);
+    logger.info('Loaded vertical: travel-shield');
+  }
+  if (isVerticalEnabled('proof-of-funds')) {
+    const { proofOfFundsRouter } = await import('./routes/proof-of-funds.routes.js');
+    app.use('/api/v1/proofs', ...protectedMiddleware, proofOfFundsRouter);
+    logger.info('Loaded vertical: proof-of-funds');
+  }
+  if (isVerticalEnabled('depin')) {
+    const { depinRouter } = await import('./routes/depin.routes.js');
+    app.use('/api/v1', ...protectedMiddleware, depinRouter);
+    logger.info('Loaded vertical: depin');
+  }
+}
 
 // Events (using authMiddleware for JWT-based access)
 app.use('/api/v1/events', authMiddleware, optionalTenantContextMiddleware, eventRouter);
 
-// Error logging and handling
-app.use(errorLogger);
-app.use(errorHandler);
-
-// 404 handler
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Not Found' });
-});
+// Note: Error handler and 404 handler are registered after vertical routes load
+// in the start() function to ensure they are always last.
 
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string) {
@@ -385,6 +393,16 @@ async function start() {
 
     // Validate chain RPC configuration
     validateChainConfig();
+
+    // Load vertical-specific routes (dynamic imports)
+    await loadVerticalRoutes();
+
+    // Register error handlers AFTER verticals (must be last middleware)
+    app.use(errorLogger);
+    app.use(errorHandler);
+    app.use((_req: express.Request, res: express.Response) => {
+      res.status(404).json({ error: 'Not Found' });
+    });
 
     // Bootstrap the RegistryService with adapters and asset pack configurations
     await bootstrapRegistry();

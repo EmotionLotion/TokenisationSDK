@@ -1,0 +1,78 @@
+{
+  "name": "Real Estate Asset Policy",
+  "version": 1,
+  "assetType": "real_estate",
+  "description": "Compliance rules specific to tokenized real estate. Should be combined with jurisdiction policy.",
+  "rules": [
+    {
+      "id": "dld_verified",
+      "type": "require",
+      "field": "asset.dldStatus",
+      "op": "eq",
+      "value": "verified",
+      "message": "Property title must be verified with DLD before trading",
+      "code": "DLD_NOT_VERIFIED"
+    },
+    {
+      "id": "min_investment",
+      "type": "limit",
+      "field": "transfer.amount",
+      "op": "gte",
+      "value": "1000000000000000000",
+      "message": "Minimum investment is 1 token (1e18 wei)",
+      "code": "BELOW_MINIMUM"
+    },
+    {
+      "id": "max_single_holding",
+      "type": "limit",
+      "field": "transfer.resultingBalance",
+      "op": "lte",
+      "value": "100000000000000000000",
+      "message": "Maximum holding per investor is 100 tokens (10%)",
+      "code": "EXCEEDS_MAX_HOLDING"
+    },
+    {
+      "id": "qualified_investor",
+      "type": "require",
+      "field": "investor.type",
+      "op": "in",
+      "value": ["qualified", "accredited", "institutional"],
+      "message": "Real estate tokens require qualified/accredited investor status",
+      "code": "NOT_QUALIFIED"
+    },
+    {
+      "id": "lockup_period",
+      "type": "require",
+      "field": "token.lockupExpiry",
+      "op": "lt",
+      "value": "time.now",
+      "message": "Token is still in lockup period",
+      "code": "LOCKUP_ACTIVE",
+      "skipIf": "token.lockupExpiry == null"
+    },
+    {
+      "id": "no_fractional_transfers",
+      "type": "require",
+      "field": "transfer.amount",
+      "op": "regex",
+      "value": "^\\d+000000000000000000$",
+      "message": "Only whole token transfers allowed for real estate",
+      "code": "FRACTIONAL_NOT_ALLOWED"
+    }
+  ],
+  "actions": {
+    "onDeny": ["log_decision", "notify_compliance"],
+    "onAllow": ["log_decision", "update_cap_table"]
+  },
+  "lifecycle": {
+    "onIssue": ["verify_dld", "create_cap_table_entry"],
+    "onTransfer": ["update_cap_table", "notify_registrar"],
+    "onRedeem": ["burn_tokens", "notify_dld", "distribute_proceeds"]
+  },
+  "metadata": {
+    "author": "AHOY Compliance",
+    "lastUpdated": "2024-01-01",
+    "suitableFor": ["residential", "commercial", "land"],
+    "tokenStandard": "ERC-3643"
+  }
+}

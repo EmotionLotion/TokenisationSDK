@@ -1,8 +1,22 @@
 /**
  * Golden Path Workflows - High-level opinionated flows for common tokenization scenarios
  *
- * These workflows provide convenience methods that orchestrate multiple SDK operations
- * into cohesive, production-ready flows with progress callbacks and error handling.
+ * @deprecated Use WorkflowRegistry instead. Vertical-specific workflows should be
+ * registered by their respective packs (e.g., @tokenisation/pack-realestate registers
+ * 'tokenize-real-estate'). The generic ProgressCallback, FlowResult, StepResult, and
+ * FlowError types are preserved for backward compatibility but new code should use
+ * WorkflowProgressEvent, WorkflowResult, etc. from WorkflowRegistry.
+ *
+ * Migration:
+ * ```typescript
+ * // Before:
+ * sdk.goldenPath.tokenizeRealEstate({ titleDeedNumber: '...' });
+ *
+ * // After:
+ * import { createRealEstateWorkflows } from '@tokenisation/pack-realestate';
+ * sdk.workflows.register(createRealEstateWorkflows());
+ * sdk.workflows.run('tokenize-real-estate', { titleDeedNumber: '...' });
+ * ```
  */
 
 import { type Result, ok, err } from '../core/index.js';

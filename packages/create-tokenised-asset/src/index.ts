@@ -49,6 +49,20 @@ const CHAINS: Record<string, ChainConfig> = {
   },
 };
 
+/**
+ * Known vertical packs and their npm package names.
+ * The CLI auto-discovers installed packs by checking node_modules,
+ * then falls back to this registry for uninstalled packs.
+ */
+const KNOWN_PACKS: Array<{ id: string; name: string; description: string; pkg: string }> = [
+  { id: 'real-estate', name: 'Real Estate', description: 'Property tokenization with DLD, rental income, NAV', pkg: '@tokenisation/realestate' },
+  { id: 'travel', name: 'Travel & Hospitality', description: 'Airline tickets, hotel reservations, car rentals, concerts', pkg: '@tokenisation/pack-travel' },
+  { id: 'compute', name: 'GPU Compute', description: 'Tokenized GPU infrastructure, benchmarking, utilization', pkg: '@tokenisation/compute' },
+  { id: 'securities', name: 'Securities', description: 'US Reg D/S fund shares, equity, debt instruments', pkg: '@tokenisation/pack-securities' },
+  { id: 'supply-chain', name: 'Supply Chain', description: 'Warehouse receipts, verification credentials, physical assets', pkg: '@tokenisation/pack-supply-chain' },
+  { id: 'loyalty', name: 'Loyalty & Ecosystem', description: 'Ahoy tokens, driver reputation, utility credits, IoT', pkg: '@tokenisation/pack-loyalty' },
+];
+
 async function promptUser(): Promise<ProjectConfig> {
   const projectName = await input({
     message: 'Project name:',
@@ -56,14 +70,16 @@ async function promptUser(): Promise<ProjectConfig> {
     validate: (v) => /^[a-z0-9-]+$/.test(v) || 'Use lowercase letters, numbers, and hyphens only',
   });
 
+  // Build choices from known packs + custom option
+  const packChoices = KNOWN_PACKS.map(p => ({
+    name: `${p.name} — ${p.description}`,
+    value: p.id,
+  }));
+  packChoices.push({ name: 'Custom — Start from scratch with @tokenisation/core only', value: 'custom' });
+
   const assetType = await select({
     message: 'Asset type:',
-    choices: [
-      { name: 'Real Estate — Property tokenization with rental income', value: 'real-estate' },
-      { name: 'Securities — Fund shares, equity, debt instruments', value: 'securities' },
-      { name: 'Tickets — Event tickets, airline, hotel reservations', value: 'tickets' },
-      { name: 'Custom — Start from scratch', value: 'custom' },
-    ],
+    choices: packChoices,
   });
 
   const chainKey = await select({
@@ -120,9 +136,16 @@ async function promptUser(): Promise<ProjectConfig> {
 
 function generatePackageJson(config: ProjectConfig): string {
   const deps: Record<string, string> = {
-    '@tokenisation/sdk': '^1.0.0',
+    '@tokenisation/core': '^1.0.0',
     dotenv: '^16.0.0',
   };
+
+  // Add the vertical pack dependency based on selection
+  const selectedPack = KNOWN_PACKS.find(p => p.id === config.assetType);
+  if (selectedPack) {
+    deps[selectedPack.pkg] = '^1.0.0';
+  }
+
   if (config.includeServer) {
     deps['express'] = '^4.18.0';
     deps['cors'] = '^2.8.0';

@@ -1128,17 +1128,18 @@ async function updateLedgerPositionInTx(
 ) {
   const normalizedWallet = walletAddress.toLowerCase();
 
-  // Find existing position within transaction
-  const existing = await txContext.query.ledgerPositions.findFirst({
-    where: and(
+  // Find existing position by the unique constraint columns (tokenId, walletAddress)
+  const existing = await txContext.select()
+    .from(ledgerPositions)
+    .where(and(
       eq(ledgerPositions.tokenId, tokenId),
-      eq(ledgerPositions.investorId, investorId),
       eq(ledgerPositions.walletAddress, normalizedWallet)
-    ),
-  });
+    ))
+    .limit(1);
 
-  if (existing) {
-    const currentBalance = BigInt(existing.balance);
+  if (existing.length > 0) {
+    const row = existing[0];
+    const currentBalance = BigInt(row.balance);
     const changeAmount = BigInt(amount);
     const newBalance = type === 'credit'
       ? currentBalance + changeAmount
@@ -1151,10 +1152,11 @@ async function updateLedgerPositionInTx(
     await txContext.update(ledgerPositions)
       .set({
         balance: newBalance.toString(),
+        investorId, // update investorId in case it changed
         lastEventAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(ledgerPositions.id, existing.id));
+      .where(eq(ledgerPositions.id, row.id));
   } else {
     if (type === 'debit') {
       throw new ValidationError('Cannot debit from non-existent position');

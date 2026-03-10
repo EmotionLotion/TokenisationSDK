@@ -5,11 +5,20 @@ title: TypeScript SDK Reference
 
 # TypeScript SDK Reference
 
-The AHOY Tokenisation SDK provides a Stripe-like TypeScript client for the tokenisation platform. Install it from npm:
+The AHOY Tokenisation SDK provides a Stripe-like TypeScript client for the tokenisation platform. Install the umbrella package or individual packages:
 
 ```bash
-npm install @tokenisation/sdk
+# Umbrella (re-exports everything)
+pnpm add @tokenisation/sdk
+
+# Or individual packages
+pnpm add @tokenisation/core                          # Foundation only
+pnpm add @tokenisation/core @tokenisation/compliance  # + KYC/AML
+pnpm add @tokenisation/core @tokenisation/chains      # + Blockchain
+pnpm add @tokenisation/realestate                      # UAE real estate (pulls in all three)
 ```
+
+> **Package imports:** All examples below use `@tokenisation/sdk` for simplicity. You can replace it with the specific package (e.g., `@tokenisation/core` for `ApiClient`, `@tokenisation/realestate` for `DLDClient`).
 
 ---
 
@@ -322,23 +331,167 @@ const events = await client.audit.listEvents({
 
 ## Error Handling
 
-All SDK methods throw `TokenizationError` on failure.
+The SDK provides a structured error hierarchy with 9 error classes and 42 machine-readable error codes. All errors extend `SDKError` and include a `.code`, `.details`, `.timestamp`, and optional `.requestId`.
+
+### Error Hierarchy
+
+| Class | Default Code | Extra Fields | When Thrown |
+|-------|-------------|--------------|------------|
+| `SDKError` | `UNKNOWN_ERROR` | — | Base class for all SDK errors |
+| `AuthenticationError` | `UNAUTHENTICATED` | — | Invalid API key, expired JWT, bad signature |
+| `ValidationError` | `VALIDATION_FAILED` | `field`, `constraints` | Bad input, schema mismatch |
+| `ComplianceError` | `COMPLIANCE_FAILED` | `violations[]` | KYC, jurisdiction, accreditation failures |
+| `ContractError` | `CONTRACT_ERROR` | `contractAddress`, `method`, `transactionHash` | Smart contract call/deploy failures |
+| `NetworkError` | `NETWORK_ERROR` | `statusCode`, `url` | HTTP, RPC, rate-limit errors |
+| `OracleError` | `ORACLE_ERROR` | `feedId`, `dataTimestamp` | Price feed stale/unavailable |
+| `AssetError` | `ASSET_NOT_FOUND` | `assetId`, `tokenId` | Asset/token lookup failures |
+| `StorageError` | `STORAGE_ERROR` | `provider`, `key` | S3/IPFS upload/download failures |
+
+### Error Code Reference (51 codes)
+
+#### General
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.UNKNOWN` | `UNKNOWN_ERROR` | Log and retry; escalate if persistent |
+| `ErrorCode.INTERNAL` | `INTERNAL_ERROR` | Log and contact support |
+| `ErrorCode.INVALID_ARGUMENT` | `INVALID_ARGUMENT` | Fix input and retry |
+| `ErrorCode.NOT_FOUND` | `NOT_FOUND` | Check resource ID |
+| `ErrorCode.ALREADY_EXISTS` | `ALREADY_EXISTS` | Use idempotency key or skip |
+| `ErrorCode.TIMEOUT` | `TIMEOUT` | Retry with backoff |
+| `ErrorCode.NOT_INITIALIZED` | `NOT_INITIALIZED` | Call `initialize()` first |
+
+#### Authentication & Authorization
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.UNAUTHENTICATED` | `UNAUTHENTICATED` | Prompt sign-in |
+| `ErrorCode.UNAUTHORIZED` | `UNAUTHORIZED` | Check user permissions/role |
+| `ErrorCode.SESSION_EXPIRED` | `SESSION_EXPIRED` | Refresh token or re-authenticate |
+| `ErrorCode.INVALID_TOKEN` | `INVALID_TOKEN` | Re-authenticate |
+| `ErrorCode.SIGNATURE_INVALID` | `SIGNATURE_INVALID` | Re-sign the message |
+| `ErrorCode.AUTH_FAILED` | `AUTH_FAILED` | Check credentials |
+
+#### Validation
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.VALIDATION_FAILED` | `VALIDATION_FAILED` | Check `error.field` and `error.constraints` |
+| `ErrorCode.SCHEMA_VALIDATION_FAILED` | `SCHEMA_VALIDATION_FAILED` | Fix data format (see Zod schema) |
+| `ErrorCode.INVALID_ADDRESS` | `INVALID_ADDRESS` | Verify wallet address format |
+| `ErrorCode.INVALID_AMOUNT` | `INVALID_AMOUNT` | Check amount is positive and within bounds |
+| `ErrorCode.INVALID_STATE` | `INVALID_STATE` | Check asset lifecycle state before operating |
+
+#### Compliance
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.COMPLIANCE_FAILED` | `COMPLIANCE_FAILED` | Check `error.violations[]` for specific issues |
+| `ErrorCode.KYC_REQUIRED` | `KYC_REQUIRED` | Initiate KYC flow for the investor |
+| `ErrorCode.KYC_EXPIRED` | `KYC_EXPIRED` | Prompt re-verification |
+| `ErrorCode.JURISDICTION_BLOCKED` | `JURISDICTION_BLOCKED` | Investor's region is restricted |
+| `ErrorCode.TRANSFER_RESTRICTED` | `TRANSFER_RESTRICTED` | Check lockup, freeze, or compliance hold |
+| `ErrorCode.INVESTOR_LIMIT_EXCEEDED` | `INVESTOR_LIMIT_EXCEEDED` | Max holder cap reached |
+| `ErrorCode.ACCREDITATION_REQUIRED` | `ACCREDITATION_REQUIRED` | Investor needs accredited status |
+
+#### Contract & Blockchain
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.CONTRACT_ERROR` | `CONTRACT_ERROR` | Check `error.contractAddress` and `error.method` |
+| `ErrorCode.CONTRACT_NOT_DEPLOYED` | `CONTRACT_NOT_DEPLOYED` | Deploy contract to target chain first |
+| `ErrorCode.CONTRACT_CALL_FAILED` | `CONTRACT_CALL_FAILED` | Check args, gas, and contract state |
+| `ErrorCode.TRANSACTION_FAILED` | `TRANSACTION_FAILED` | Check wallet balance and network status |
+| `ErrorCode.TRANSACTION_REVERTED` | `TRANSACTION_REVERTED` | Inspect revert reason in `error.details` |
+| `ErrorCode.INSUFFICIENT_BALANCE` | `INSUFFICIENT_BALANCE` | Fund the wallet |
+| `ErrorCode.INSUFFICIENT_ALLOWANCE` | `INSUFFICIENT_ALLOWANCE` | Call `approve()` first |
+| `ErrorCode.GAS_ESTIMATION_FAILED` | `GAS_ESTIMATION_FAILED` | Transaction would likely revert — check inputs |
+| `ErrorCode.NONCE_TOO_LOW` | `NONCE_TOO_LOW` | Retry (nonce conflict from concurrent txs) |
+
+#### Network
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.NETWORK_ERROR` | `NETWORK_ERROR` | Check connectivity; retry |
+| `ErrorCode.RPC_ERROR` | `RPC_ERROR` | RPC node down — try fallback provider |
+| `ErrorCode.RATE_LIMITED` | `RATE_LIMITED` | Back off and retry (check `Retry-After` header) |
+| `ErrorCode.SERVICE_UNAVAILABLE` | `SERVICE_UNAVAILABLE` | Service down — retry with backoff |
+| `ErrorCode.CIRCUIT_OPEN` | `CIRCUIT_OPEN` | Circuit breaker tripped — wait before retrying |
+
+#### Asset & Token
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.ASSET_NOT_FOUND` | `ASSET_NOT_FOUND` | Verify asset ID |
+| `ErrorCode.TOKEN_NOT_FOUND` | `TOKEN_NOT_FOUND` | Verify token ID |
+| `ErrorCode.INVALID_TOKEN_STANDARD` | `INVALID_TOKEN_STANDARD` | Use a supported standard (ERC-20/721/1155/3643) |
+| `ErrorCode.MINTING_PAUSED` | `MINTING_PAUSED` | Wait for admin to unpause |
+| `ErrorCode.TRANSFER_PAUSED` | `TRANSFER_PAUSED` | Transfers halted — check compliance status |
+| `ErrorCode.ACCOUNT_FROZEN` | `ACCOUNT_FROZEN` | Contact compliance team |
+
+#### Oracle
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.ORACLE_ERROR` | `ORACLE_ERROR` | Check oracle feed health |
+| `ErrorCode.ORACLE_STALE_DATA` | `ORACLE_STALE_DATA` | Wait for fresh data update |
+| `ErrorCode.ORACLE_UNAVAILABLE` | `ORACLE_UNAVAILABLE` | Fallback to secondary oracle or wait |
+
+#### Storage
+
+| Constant | String Value | Recommended Handling |
+|----------|-------------|---------------------|
+| `ErrorCode.STORAGE_ERROR` | `STORAGE_ERROR` | Check storage provider status |
+| `ErrorCode.UPLOAD_FAILED` | `UPLOAD_FAILED` | Retry upload; check file size limits |
+| `ErrorCode.DOWNLOAD_FAILED` | `DOWNLOAD_FAILED` | Verify CID/key exists; retry |
+
+### Error Handling Example
 
 ```typescript
-import { TokenizationError } from '@tokenisation/sdk';
+import {
+  isSDKError,
+  hasErrorCode,
+  ErrorCode,
+  ComplianceError,
+  NetworkError,
+  ValidationError,
+  formatErrorForUser,
+} from '@tokenisation/sdk';
 
 try {
-  await client.tokens.deploy(tokenId, { deployerAddress });
+  await client.transfers.create({ tokenId, fromWallet, toWallet, amount });
 } catch (error) {
-  if (error instanceof TokenizationError) {
-    console.error(`[${error.code}] ${error.message}`);
-    console.error(`Status: ${error.statusCode}`);
-    console.error(`Request ID: ${error.requestId}`);
+  if (error instanceof ComplianceError) {
+    // Access violation details
+    for (const v of error.violations) {
+      console.log(`Rule ${v.ruleId}: ${v.reason}`);
+    }
+  } else if (error instanceof ValidationError) {
+    console.log(`Field "${error.field}" failed:`, error.constraints);
+  } else if (error instanceof NetworkError && error.statusCode === 429) {
+    // Rate limited — back off
+    await sleep(5000);
+  } else if (isSDKError(error)) {
+    // Generic SDK error handling
+    if (hasErrorCode(error, ErrorCode.KYC_REQUIRED)) {
+      redirectToKYC();
+    } else {
+      // Show user-friendly message
+      showToast(formatErrorForUser(error));
+    }
   }
 }
 ```
 
-Common error codes: `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMIT_EXCEEDED`, `CONFLICT`, `INTERNAL_ERROR`.
+### Utility Functions
+
+| Function | Description |
+|----------|-------------|
+| `isSDKError(error)` | Type guard — returns `true` if error is an `SDKError` instance |
+| `hasErrorCode(error, code)` | Check if an error has a specific `ErrorCode` |
+| `wrapError(error, message?, code?)` | Wrap any `unknown` error into an `SDKError` |
+| `getErrorMessage(error)` | Safely extract error message from `unknown` |
+| `formatErrorForUser(error)` | Map error code to a user-friendly string |
 
 ---
 

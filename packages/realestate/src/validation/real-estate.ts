@@ -175,6 +175,51 @@ export type RedemptionRequestInput = z.infer<typeof redemptionRequestInputSchema
 // DLD Client Schemas
 // ============================================================================
 
+export const VerifyTitleDeedInputSchema = z.object({
+  deedNumber: z.string().min(1, 'deedNumber is required'),
+  propertyId: z.string().optional(),
+  emiratesId: z.string().optional(),
+  passportNumber: z.string().optional(),
+});
+export type VerifyTitleDeedInput = z.infer<typeof VerifyTitleDeedInputSchema>;
+
+export const CheckTokenizationEligibilityInputSchema = z.object({
+  propertyId: z.string().min(1, 'propertyId is required'),
+  deedNumber: z.string().optional(),
+  ownershipType: z.string().optional(),
+});
+export type CheckTokenizationEligibilityInput = z.infer<typeof CheckTokenizationEligibilityInputSchema>;
+
+export const NotifyTokenizationInputSchema = z.object({
+  propertyId: z.string().min(1, 'propertyId is required'),
+  deedNumber: z.string().min(1, 'deedNumber is required'),
+  tokenContractAddress: z.string().min(1, 'tokenContractAddress is required'),
+  totalSupply: z.string().min(1, 'totalSupply is required'),
+  issuerDetails: z.object({
+    name: z.string().optional(),
+    registrationNumber: z.string().optional(),
+    jurisdiction: z.string().optional(),
+  }).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+export type NotifyTokenizationInput = z.infer<typeof NotifyTokenizationInputSchema>;
+
+export const GetValuationInputSchema = z.object({
+  propertyId: z.string().min(1, 'propertyId is required'),
+  valuationType: z.enum(['MARKET', 'BOOK', 'ASSESSED']).optional(),
+});
+export type GetValuationInput = z.infer<typeof GetValuationInputSchema>;
+
+export const ListDldEventsParamsSchema = z.object({
+  propertyId: z.string().optional(),
+  eventType: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+  offset: z.number().int().min(0).optional(),
+});
+export type ListDldEventsParams = z.infer<typeof ListDldEventsParamsSchema>;
+
 export const dldRegisterTitleInputSchema = z.object({
   projectId: z.string().min(1, 'projectId is required'),
   dldTitleNumber: z.string().min(1, 'dldTitleNumber is required'),

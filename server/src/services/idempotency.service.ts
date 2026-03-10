@@ -55,8 +55,11 @@ export interface IdempotentRequest extends ApiKeyRequest {
  * Generates a hash of the request body for comparison.
  */
 function hashRequestBody(body: unknown): string {
-  const normalized = JSON.stringify(body, Object.keys(body as object).sort());
-  return createHash('sha256').update(normalized).digest('hex');
+  // Must match the global idempotency middleware's hash (middleware/idempotency.ts)
+  const serialised = body && Object.keys(body as object).length > 0
+    ? JSON.stringify(body)
+    : '';
+  return createHash('sha256').update(serialised).digest('hex');
 }
 
 /**

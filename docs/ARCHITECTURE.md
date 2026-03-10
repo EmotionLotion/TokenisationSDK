@@ -7,7 +7,7 @@
 ## Table of Contents
 
 1. [System Overview](#1-system-overview)
-2. [Monorepo Structure](#2-monorepo-structure)
+2. [Package Architecture](#2-package-architecture)
 3. [SDK Core Engine](#3-sdk-core-engine)
 4. [SDK Modules](#4-sdk-modules)
 5. [Vertical Packs](#5-vertical-packs)
@@ -73,11 +73,66 @@ The platform follows a layered architecture where each layer has well-defined re
 
 ---
 
-## 2. Monorepo Structure
+## 2. Package Architecture
+
+The SDK has been refactored from a monolithic `@tokenisation/sdk` into four layered packages. The umbrella `@tokenisation/sdk` package still works (it re-exports everything), but teams can now install only what they need.
+
+### Dependency Graph
+
+```
+@tokenisation/core                ← Foundation (engines, errors, types, plugins)
+    ↑               ↑
+@tokenisation/compliance   @tokenisation/chains     ← Domain layers (independent of each other)
+    ↑               ↑
+@tokenisation/realestate          ← Primary vertical (depends on all three above)
+    ↑
+@tokenisation/sdk                 ← Umbrella re-export (unchanged public API)
+```
+
+**Build order**: `core` → `compliance` | `chains` (parallel) → `realestate` → `sdk`
+
+### Which Package Owns What
+
+| Concern | Package | Key exports |
+|---------|---------|-------------|
+| Engines (Lifecycle, Compliance, Policy, Saga) | `@tokenisation/core` | `LifecycleEngine`, `ComplianceEngine`, `PolicyEvaluator`, `SagaOrchestrator` |
+| State machines, hook system, event store | `@tokenisation/core` | `StateMachine`, `HookManager`, `EventStore` |
+| Error hierarchy (9 classes, 51 codes) | `@tokenisation/core` | `SDKError`, `ErrorCode`, `isSDKError`, `hasErrorCode` |
+| API Client (Stripe-like) | `@tokenisation/core` | `ApiClient`, `createApiClient`, `HttpClient` |
+| OAuth, pagination, validation utils | `@tokenisation/core` | `OAuthTokenManager`, `paginate`, `isValidAddress` |
+| Asset abstraction, decision receipts | `@tokenisation/core` | `AssetType`, `createReceipt`, `hashPolicy` |
+| Disaster recovery, custody, indexing | `@tokenisation/core` | `DisasterRecoveryService`, `CustodyManager`, `IndexingEngine` |
+| Offline engines, providers (mock) | `@tokenisation/core` | `offline.*`, `MockKYCProvider`, `MockCustodyProvider` |
+| KYC/AML, identity claims, policy rules | `@tokenisation/compliance` | `ComplianceService`, `JurisdictionPlugin`, `ClaimsService`, `PolicyRegistry` |
+| KYC providers (Sumsub, Mock) | `@tokenisation/compliance` | `SumsubProvider`, `MockKYCProvider` |
+| EVM chain plugins, chain registry | `@tokenisation/chains` | `EVMChainPlugin`, `ChainRegistry`, `chainRegistry` |
+| Smart contract adapters (ERC-20/721/1155/1410/4626/SBT) | `@tokenisation/chains` | `ERC20Adapter`, `ComplianceTokenContract` |
+| Chainlink integration (11 plugins) | `@tokenisation/chains` | `DataFeedPlugin`, `CCIPBridgePlugin`, `AutomationPlugin`, etc. |
+| Deployment, gas, oracle, reconciliation services | `@tokenisation/chains` | `DeploymentService`, `GasEstimator`, `OracleService` |
+| Account abstraction (ERC-4337) | `@tokenisation/chains` | `AAModule`, bundlers, paymasters |
+| MPC custody (Fireblocks, Lit, Web3Auth) | `@tokenisation/chains` | `FireblocksCustodyProvider`, etc. |
+| ZKP (circuits, plugins) | `@tokenisation/chains` | `ZKPPlugin`, `CircuitManager` |
+| Connectors (DocuSign, WalletPass) | `@tokenisation/chains` | `DocuSignConnector`, `AppleWalletPass` |
+| Real estate lifecycle (11 states) | `@tokenisation/realestate` | `REAL_ESTATE_LIFECYCLE`, `RealEstateLifecycleStates` |
+| DLD/VARA condition evaluators | `@tokenisation/realestate` | `DLDConditionEvaluator`, `VARAConditionEvaluator` |
+| Pre-built packs (Dubai, ADGM, Generic) | `@tokenisation/realestate` | `dubaiRealEstatePack`, `createRealEstatePack` |
+| RE modules (Property, NAV, SecondaryMarket, etc.) | `@tokenisation/realestate` | `PropertyModule`, `NAVModule`, `DLDClient` |
+| RE validation schemas (14 Zod schemas) | `@tokenisation/realestate` | `createPropertyInputSchema`, `parseOrThrow` |
+| DLD provider interface | `@tokenisation/realestate` | `IDLDProvider`, `MockDLDProvider` |
+
+### Monorepo Structure
 
 ```
 TokenisationSDK/
-├── sdk/                    # Core TypeScript SDK
+├── packages/
+│   ├── core/               # @tokenisation/core — foundation
+│   ├── compliance/         # @tokenisation/compliance — KYC/AML, identity
+│   ├── chains/             # @tokenisation/chains — blockchain, contracts, oracles
+│   ├── realestate/         # @tokenisation/realestate — UAE real estate vertical
+│   ├── conformance-suite/  # SDK conformance tests
+│   ├── create-tokenised-asset/  # CLI scaffolding tool
+│   └── sdk-playground/     # Interactive SDK demo
+├── sdk/                    # @tokenisation/sdk — umbrella re-export
 ├── sdk-react/              # React hooks & components
 ├── sdk-react-native/       # React Native bindings
 ├── ui-kit/                 # Reusable UI component library
@@ -87,10 +142,6 @@ TokenisationSDK/
 ├── apps/
 │   └── real-estate/        # Real estate tokenisation app
 ├── circuits/               # Zero-knowledge proof circuits
-├── packages/
-│   ├── conformance-suite/  # SDK conformance tests
-│   ├── create-tokenised-asset/  # CLI scaffolding tool
-│   └── sdk-playground/     # Interactive SDK demo
 ├── deploy/                 # Deployment scripts
 ├── docker/                 # Docker configuration
 ├── docs/                   # Documentation
@@ -104,17 +155,17 @@ TokenisationSDK/
 ```
 
 **Package manager**: pnpm (workspaces)
-**Build**: TypeScript (`tsc`) for SDK packages, Vite for applications, Foundry for contracts
+**Build**: `pnpm -r run build` — TypeScript (`tsc`) for SDK packages, Vite for applications, Foundry for contracts
 
 ---
 
 ## 3. SDK Core Engine
 
-The core engine (`sdk/src/core/`) contains 27 files forming the foundational abstractions.
+The core engine (`packages/core/src/core/`) contains 27 files forming the foundational abstractions.
 
 ### 3.1 Compliance Engine
 
-**File**: `core/ComplianceEngine.ts`
+**File**: `packages/core/src/core/ComplianceEngine.ts`
 
 The central gatekeeper for all token operations. Every transfer, issuance, or redemption passes through compliance evaluation.
 
@@ -135,7 +186,7 @@ Key types:
 
 ### 3.2 Lifecycle Engine
 
-**File**: `core/LifecycleEngine.ts`
+**File**: `packages/core/src/core/LifecycleEngine.ts`
 
 Manages the lifecycle of tokenised assets through defined state transitions:
 
@@ -148,7 +199,7 @@ Each transition is validated against compliance rules and emits events to the Ev
 
 ### 3.3 State Machine
 
-**File**: `core/StateMachine.ts`
+**File**: `packages/core/src/core/StateMachine.ts`
 
 A generic, configurable state machine used by vertical packs to define custom lifecycle flows. Provides:
 
@@ -159,7 +210,7 @@ A generic, configurable state machine used by vertical packs to define custom li
 
 ### 3.4 Custody Manager
 
-**File**: `core/CustodyManager.ts`
+**File**: `packages/core/src/core/CustodyManager.ts`
 
 Multi-signature custody with regulatory override capabilities:
 
@@ -170,7 +221,7 @@ Multi-signature custody with regulatory override capabilities:
 
 ### 3.5 Event Store
 
-**File**: `core/EventStore.ts`
+**File**: `packages/core/src/core/EventStore.ts`
 
 Append-only event sourcing with `IEventStore` interface. Supports:
 
@@ -180,7 +231,7 @@ Append-only event sourcing with `IEventStore` interface. Supports:
 
 ### 3.6 Saga Orchestrator
 
-**Files**: `core/Saga.ts`, `core/saga/`
+**Files**: `packages/core/src/core/Saga.ts`, `packages/core/src/core/saga/`
 
 Long-running transaction orchestration with compensating actions:
 
@@ -192,26 +243,26 @@ Long-running transaction orchestration with compensating actions:
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| Asset Abstraction | `AssetAbstraction.ts` | Maps business concepts (AssetType, InvestorClass) to ERC standards |
-| Chain Service | `ChainService.ts` | Multi-chain connection management |
-| Decision Receipt | `DecisionReceipt.ts` | Cryptographic compliance proofs with receipt chaining |
-| Hook System | `HookSystem.ts` | Pre/post lifecycle hooks with priority ordering |
-| Indexing Engine | `IndexingEngine.ts` | Real-time on-chain event indexing |
-| Policy Evaluator | `PolicyEvaluator.ts` | Rule engine for compliance policies |
-| Policy Hash | `PolicyHash.ts` | Content-addressed policy versioning |
-| Provider Registry | `ProviderRegistry.ts` | Registry for external service providers |
-| Right Type Registry | `RightTypeRegistry.ts` | Custom token right definitions |
-| Idempotency | `Idempotency.ts` | Operation deduplication |
-| Resilience | `Resilience.ts` | Circuit breaker pattern |
-| Retry | `Retry.ts` | Exponential backoff retry |
-| Disaster Recovery | `DisasterRecovery.ts` | Key recovery and disaster workflows |
-| Observability | `Observability.ts` | OpenTelemetry hooks |
+| Asset Abstraction | `packages/core/src/core/AssetAbstraction.ts` | Maps business concepts (AssetType, InvestorClass) to ERC standards |
+| Chain Service | `packages/core/src/core/ChainService.ts` | Multi-chain connection management |
+| Decision Receipt | `packages/core/src/core/DecisionReceipt.ts` | Cryptographic compliance proofs with receipt chaining |
+| Hook System | `packages/core/src/core/HookSystem.ts` | Pre/post lifecycle hooks with priority ordering |
+| Indexing Engine | `packages/core/src/core/IndexingEngine.ts` | Real-time on-chain event indexing |
+| Policy Evaluator | `packages/core/src/core/PolicyEvaluator.ts` | Rule engine for compliance policies |
+| Policy Hash | `packages/core/src/core/PolicyHash.ts` | Content-addressed policy versioning |
+| Provider Registry | `packages/core/src/core/ProviderRegistry.ts` | Registry for external service providers |
+| Right Type Registry | `packages/core/src/core/RightTypeRegistry.ts` | Custom token right definitions |
+| Idempotency | `packages/core/src/core/Idempotency.ts` | Operation deduplication |
+| Resilience | `packages/core/src/core/Resilience.ts` | Circuit breaker pattern |
+| Retry | `packages/core/src/core/Retry.ts` | Exponential backoff retry |
+| Disaster Recovery | `packages/core/src/core/DisasterRecovery.ts` | Key recovery and disaster workflows |
+| Observability | `packages/core/src/core/Observability.ts` | OpenTelemetry hooks |
 
 ---
 
 ## 4. SDK Modules
 
-The module layer (`sdk/src/modules/`) contains 28 domain-specific API clients that consume core services.
+The module layer (`packages/core/src/modules/`) contains 28 domain-specific API clients that consume core services. Real-estate-specific modules (DLD, Property, NAV, InvestorTier, ExitWindow, SecondaryMarket, Legal) live in `packages/realestate/src/modules/`.
 
 ### Module Catalogue
 
@@ -258,64 +309,50 @@ export class SecondaryMarketModule {
 
 ## 5. Vertical Packs
 
-Packs (`sdk/src/packs/`) are pre-built vertical configurations that combine modules, compliance rules, lifecycle states, and condition evaluators for specific asset classes.
+Packs are pre-built vertical configurations that combine modules, compliance rules, lifecycle states, and condition evaluators for specific asset classes. Generic packs live in `packages/core/src/packs/`; real estate packs live in `packages/realestate/src/packs/`.
 
 ### 5.1 Available Verticals
 
-| Pack | Files | Description |
-|------|-------|-------------|
-| **Real Estate** | `real-estate.pack.ts`, `real-estate-lifecycle.ts`, `UAERealEstate.ts` | Property tokenisation with SPV structures, DLD integration, VARA compliance |
-| **US Securities** | `us-securities.pack.ts` | SEC Reg D/S compliant security tokens |
-| **GPU Compute** | `gpu-compute.pack.ts`, `GPUCompute.ts` | Tokenised GPU compute resources |
-| **Airline Tickets** | `AirlineTicket.ts`, `AirlineTicketStateMachine.ts` | NFT-based airline tickets with boarding pass lifecycle |
-| **Concert Tickets** | `ConcertTicket.ts`, `ConcertTicketStateMachine.ts` | Event ticket NFTs with venue validation |
-| **Hotel Reservations** | `HotelReservation.ts`, `HotelReservationStateMachine.ts` | Hotel booking tokens with check-in/out states |
-| **Car Rentals** | `CarRental.ts`, `CarRentalStateMachine.ts` | Car rental reservation tokens |
-| **Event Tickets** | `EventTicket.ts` | Generic event ticketing |
-| **Loyalty Points** | `LoyaltyPoints.ts` | Points-based loyalty programs |
-| **Physical Assets** | `PhysicalAsset.ts` | Tokenised physical goods with custody proofs |
-| **Warehouse Receipts** | `WarehouseReceipt.ts` | Commodity warehouse receipt tokens |
-| **Verification Credentials** | `VerificationCredential.ts` | Verifiable credential tokens |
+| Pack | Package | Files | Description |
+|------|---------|-------|-------------|
+| **UAE Real Estate** | `@tokenisation/realestate` | `real-estate.pack.ts`, `real-estate-lifecycle.ts`, `UAERealEstate.ts` | Property tokenisation with SPV structures, DLD integration, VARA compliance |
+| **US Securities** | `@tokenisation/core` | `us-securities.pack.ts` | SEC Reg D/S compliant security tokens |
+| **GPU Compute** | `@tokenisation/core` | `gpu-compute.pack.ts`, `GPUCompute.ts` | Tokenised GPU compute resources |
+| **Airline Tickets** | `@tokenisation/core` | `AirlineTicket.ts`, `AirlineTicketStateMachine.ts` | NFT-based airline tickets with boarding pass lifecycle |
+| **Concert Tickets** | `@tokenisation/core` | `ConcertTicket.ts`, `ConcertTicketStateMachine.ts` | Event ticket NFTs with venue validation |
+| **Hotel Reservations** | `@tokenisation/core` | `HotelReservation.ts`, `HotelReservationStateMachine.ts` | Hotel booking tokens with check-in/out states |
+| **Car Rentals** | `@tokenisation/core` | `CarRental.ts`, `CarRentalStateMachine.ts` | Car rental reservation tokens |
+| **Event Tickets** | `@tokenisation/core` | `EventTicket.ts` | Generic event ticketing |
+| **Loyalty Points** | `@tokenisation/core` | `LoyaltyPoints.ts` | Points-based loyalty programs |
+| **Physical Assets** | `@tokenisation/core` | `PhysicalAsset.ts` | Tokenised physical goods with custody proofs |
+| **Warehouse Receipts** | `@tokenisation/core` | `WarehouseReceipt.ts` | Commodity warehouse receipt tokens |
+| **Verification Credentials** | `@tokenisation/core` | `VerificationCredential.ts` | Verifiable credential tokens |
 
-### 5.2 Real Estate Lifecycle (Example)
+### 5.2 Real Estate Lifecycle (11-State)
+
+The real estate lifecycle (`packages/realestate/src/packs/real-estate-lifecycle.ts`) models the full Stake.com pipeline with 11 states and zero information loss:
 
 ```
-                    ┌──────────┐
-                    │  DRAFT   │
-                    └────┬─────┘
-                         │ submit_for_review
-                    ┌────▼─────┐
-                    │ REVIEW   │
-                    └────┬─────┘
-                    ┌────▼──────────┐
-                    │ DUE_DILIGENCE │
-                    └────┬──────────┘
-                    ┌────▼─────────────┐
-                    │ REGULATORY_FILING │
-                    └────┬─────────────┘
-                    ┌────▼─────────────┐
-                    │ PENDING_APPROVAL  │
-                    └────┬─────────────┘
-                    ┌────▼─────┐
-                    │ APPROVED │
-                    └────┬─────┘
-                    ┌────▼───────┐
-                    │ MINTING    │
-                    └────┬───────┘
-              ┌──────────▼──────────┐
-              │     ACTIVE          │
-              │  (tokens trading)   │
-              └──┬──────────┬───────┘
-                 │          │
-          freeze │          │ initiate_exit
-        ┌────────▼──┐  ┌───▼────────────┐
-        │  FROZEN    │  │ EXIT_PERIOD    │
-        └────────────┘  └───┬────────────┘
-                            │ complete_exit
-                       ┌────▼─────┐
-                       │ REDEEMED │
-                       └──────────┘
+  SOURCING ──► DUE_DILIGENCE ──► LEGAL_STRUCTURING ──► REGULATORY_APPROVAL ──► TOKEN_ISSUANCE ──► LIVE
+                                                                                                    │
+                                                                                   ┌────────────────┤
+                                                                                   │                │
+                                                                          ENABLE_SECONDARY   BEGIN_DISTRIBUTION
+                                                                                   │                │
+                                                                        SECONDARY_TRADING ◄── DISTRIBUTING
+                                                                                   │                ▲
+                                                                                   ├── BEGIN_DIST ──┘
+                                                                                   │
+                                                                         ┌── FREEZE ──┐
+                                                                         │            │
+                                                                       FROZEN         │
+                                                                         │            │
+                                                                  UNFREEZE_TO_*       │
+                                                                                      │
+                                                               Any non-terminal ── REDEEM ──► REDEEMED ──► CLOSED
 ```
+
+Guards enforce lockup expiry, VARA approval, DLD registration, and property-sold conditions. Role-gated transitions require `ADMIN` or `COMPLIANCE` roles.
 
 ### 5.3 Pack Architecture
 
@@ -330,7 +367,7 @@ Each pack provides:
 
 ## 6. Plugin System
 
-Plugins (`sdk/src/plugins/`) are the primary extension mechanism. They implement well-defined interfaces from `core/interfaces.ts`.
+Plugins are the primary extension mechanism. Auth, storage, events, and KYC plugins live in `packages/core/src/plugins/`. Chain and Chainlink plugins live in `packages/chains/src/plugins/`. Compliance plugins live in `packages/compliance/src/plugins/`. All implement well-defined interfaces from `packages/core/src/core/interfaces.ts`.
 
 ### 6.1 Plugin Interfaces
 
@@ -401,8 +438,8 @@ interface IProofOfReservePlugin {
 ### 6.3 Plugin Registration
 
 ```typescript
-import { TokenisationSDK } from '@tokenisation/sdk';
-import { MetaMaskPlugin } from '@tokenisation/sdk/plugins';
+import { TokenisationSDK, MetaMaskPlugin, IPFSStoragePlugin } from '@tokenisation/core';
+import { EVMChainPlugin } from '@tokenisation/chains';
 
 const sdk = new TokenisationSDK({
   plugins: [
@@ -413,11 +450,13 @@ const sdk = new TokenisationSDK({
 });
 ```
 
+> **Note:** You can also import from `@tokenisation/sdk` — it re-exports everything from the individual packages.
+
 ---
 
 ## 7. Provider Interfaces
 
-Providers (`sdk/src/providers/`) are swappable implementations of external service integrations.
+Providers are swappable implementations of external service integrations. Mock and reference providers live in `packages/core/src/providers/`. KYC providers (Sumsub, Mock) live in `packages/compliance/src/providers/`. Custody providers (Fireblocks, Lit, Web3Auth) live in `packages/chains/src/providers/`. DLD providers live in `packages/realestate/src/providers/`.
 
 ### 7.1 Provider Types
 
@@ -524,7 +563,7 @@ The contracts layer (`contracts/src/`) implements on-chain logic using Solidity,
 
 ### 8.4 SDK Contract Adapters
 
-The SDK wraps contract interactions through typed adapters:
+The SDK wraps contract interactions through typed adapters in `packages/chains/src/contracts/`:
 
 | Adapter | Standard | Operations |
 |---------|----------|------------|
@@ -728,7 +767,7 @@ The server (`server/src/`) is an Express.js application providing RESTful APIs w
 ### 12.1 Account Abstraction (ERC-4337)
 
 ```
-sdk/src/account-abstraction/
+packages/chains/src/account-abstraction/
 ├── bundlers/
 │   ├── AlchemyBundler.ts       # Alchemy bundler integration
 │   ├── BiconomyBundler.ts      # Biconomy bundler integration
@@ -747,7 +786,7 @@ Enables gasless transactions for end users through smart contract wallets.
 ### 12.2 Zero-Knowledge Proofs
 
 ```
-sdk/src/zkp/
+packages/chains/src/zkp/
 ├── CircuitManager.ts    # Circuit compilation and proving
 └── ZKPPlugin.ts         # Plugin interface for ZKP compliance
 
@@ -764,7 +803,7 @@ Allows compliance checks (KYC, accreditation) without revealing personal data.
 ### 12.3 Multi-Party Computation (MPC)
 
 ```
-sdk/src/providers/custody/mpc/
+packages/chains/src/providers/custody/mpc/
 ├── AbstractMPCProvider.ts       # Base MPC abstraction
 ├── FireblocksCustodyProvider.ts # Fireblocks integration
 ├── LitProtocolCustodyProvider.ts# Lit Protocol integration
@@ -776,7 +815,7 @@ sdk/src/providers/custody/mpc/
 ### 12.4 Offline Support
 
 ```
-sdk/src/offline/
+packages/core/src/offline/
 ├── LifecycleEngine.ts    # Offline lifecycle management
 ├── ComplianceEngine.ts   # Offline compliance evaluation
 ├── CashFlowEngine.ts     # Offline distribution calculation
@@ -790,7 +829,7 @@ sdk/src/offline/
 ### 12.5 Cross-Pack Orchestration
 
 ```
-sdk/src/orchestration/
+packages/core/src/orchestration/
 ├── CrossPackEventBus.ts           # Events across verticals
 ├── SagaOrchestrator.ts            # Multi-pack saga coordination
 ├── PortableComplianceReceipt.ts   # Cross-vertical compliance proofs
@@ -897,7 +936,7 @@ export const myVerticalPack = {
 ### 14.2 Adding a New Plugin
 
 ```typescript
-import { ICompliancePlugin } from '@tokenisation/sdk/core/interfaces';
+import type { ICompliancePlugin, ComplianceContext, ComplianceResult } from '@tokenisation/core';
 
 class MyCompliancePlugin implements ICompliancePlugin {
   async check(context: ComplianceContext): Promise<ComplianceResult> {
@@ -913,7 +952,7 @@ sdk.registerPlugin(new MyCompliancePlugin());
 ### 14.3 Adding a New Provider
 
 ```typescript
-import { IKYCProvider } from '@tokenisation/sdk/core/interfaces.providers';
+import type { IKYCProvider, KYCSession, KYCStatus } from '@tokenisation/core';
 
 class MyKYCProvider implements IKYCProvider {
   async createSession(userId: string): Promise<KYCSession> {

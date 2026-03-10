@@ -25,7 +25,7 @@ The platform supports ERC-3643 (T-REX) for regulated security tokens, ERC-20 for
 
 ### Is the platform suitable for production use?
 
-The platform is designed for production use with enterprise-grade security, compliance, and audit capabilities. However, ensure you have completed a security audit, configured proper authentication secrets, and tested your compliance policies before going live. See the [Security Audit Checklist](https://github.com/your-org/tokenisation-sdk/blob/main/SECURITY_AUDIT_CHECKLIST.md) for a comprehensive review guide.
+The platform is designed for production use with enterprise-grade security, compliance, and audit capabilities. However, ensure you have completed a security audit, configured proper authentication secrets, and tested your compliance policies before going live. See the [Security Audit Checklist](https://github.com/EmotionLotion/TokenisationSDK/blob/main/SECURITY_AUDIT_CHECKLIST.md) for a comprehensive review guide.
 
 ---
 
@@ -51,6 +51,26 @@ This starts the API server, PostgreSQL, Redis, and a local Anvil (Foundry) block
 ### Can I use npm or yarn instead of pnpm?
 
 The monorepo is configured for pnpm workspaces. While you can install individual SDK packages with npm or yarn in your own project (`npm install @tokenisation/sdk`), contributing to the platform itself requires pnpm.
+
+---
+
+## Packages
+
+### What's the difference between @tokenisation/sdk and the individual packages?
+
+`@tokenisation/sdk` is the **umbrella package** — it re-exports everything from the four individual packages (`@tokenisation/core`, `@tokenisation/compliance`, `@tokenisation/chains`, `@tokenisation/realestate`). If you install `@tokenisation/sdk`, all imports continue to work exactly as before.
+
+The individual packages let you install only what you need:
+
+| If you need... | Install |
+|----------------|---------|
+| Just the API client, engines, and types | `@tokenisation/core` |
+| KYC/AML, jurisdiction enforcement | `@tokenisation/core` + `@tokenisation/compliance` |
+| Smart contracts, Chainlink, deployment | `@tokenisation/core` + `@tokenisation/chains` |
+| UAE real estate (DLD, VARA, lifecycle) | `@tokenisation/realestate` (pulls in all three) |
+| Everything (simplest) | `@tokenisation/sdk` |
+
+All packages use the same version and are published together. There is no risk of version mismatch when combining them.
 
 ---
 

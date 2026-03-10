@@ -14,5 +14,6 @@
     "skipLibCheck": true,
     "composite": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/hooks", "src/ui-kit", "src/ui"]
 }

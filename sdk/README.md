@@ -4,6 +4,37 @@
 
 A TypeScript SDK for building tokenized asset applications with built-in compliance, multi-chain support, and lifecycle management.
 
+## Package Architecture
+
+This is the **umbrella package** — it re-exports everything from the four underlying packages. Install this if you want the simplest setup with no decisions about which packages to import.
+
+```
+@tokenisation/sdk (this package)
+  └── re-exports from:
+       ├── @tokenisation/core        — Engines, API client, errors, types, plugins
+       ├── @tokenisation/compliance  — KYC/AML, identity claims, jurisdiction enforcement
+       ├── @tokenisation/chains      — Blockchain, contracts, Chainlink, AA, ZKP, custody
+       └── @tokenisation/realestate  — UAE real estate with DLD/VARA
+```
+
+**All existing imports from `@tokenisation/sdk` continue to work.** If you want lighter dependencies, you can import from individual packages instead:
+
+```typescript
+// These are equivalent:
+import { ApiClient, createApiClient } from '@tokenisation/sdk';
+import { ApiClient, createApiClient } from '@tokenisation/core';
+
+// Real estate specific:
+import { DLDClient, PropertyModule } from '@tokenisation/sdk';
+import { DLDClient, PropertyModule } from '@tokenisation/realestate';
+
+// Blockchain specific:
+import { EVMChainPlugin, DeploymentService } from '@tokenisation/sdk';
+import { EVMChainPlugin, DeploymentService } from '@tokenisation/chains';
+```
+
+See [`packages/core/README.md`](../packages/core/README.md), [`packages/compliance/README.md`](../packages/compliance/README.md), [`packages/chains/README.md`](../packages/chains/README.md), and [`packages/realestate/README.md`](../packages/realestate/README.md) for detailed documentation of each package.
+
 ## Features
 
 - **27 API Modules** — Assets, tokens, transfers, investors, compliance, governance, escrow, and more

@@ -1,3 +1,20 @@
+// Generic Workflow Registry (pack-agnostic)
+export {
+  WorkflowRegistry,
+} from './WorkflowRegistry.js';
+export type {
+  WorkflowDefinition,
+  WorkflowStepDefinition,
+  WorkflowExecutionContext,
+  WorkflowProgressCallback,
+  WorkflowProgressEvent,
+  WorkflowResult,
+  WorkflowStepResult,
+  WorkflowError,
+  WorkflowRunOptions,
+} from './WorkflowRegistry.js';
+
+// GoldenPath — Legacy convenience workflows (deprecated, use WorkflowRegistry)
 export {
   // Types
   ProgressCallback,

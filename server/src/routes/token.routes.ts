@@ -3,7 +3,6 @@ import { z } from 'zod';
 import * as tokenService from '../services/token.service.js';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
-import { idempotencyMiddleware } from '../services/idempotency.service.js';
 import { requireScope } from '../middleware/scopeGuard.js';
 
 export const tokenRouter = Router();
@@ -85,7 +84,8 @@ tokenRouter.post(
   '/',
   apiKeyMiddleware,
   requireScope('write'),
-  idempotencyMiddleware({ operation: 'token.create', required: true }),
+  // Idempotency handled by global middleware; require the header for safety
+  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
@@ -174,7 +174,7 @@ tokenRouter.post(
   '/:id/deploy',
   apiKeyMiddleware,
   requireScope('admin'),
-  idempotencyMiddleware({ operation: 'token.deploy', required: true }),
+  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
@@ -538,7 +538,7 @@ tokenRouter.post(
   '/:tokenId/burn',
   apiKeyMiddleware,
   requireScope('admin'),
-  idempotencyMiddleware({ operation: 'token.burn', required: true }),
+  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {

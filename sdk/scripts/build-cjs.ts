@@ -43,10 +43,14 @@ const sharedOptions = {
   sourcemap: true,
   minify: false,
   treeShaking: true,
+  // Allow JSX in .js files (e.g. @tokenisation/realestate compiled components)
+  loader: { '.js': 'jsx' as const },
   // External peer / heavy deps that consumers provide
   external: [
     'ethers',
     'viem',
+    'react',
+    'react-dom',
     '@chainlink/*',
     'drizzle-orm',
     'pg',

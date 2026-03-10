@@ -30,6 +30,18 @@ const client = new ApiClient({
 In sandbox mode, use API keys prefixed with `sk_test_`. For production, use keys prefixed with `sk_live_`.
 :::
 
+:::note Individual Package Imports
+If you prefer lighter dependencies, you can import from individual packages instead of the umbrella:
+
+```typescript
+// These are equivalent:
+import { ApiClient } from '@tokenisation/sdk';
+import { ApiClient } from '@tokenisation/core';
+```
+
+See [Installation — Choosing Your Packages](./INSTALLATION.md#choosing-your-packages) for the full decision tree.
+:::
+
 ## Step 3: Create an Organisation and Project
 
 Every tokenised asset belongs to a project, which belongs to an organisation.

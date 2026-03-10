@@ -153,7 +153,6 @@ export class DLDConditionEvaluator implements ICustomConditionEvaluator {
 
       const titleDeed = await this.dldModule.verify({
         deedNumber: titleDeedNumber,
-        propertyId: propertyId,
       });
 
       if (titleDeed.status !== 'VALID') {
@@ -176,6 +175,7 @@ export class DLDConditionEvaluator implements ICustomConditionEvaluator {
 
       // Step 2: Check tokenization eligibility (uses propertyId)
       const eligibility = await this.dldModule.canTokenize({
+        deedNumber: titleDeedNumber,
         propertyId: titleDeed.propertyId,
       });
 
@@ -311,12 +311,6 @@ export class DLDConditionEvaluator implements ICustomConditionEvaluator {
         deedNumber: titleDeedNumber,
         tokenContractAddress,
         totalSupply,
-        issuerDetails: {
-          name: issuerName,
-          registrationNumber: issuerRegNumber,
-          jurisdiction: issuerJurisdiction,
-        },
-        metadata: {},
       });
 
       // Store reference number for future checks

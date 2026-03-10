@@ -558,11 +558,15 @@ export {
 
 // ─── @tokenisation/realestate ─────────────────────────────────────────────────
 // Explicit re-exports to avoid name collisions with @tokenisation/core.
-// Colliding names kept from core: AssetPackConfig, CreateScheduleInput, DldEvent,
+// Colliding names kept from core: AssetPackConfig, CreateScheduleInput,
 // InvestorTier, RealEstateMetadata, RealEstateMetadataSchema, RedemptionRequest,
 // ValidationError.
 
 export {
+  // --- Types ---
+  type DldTitle,
+  DldEventRecord as DldEvent,
+
   // --- Models ---
   // RealEstateMetadataSchema — skipped (collides with core)
   // RealEstateMetadata (type) — skipped (collides with core)
@@ -657,7 +661,7 @@ export {
   type TokenizationEligibility,
   type TokenizationNotification,
   type Valuation,
-  // DldEvent — skipped (collides with core)
+  // DldEvent from DLDClient — skipped (re-exported above from types as DldEvent)
   type PropertySummary,
   DLDModule,
 

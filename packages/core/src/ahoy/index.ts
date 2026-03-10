@@ -15,7 +15,7 @@ export { DataStreamAccessPack, AlgorithmIPPack, createDataStreamAccess, register
 export { ComputeCreditPack, AgentWalletPack, registerComputeNode, createRoutingAgent, simulateComputeWeek } from './packs/ComputeCredit.js';
 
 // Plugins
-export { TelematicsOraclePlugin } from './plugins/TelematicsOracle.js';
+export { TelematicsOraclePlugin, TelematicsEventType } from './plugins/TelematicsOracle.js';
 export { IoTOraclePlugin } from './plugins/IoTOracle.js';
 
 // Adapters (connect to real COMET app)

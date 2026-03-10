@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **4-package SDK architecture:** The monolithic `@tokenisation/sdk` has been refactored into four layered packages:
+  - `@tokenisation/core` — Asset-class-agnostic foundation (engines, errors, types, plugins, API client, providers)
+  - `@tokenisation/compliance` — KYC/AML, identity claims, jurisdiction enforcement, policy registry
+  - `@tokenisation/chains` — Blockchain interaction, smart contract adapters, Chainlink oracles, account abstraction, MPC custody, ZKP
+  - `@tokenisation/realestate` — UAE real estate tokenization with DLD integration, VARA compliance, 11-state lifecycle
+- Build order: `core` → `compliance` | `chains` (parallel) → `realestate` → `sdk`
+- Backward compatibility: `@tokenisation/sdk` umbrella package unchanged — it re-exports everything from the four packages
+- Teams can now install only what they need (e.g., `@tokenisation/core` alone for non-real-estate verticals)
+- Package README documentation for all four new packages
+- Comprehensive error code reference documentation (51 codes across 9 error classes)
 - Industry vertical support: airline, hotel, car rental, concert ticket APIs with dedicated route files, services, and NFT contracts
 - Sanctions screening integration (OFAC/UN lists) with auto-refresh on startup
 - Persistent signing key service (`AutoFileSigningService`) — keys survive server restarts

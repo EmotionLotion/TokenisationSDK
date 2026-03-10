@@ -14,6 +14,10 @@ import {
   UUIDSchema,
 } from '@tokenisation/core';
 import {
+  parseOrThrow,
+  dldRegisterTitleInputSchema,
+  dldIngestEventInputSchema,
+  dldCreateSyncJobInputSchema,
   VerifyTitleDeedInputSchema,
   CheckTokenizationEligibilityInputSchema,
   NotifyTokenizationInputSchema,
@@ -24,8 +28,7 @@ import {
   type NotifyTokenizationInput,
   type GetValuationInput,
   type ListDldEventsParams,
-} from '@tokenisation/core';
-import { parseOrThrow, dldRegisterTitleInputSchema, dldIngestEventInputSchema, dldCreateSyncJobInputSchema } from '../validation/real-estate.js';
+} from '../validation/real-estate.js';
 
 // ============================================================================
 // Types

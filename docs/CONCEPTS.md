@@ -5,7 +5,18 @@ title: Core Concepts
 
 # Core Concepts
 
-This page explains the fundamental building blocks of the AHOY Tokenisation Platform: assets, tokens, investors, transfers, compliance policies, and the audit trail.
+This page explains the fundamental building blocks of the AHOY Tokenisation Platform: packages, assets, tokens, investors, transfers, compliance policies, and the audit trail.
+
+## Packages
+
+The SDK is organised into four independently installable packages that form a dependency hierarchy:
+
+- **`@tokenisation/core`** — Asset-class-agnostic foundation: engines (lifecycle, compliance, policy, saga), API client, error hierarchy (9 classes, 51 codes), state machines, offline support, orchestration, and mock providers.
+- **`@tokenisation/compliance`** — KYC/AML verification, identity claims, jurisdiction enforcement, and policy evaluation. Depends on `core`.
+- **`@tokenisation/chains`** — Blockchain interaction: EVM chain plugins, smart contract adapters (ERC-20/721/1155/3643), Chainlink integration (11 plugins), deployment services, account abstraction (ERC-4337), MPC custody, and ZKP. Depends on `core`.
+- **`@tokenisation/realestate`** — UAE real estate tokenization: 11-state lifecycle, DLD/VARA condition evaluators, pre-built packs (Dubai, ADGM, Generic), property modules, and 14 Zod validation schemas. Depends on `core`, `compliance`, and `chains`.
+
+The umbrella package `@tokenisation/sdk` re-exports everything from all four — existing code using `@tokenisation/sdk` continues to work without changes.
 
 ## Assets
 

@@ -5,7 +5,7 @@ import * as relayerService from '../services/relayer.service.js';
 import * as batchTransferService from '../services/batch-transfer.service.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { apiKeyMiddleware, type ApiKeyRequest } from '../middleware/auth.js';
-import { idempotencyMiddleware } from '../services/idempotency.service.js';
+// Idempotency handled by global middleware (middleware/idempotency.ts)
 import { requireScope } from '../middleware/scopeGuard.js';
 import { db, schema } from '../config/database.js';
 import { eq, and } from 'drizzle-orm';
@@ -387,7 +387,7 @@ transferRouter.post(
   '/',
   apiKeyMiddleware,
   requireScope('write'),
-  idempotencyMiddleware({ operation: 'transfer.create', required: true }),
+  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {

@@ -35,7 +35,6 @@ export {
   ClaimsService,
   DenyReason,
   PolicyRegistry,
-  UAE_REAL_ESTATE_POLICY,
 } from '@tokenisation/compliance';
 
 // Re-export chains (explicit to avoid name collisions with core)
@@ -648,4 +647,5 @@ export {
   type DLDProviderOwnershipType,
   MockDLDProvider,
   createMockDLDProvider,
+  UAE_REAL_ESTATE_POLICY,
 } from '@tokenisation/realestate';

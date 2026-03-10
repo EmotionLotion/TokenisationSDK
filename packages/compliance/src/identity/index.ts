@@ -15,7 +15,6 @@
  * import {
  *   ClaimsService,
  *   ClaimType,
- *   UAE_REAL_ESTATE_POLICY,
  * } from '@tokenisation/compliance/identity';
  *
  * // Process KYC result
@@ -58,7 +57,6 @@ export {
   PolicyRegistry,
   evaluatePolicy,
   createDefaultPolicyRegistry,
-  UAE_REAL_ESTATE_POLICY,
 } from './PolicyRules.js';
 
 // Claims Service
