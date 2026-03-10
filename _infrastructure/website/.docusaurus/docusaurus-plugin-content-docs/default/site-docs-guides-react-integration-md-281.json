@@ -1,0 +1,28 @@
+{
+  "id": "guides/REACT_INTEGRATION",
+  "title": "React Integration Guide",
+  "description": "This guide covers how to build React applications with the AHOY Tokenisation SDK using @tokenisation/sdk-react hooks and @tokenisation/ui-kit components. By the end, you will understand the provider setup, hook patterns, component library, and how to wire everything together.",
+  "source": "@site/../docs/guides/REACT_INTEGRATION.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/REACT_INTEGRATION",
+  "permalink": "/TokenisationSDK/docs/guides/REACT_INTEGRATION",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/guides/REACT_INTEGRATION.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "sidebar_position": 4,
+    "title": "React Integration Guide"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Real Estate Tokenisation Guide",
+    "permalink": "/TokenisationSDK/docs/guides/REAL_ESTATE"
+  },
+  "next": {
+    "title": "Compliance Engine Guide",
+    "permalink": "/TokenisationSDK/docs/guides/COMPLIANCE"
+  }
+}

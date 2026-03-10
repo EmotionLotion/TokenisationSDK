@@ -1,0 +1,28 @@
+{
+  "id": "GLOSSARY",
+  "title": "Glossary",
+  "description": "A reference of key terms and concepts used throughout the AHOY Tokenisation Platform.",
+  "source": "@site/../docs/GLOSSARY.md",
+  "sourceDirName": ".",
+  "slug": "/GLOSSARY",
+  "permalink": "/TokenisationSDK/docs/GLOSSARY",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/GLOSSARY.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "sidebar_position": 5,
+    "title": "Glossary"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Core Concepts",
+    "permalink": "/TokenisationSDK/docs/CONCEPTS"
+  },
+  "next": {
+    "title": "AHOY Tokenisation SDK — Architecture Document",
+    "permalink": "/TokenisationSDK/docs/ARCHITECTURE"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "CONCEPTS",
+  "title": "Core Concepts",
+  "description": "This page explains the fundamental building blocks of the AHOY Tokenisation Platform: packages, assets, tokens, investors, transfers, compliance policies, and the audit trail.",
+  "source": "@site/../docs/CONCEPTS.md",
+  "sourceDirName": ".",
+  "slug": "/CONCEPTS",
+  "permalink": "/TokenisationSDK/docs/CONCEPTS",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/CONCEPTS.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "sidebar_position": 4,
+    "title": "Core Concepts"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "First Project Tutorial",
+    "permalink": "/TokenisationSDK/docs/getting-started/FIRST_PROJECT"
+  },
+  "next": {
+    "title": "Glossary",
+    "permalink": "/TokenisationSDK/docs/GLOSSARY"
+  }
+}

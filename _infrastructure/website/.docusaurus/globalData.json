@@ -1,0 +1,155 @@
+{
+  "docusaurus-plugin-content-docs": {
+    "default": {
+      "path": "/TokenisationSDK/docs",
+      "versions": [
+        {
+          "name": "current",
+          "label": "Next",
+          "isLast": true,
+          "path": "/TokenisationSDK/docs",
+          "mainDocId": "getting-started/INSTALLATION",
+          "docs": [
+            {
+              "id": "api/AUTHENTICATION",
+              "path": "/TokenisationSDK/docs/api/AUTHENTICATION",
+              "sidebar": "docs"
+            },
+            {
+              "id": "api/REST_API",
+              "path": "/TokenisationSDK/docs/api/REST_API",
+              "sidebar": "docs"
+            },
+            {
+              "id": "api/SDK_REFERENCE",
+              "path": "/TokenisationSDK/docs/api/SDK_REFERENCE",
+              "sidebar": "docs"
+            },
+            {
+              "id": "ARCHITECTURE",
+              "path": "/TokenisationSDK/docs/ARCHITECTURE",
+              "sidebar": "docs"
+            },
+            {
+              "id": "architecture/OVERVIEW",
+              "path": "/TokenisationSDK/docs/architecture/OVERVIEW",
+              "sidebar": "docs"
+            },
+            {
+              "id": "CONCEPTS",
+              "path": "/TokenisationSDK/docs/CONCEPTS",
+              "sidebar": "docs"
+            },
+            {
+              "id": "deployment/DOCKER",
+              "path": "/TokenisationSDK/docs/deployment/DOCKER",
+              "sidebar": "docs"
+            },
+            {
+              "id": "deployment/KUBERNETES",
+              "path": "/TokenisationSDK/docs/deployment/KUBERNETES",
+              "sidebar": "docs"
+            },
+            {
+              "id": "FAQ",
+              "path": "/TokenisationSDK/docs/FAQ",
+              "sidebar": "docs"
+            },
+            {
+              "id": "getting-started/FIRST_PROJECT",
+              "path": "/TokenisationSDK/docs/getting-started/FIRST_PROJECT",
+              "sidebar": "docs"
+            },
+            {
+              "id": "getting-started/INSTALLATION",
+              "path": "/TokenisationSDK/docs/getting-started/INSTALLATION",
+              "sidebar": "docs"
+            },
+            {
+              "id": "getting-started/QUICKSTART",
+              "path": "/TokenisationSDK/docs/getting-started/QUICKSTART",
+              "sidebar": "docs"
+            },
+            {
+              "id": "GLOSSARY",
+              "path": "/TokenisationSDK/docs/GLOSSARY",
+              "sidebar": "docs"
+            },
+            {
+              "id": "guides/BUILDING_REAL_ESTATE_APP",
+              "path": "/TokenisationSDK/docs/guides/BUILDING_REAL_ESTATE_APP",
+              "sidebar": "docs"
+            },
+            {
+              "id": "guides/COMPLIANCE",
+              "path": "/TokenisationSDK/docs/guides/COMPLIANCE",
+              "sidebar": "docs"
+            },
+            {
+              "id": "guides/REACT_INTEGRATION",
+              "path": "/TokenisationSDK/docs/guides/REACT_INTEGRATION",
+              "sidebar": "docs"
+            },
+            {
+              "id": "guides/REAL_ESTATE",
+              "path": "/TokenisationSDK/docs/guides/REAL_ESTATE",
+              "sidebar": "docs"
+            },
+            {
+              "id": "guides/WEBHOOKS",
+              "path": "/TokenisationSDK/docs/guides/WEBHOOKS",
+              "sidebar": "docs"
+            },
+            {
+              "id": "PLATFORM-DEVELOPER-GUIDE",
+              "path": "/TokenisationSDK/docs/PLATFORM-DEVELOPER-GUIDE"
+            },
+            {
+              "id": "REAL_ESTATE_CONSOLIDATION_PLAN",
+              "path": "/TokenisationSDK/docs/REAL_ESTATE_CONSOLIDATION_PLAN"
+            },
+            {
+              "id": "recipes/AIRLINE_TICKETS",
+              "path": "/TokenisationSDK/docs/recipes/AIRLINE_TICKETS",
+              "sidebar": "docs"
+            },
+            {
+              "id": "recipes/CAR_RENTALS",
+              "path": "/TokenisationSDK/docs/recipes/CAR_RENTALS",
+              "sidebar": "docs"
+            },
+            {
+              "id": "recipes/CONCERT_TICKETS",
+              "path": "/TokenisationSDK/docs/recipes/CONCERT_TICKETS",
+              "sidebar": "docs"
+            },
+            {
+              "id": "recipes/HOTEL_RESERVATIONS",
+              "path": "/TokenisationSDK/docs/recipes/HOTEL_RESERVATIONS",
+              "sidebar": "docs"
+            },
+            {
+              "id": "security/SECURITY_AUDIT_CHECKLIST",
+              "path": "/TokenisationSDK/docs/security/SECURITY_AUDIT_CHECKLIST"
+            },
+            {
+              "id": "security/SECURITY_MODEL",
+              "path": "/TokenisationSDK/docs/security/SECURITY_MODEL",
+              "sidebar": "docs"
+            }
+          ],
+          "draftIds": [],
+          "sidebars": {
+            "docs": {
+              "link": {
+                "path": "/TokenisationSDK/docs/getting-started/INSTALLATION",
+                "label": "getting-started/INSTALLATION"
+              }
+            }
+          }
+        }
+      ],
+      "breadcrumbs": true
+    }
+  }
+}

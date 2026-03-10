@@ -1,0 +1,28 @@
+{
+  "id": "recipes/AIRLINE_TICKETS",
+  "title": "Airline Ticket Tokenisation",
+  "description": "Tokenise airline tickets as ERC-721 NFTs with burn-after-use semantics, dynamic metadata for gate and seat changes, anti-scalping transfer controls, and Chainlink Automation for auto-expiry and refunds.",
+  "source": "@site/../docs/recipes/AIRLINE_TICKETS.md",
+  "sourceDirName": "recipes",
+  "slug": "/recipes/AIRLINE_TICKETS",
+  "permalink": "/TokenisationSDK/docs/recipes/AIRLINE_TICKETS",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/recipes/AIRLINE_TICKETS.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "Airline Ticket Tokenisation"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Webhooks Guide",
+    "permalink": "/TokenisationSDK/docs/guides/WEBHOOKS"
+  },
+  "next": {
+    "title": "Car Rental Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/CAR_RENTALS"
+  }
+}

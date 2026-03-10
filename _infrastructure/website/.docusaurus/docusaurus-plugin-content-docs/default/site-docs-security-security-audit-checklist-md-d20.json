@@ -1,0 +1,15 @@
+{
+  "id": "security/SECURITY_AUDIT_CHECKLIST",
+  "title": "Smart Contract Security Audit Checklist",
+  "description": "Pre-deployment security review for all Tokenisation Platform smart contracts.",
+  "source": "@site/../docs/security/SECURITY_AUDIT_CHECKLIST.md",
+  "sourceDirName": "security",
+  "slug": "/security/SECURITY_AUDIT_CHECKLIST",
+  "permalink": "/TokenisationSDK/docs/security/SECURITY_AUDIT_CHECKLIST",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/security/SECURITY_AUDIT_CHECKLIST.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {}
+}

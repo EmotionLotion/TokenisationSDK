@@ -1,0 +1,24 @@
+{
+  "id": "getting-started/INSTALLATION",
+  "title": "Installation",
+  "description": "This guide walks you through installing the AHOY Tokenisation SDK packages and setting up your development environment.",
+  "source": "@site/../docs/getting-started/INSTALLATION.md",
+  "sourceDirName": "getting-started",
+  "slug": "/getting-started/INSTALLATION",
+  "permalink": "/TokenisationSDK/docs/getting-started/INSTALLATION",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/getting-started/INSTALLATION.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "Installation"
+  },
+  "sidebar": "docs",
+  "next": {
+    "title": "Quickstart",
+    "permalink": "/TokenisationSDK/docs/getting-started/QUICKSTART"
+  }
+}

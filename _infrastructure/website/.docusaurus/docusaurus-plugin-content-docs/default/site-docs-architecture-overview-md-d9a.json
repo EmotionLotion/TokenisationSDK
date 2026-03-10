@@ -1,0 +1,28 @@
+{
+  "id": "architecture/OVERVIEW",
+  "title": "Architecture Overview",
+  "description": "The AHOY Tokenisation Platform is a monorepo that provides end-to-end infrastructure for tokenising real-world assets. This document describes the high-level architecture, package structure, server internals, and multi-chain deployment model.",
+  "source": "@site/../docs/architecture/OVERVIEW.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/OVERVIEW",
+  "permalink": "/TokenisationSDK/docs/architecture/OVERVIEW",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/architecture/OVERVIEW.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "Architecture Overview"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Authentication",
+    "permalink": "/TokenisationSDK/docs/api/AUTHENTICATION"
+  },
+  "next": {
+    "title": "Building a Real Estate App",
+    "permalink": "/TokenisationSDK/docs/guides/BUILDING_REAL_ESTATE_APP"
+  }
+}

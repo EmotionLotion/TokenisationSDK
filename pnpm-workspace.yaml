@@ -6,5 +6,5 @@ packages:
   - sdk-react-native
   - server
   - packages/*
-  - apps/*
-  - website
+  - _infrastructure/apps/*
+  - _infrastructure/website

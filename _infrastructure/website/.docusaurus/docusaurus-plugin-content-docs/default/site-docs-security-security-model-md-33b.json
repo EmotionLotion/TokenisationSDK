@@ -1,0 +1,28 @@
+{
+  "id": "security/SECURITY_MODEL",
+  "title": "Security Model",
+  "description": "This document describes the security architecture of the AHOY Tokenisation SDK, covering authentication, authorization, smart contract security controls, audit logging, and infrastructure hardening.",
+  "source": "@site/../docs/security/SECURITY_MODEL.md",
+  "sourceDirName": "security",
+  "slug": "/security/SECURITY_MODEL",
+  "permalink": "/TokenisationSDK/docs/security/SECURITY_MODEL",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/security/SECURITY_MODEL.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "Security Model"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Kubernetes / Helm Deployment",
+    "permalink": "/TokenisationSDK/docs/deployment/KUBERNETES"
+  },
+  "next": {
+    "title": "FAQ",
+    "permalink": "/TokenisationSDK/docs/FAQ"
+  }
+}

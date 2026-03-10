@@ -1,0 +1,28 @@
+{
+  "id": "api/SDK_REFERENCE",
+  "title": "TypeScript SDK Reference",
+  "description": "The AHOY Tokenisation SDK provides a Stripe-like TypeScript client for the tokenisation platform. Install the umbrella package or individual packages:",
+  "source": "@site/../docs/api/SDK_REFERENCE.md",
+  "sourceDirName": "api",
+  "slug": "/api/SDK_REFERENCE",
+  "permalink": "/TokenisationSDK/docs/api/SDK_REFERENCE",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/api/SDK_REFERENCE.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2,
+    "title": "TypeScript SDK Reference"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "AHOY Tokenisation SDK — Architecture Document",
+    "permalink": "/TokenisationSDK/docs/ARCHITECTURE"
+  },
+  "next": {
+    "title": "REST API Reference",
+    "permalink": "/TokenisationSDK/docs/api/REST_API"
+  }
+}

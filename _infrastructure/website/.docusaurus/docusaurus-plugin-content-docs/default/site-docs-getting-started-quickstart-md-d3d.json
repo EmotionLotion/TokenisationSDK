@@ -1,0 +1,28 @@
+{
+  "id": "getting-started/QUICKSTART",
+  "title": "Quickstart",
+  "description": "This guide takes you from zero to a working tokenised asset in under five minutes. You will install the SDK, create an organisation, onboard an investor, create an asset, deploy a token, and execute a transfer.",
+  "source": "@site/../docs/getting-started/QUICKSTART.md",
+  "sourceDirName": "getting-started",
+  "slug": "/getting-started/QUICKSTART",
+  "permalink": "/TokenisationSDK/docs/getting-started/QUICKSTART",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/getting-started/QUICKSTART.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2,
+    "title": "Quickstart"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Installation",
+    "permalink": "/TokenisationSDK/docs/getting-started/INSTALLATION"
+  },
+  "next": {
+    "title": "First Project Tutorial",
+    "permalink": "/TokenisationSDK/docs/getting-started/FIRST_PROJECT"
+  }
+}

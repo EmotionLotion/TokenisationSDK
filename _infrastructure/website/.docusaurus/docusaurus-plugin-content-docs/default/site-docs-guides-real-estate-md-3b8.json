@@ -1,0 +1,28 @@
+{
+  "id": "guides/REAL_ESTATE",
+  "title": "Real Estate Tokenisation Guide",
+  "description": "This guide walks through the complete workflow for tokenising a real estate property on the AHOY platform, with a focus on UAE/Dubai properties using the Dubai Land Department (DLD) integration and VARA compliance.",
+  "source": "@site/../docs/guides/REAL_ESTATE.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/REAL_ESTATE",
+  "permalink": "/TokenisationSDK/docs/guides/REAL_ESTATE",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/guides/REAL_ESTATE.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "Real Estate Tokenisation Guide"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Building a Real Estate App",
+    "permalink": "/TokenisationSDK/docs/guides/BUILDING_REAL_ESTATE_APP"
+  },
+  "next": {
+    "title": "React Integration Guide",
+    "permalink": "/TokenisationSDK/docs/guides/REACT_INTEGRATION"
+  }
+}

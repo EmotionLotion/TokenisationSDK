@@ -1,0 +1,28 @@
+{
+  "id": "api/AUTHENTICATION",
+  "title": "Authentication",
+  "description": "The AHOY Tokenisation API supports three authentication methods: API Keys for server-to-server communication, JWT Bearer Tokens for session-based access, and SIWE (Sign In With Ethereum) for wallet-based authentication.",
+  "source": "@site/../docs/api/AUTHENTICATION.md",
+  "sourceDirName": "api",
+  "slug": "/api/AUTHENTICATION",
+  "permalink": "/TokenisationSDK/docs/api/AUTHENTICATION",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/api/AUTHENTICATION.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3,
+    "title": "Authentication"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "REST API Reference",
+    "permalink": "/TokenisationSDK/docs/api/REST_API"
+  },
+  "next": {
+    "title": "Architecture Overview",
+    "permalink": "/TokenisationSDK/docs/architecture/OVERVIEW"
+  }
+}

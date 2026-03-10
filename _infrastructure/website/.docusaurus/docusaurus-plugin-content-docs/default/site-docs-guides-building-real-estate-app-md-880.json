@@ -1,0 +1,28 @@
+{
+  "id": "guides/BUILDING_REAL_ESTATE_APP",
+  "title": "Building a Real Estate App",
+  "description": "This tutorial walks you through building a complete real estate tokenisation platform using the AHOY SDK. You will create a React application with property browsing, investor onboarding, investment flows, portfolio management, secondary market trading, and an admin dashboard — following the same architecture as the reference app at apps/real-estate/.",
+  "source": "@site/../docs/guides/BUILDING_REAL_ESTATE_APP.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/BUILDING_REAL_ESTATE_APP",
+  "permalink": "/TokenisationSDK/docs/guides/BUILDING_REAL_ESTATE_APP",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/guides/BUILDING_REAL_ESTATE_APP.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "sidebar_position": 5,
+    "title": "Building a Real Estate App"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Architecture Overview",
+    "permalink": "/TokenisationSDK/docs/architecture/OVERVIEW"
+  },
+  "next": {
+    "title": "Real Estate Tokenisation Guide",
+    "permalink": "/TokenisationSDK/docs/guides/REAL_ESTATE"
+  }
+}

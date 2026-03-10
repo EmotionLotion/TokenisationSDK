@@ -1,0 +1,28 @@
+{
+  "id": "recipes/HOTEL_RESERVATIONS",
+  "title": "Hotel Reservation Tokenisation",
+  "description": "Tokenise hotel reservations as ERC-721 NFTs with full lifecycle management, room upgrades, stay extensions, automated no-show detection, and on-chain audit trails.",
+  "source": "@site/../docs/recipes/HOTEL_RESERVATIONS.md",
+  "sourceDirName": "recipes",
+  "slug": "/recipes/HOTEL_RESERVATIONS",
+  "permalink": "/TokenisationSDK/docs/recipes/HOTEL_RESERVATIONS",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/recipes/HOTEL_RESERVATIONS.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2,
+    "title": "Hotel Reservation Tokenisation"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Concert Ticket Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/CONCERT_TICKETS"
+  },
+  "next": {
+    "title": "Docker Compose Deployment",
+    "permalink": "/TokenisationSDK/docs/deployment/DOCKER"
+  }
+}

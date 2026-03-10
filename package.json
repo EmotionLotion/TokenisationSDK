@@ -10,15 +10,15 @@
         "sdk-react-native",
         "server",
         "packages/*",
-        "apps/*",
-        "website"
+        "_infrastructure/apps/*",
+        "_infrastructure/website"
     ],
     "scripts": {
         "build": "pnpm -r run build",
         "test": "pnpm -r run test",
         "playground": "pnpm --filter @tokenisation/sdk-playground dev",
         "test:conformance": "pnpm run test --filter @tokenisation/conformance-suite",
-        "test:e2e": "playwright test",
+        "test:e2e": "cd _infrastructure && playwright test",
         "changeset": "changeset",
         "version": "changeset version",
         "release": "pnpm build && changeset publish"

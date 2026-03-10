@@ -1,0 +1,15 @@
+{
+  "id": "PLATFORM-DEVELOPER-GUIDE",
+  "title": "Platform Developer Guide — Real Estate Reference App",
+  "description": "Welcome to the Tokenisation SDK. This guide is for you — the platform developer building the reference real estate app. You don't need to understand the SDK internals. You just need to know how to use it.",
+  "source": "@site/../docs/PLATFORM-DEVELOPER-GUIDE.md",
+  "sourceDirName": ".",
+  "slug": "/PLATFORM-DEVELOPER-GUIDE",
+  "permalink": "/TokenisationSDK/docs/PLATFORM-DEVELOPER-GUIDE",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/PLATFORM-DEVELOPER-GUIDE.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {}
+}

@@ -1,0 +1,28 @@
+{
+  "id": "deployment/KUBERNETES",
+  "title": "Kubernetes / Helm Deployment",
+  "description": "Deploy the AHOY Tokenisation SDK to production on Kubernetes using Terraform for AWS infrastructure provisioning and Helm for service deployment.",
+  "source": "@site/../docs/deployment/KUBERNETES.md",
+  "sourceDirName": "deployment",
+  "slug": "/deployment/KUBERNETES",
+  "permalink": "/TokenisationSDK/docs/deployment/KUBERNETES",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/deployment/KUBERNETES.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2,
+    "title": "Kubernetes / Helm Deployment"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Docker Compose Deployment",
+    "permalink": "/TokenisationSDK/docs/deployment/DOCKER"
+  },
+  "next": {
+    "title": "Security Model",
+    "permalink": "/TokenisationSDK/docs/security/SECURITY_MODEL"
+  }
+}

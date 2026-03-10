@@ -1,0 +1,28 @@
+{
+  "id": "deployment/DOCKER",
+  "title": "Docker Compose Deployment",
+  "description": "Run the full AHOY Tokenisation SDK stack locally or as a hosted sandbox using Docker Compose. The stack includes the API server, PostgreSQL, Redis, and a local Ethereum node (Anvil).",
+  "source": "@site/../docs/deployment/DOCKER.md",
+  "sourceDirName": "deployment",
+  "slug": "/deployment/DOCKER",
+  "permalink": "/TokenisationSDK/docs/deployment/DOCKER",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/deployment/DOCKER.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "Docker Compose Deployment"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Hotel Reservation Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/HOTEL_RESERVATIONS"
+  },
+  "next": {
+    "title": "Kubernetes / Helm Deployment",
+    "permalink": "/TokenisationSDK/docs/deployment/KUBERNETES"
+  }
+}

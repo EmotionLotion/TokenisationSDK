@@ -1,0 +1,24 @@
+{
+  "id": "FAQ",
+  "title": "FAQ",
+  "description": "Common questions about the AHOY Tokenisation Platform.",
+  "source": "@site/../docs/FAQ.md",
+  "sourceDirName": ".",
+  "slug": "/FAQ",
+  "permalink": "/TokenisationSDK/docs/FAQ",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/FAQ.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 20,
+  "frontMatter": {
+    "sidebar_position": 20,
+    "title": "FAQ"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Security Model",
+    "permalink": "/TokenisationSDK/docs/security/SECURITY_MODEL"
+  }
+}

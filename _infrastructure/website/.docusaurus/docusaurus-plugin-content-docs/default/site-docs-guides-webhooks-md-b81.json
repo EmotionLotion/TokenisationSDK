@@ -1,0 +1,28 @@
+{
+  "id": "guides/WEBHOOKS",
+  "title": "Webhooks Guide",
+  "description": "Webhooks deliver real-time event notifications to your application over HTTPS. Instead of polling the API, register an endpoint and the platform pushes events as they happen -- token deployments, transfer completions, KYC status changes, compliance decisions, and more.",
+  "source": "@site/../docs/guides/WEBHOOKS.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/WEBHOOKS",
+  "permalink": "/TokenisationSDK/docs/guides/WEBHOOKS",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/guides/WEBHOOKS.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3,
+    "title": "Webhooks Guide"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Compliance Engine Guide",
+    "permalink": "/TokenisationSDK/docs/guides/COMPLIANCE"
+  },
+  "next": {
+    "title": "Airline Ticket Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/AIRLINE_TICKETS"
+  }
+}

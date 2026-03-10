@@ -1,0 +1,28 @@
+{
+  "id": "guides/COMPLIANCE",
+  "title": "Compliance Engine Guide",
+  "description": "The AHOY compliance engine enforces regulatory rules for every token operation -- transfers, issuances, redemptions, and more. It uses a policy-based architecture with versioned rulesets, deterministic evaluation, and cryptographically signed decision receipts.",
+  "source": "@site/../docs/guides/COMPLIANCE.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/COMPLIANCE",
+  "permalink": "/TokenisationSDK/docs/guides/COMPLIANCE",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/guides/COMPLIANCE.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2,
+    "title": "Compliance Engine Guide"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "React Integration Guide",
+    "permalink": "/TokenisationSDK/docs/guides/REACT_INTEGRATION"
+  },
+  "next": {
+    "title": "Webhooks Guide",
+    "permalink": "/TokenisationSDK/docs/guides/WEBHOOKS"
+  }
+}

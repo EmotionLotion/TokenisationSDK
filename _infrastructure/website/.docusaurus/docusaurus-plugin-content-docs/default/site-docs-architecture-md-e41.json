@@ -1,0 +1,24 @@
+{
+  "id": "ARCHITECTURE",
+  "title": "AHOY Tokenisation SDK — Architecture Document",
+  "description": "A compliance-first, plugin-driven tokenisation platform for issuing, managing, and trading regulated digital assets across any vertical.",
+  "source": "@site/../docs/ARCHITECTURE.md",
+  "sourceDirName": ".",
+  "slug": "/ARCHITECTURE",
+  "permalink": "/TokenisationSDK/docs/ARCHITECTURE",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/ARCHITECTURE.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Glossary",
+    "permalink": "/TokenisationSDK/docs/GLOSSARY"
+  },
+  "next": {
+    "title": "TypeScript SDK Reference",
+    "permalink": "/TokenisationSDK/docs/api/SDK_REFERENCE"
+  }
+}

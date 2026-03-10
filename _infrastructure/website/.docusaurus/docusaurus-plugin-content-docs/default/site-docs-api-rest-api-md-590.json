@@ -1,0 +1,28 @@
+{
+  "id": "api/REST_API",
+  "title": "REST API Reference",
+  "description": "Base URL//api.tokenisation.io/api/v1 (production) or https://api.test.tokenisation.io/api/v1 (sandbox)",
+  "source": "@site/../docs/api/REST_API.md",
+  "sourceDirName": "api",
+  "slug": "/api/REST_API",
+  "permalink": "/TokenisationSDK/docs/api/REST_API",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/api/REST_API.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1,
+    "title": "REST API Reference"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "TypeScript SDK Reference",
+    "permalink": "/TokenisationSDK/docs/api/SDK_REFERENCE"
+  },
+  "next": {
+    "title": "Authentication",
+    "permalink": "/TokenisationSDK/docs/api/AUTHENTICATION"
+  }
+}

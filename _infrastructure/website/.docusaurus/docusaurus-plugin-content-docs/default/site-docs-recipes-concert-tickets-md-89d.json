@@ -1,0 +1,28 @@
+{
+  "id": "recipes/CONCERT_TICKETS",
+  "title": "Concert Ticket Tokenisation",
+  "description": "Tokenise concert and live event tickets as ERC-721 NFTs with on-chain anti-scalping price caps, seating tier enforcement, QR-code gate scanning, and Chainlink Automation for post-event expiry.",
+  "source": "@site/../docs/recipes/CONCERT_TICKETS.md",
+  "sourceDirName": "recipes",
+  "slug": "/recipes/CONCERT_TICKETS",
+  "permalink": "/TokenisationSDK/docs/recipes/CONCERT_TICKETS",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/recipes/CONCERT_TICKETS.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "sidebar_position": 4,
+    "title": "Concert Ticket Tokenisation"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Car Rental Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/CAR_RENTALS"
+  },
+  "next": {
+    "title": "Hotel Reservation Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/HOTEL_RESERVATIONS"
+  }
+}

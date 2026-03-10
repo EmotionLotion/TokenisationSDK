@@ -1,0 +1,28 @@
+{
+  "id": "recipes/CAR_RENTALS",
+  "title": "Car Rental Tokenisation",
+  "description": "Tokenise car rental agreements as ERC-721 NFTs with deposit escrow, vehicle condition tracking, multi-step inspection flow, and Chainlink Automation for overdue and no-show detection.",
+  "source": "@site/../docs/recipes/CAR_RENTALS.md",
+  "sourceDirName": "recipes",
+  "slug": "/recipes/CAR_RENTALS",
+  "permalink": "/TokenisationSDK/docs/recipes/CAR_RENTALS",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/recipes/CAR_RENTALS.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3,
+    "title": "Car Rental Tokenisation"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Airline Ticket Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/AIRLINE_TICKETS"
+  },
+  "next": {
+    "title": "Concert Ticket Tokenisation",
+    "permalink": "/TokenisationSDK/docs/recipes/CONCERT_TICKETS"
+  }
+}

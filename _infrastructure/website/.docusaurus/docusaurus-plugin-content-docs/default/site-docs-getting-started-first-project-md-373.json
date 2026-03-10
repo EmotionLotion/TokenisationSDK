@@ -1,0 +1,28 @@
+{
+  "id": "getting-started/FIRST_PROJECT",
+  "title": "First Project Tutorial",
+  "description": "This tutorial walks you through a complete real estate tokenisation workflow: creating an organisation and project, uploading legal documents, creating an asset, deploying an ERC-3643 security token, onboarding investors with KYC verification, issuing tokens, and distributing dividends.",
+  "source": "@site/../docs/getting-started/FIRST_PROJECT.md",
+  "sourceDirName": "getting-started",
+  "slug": "/getting-started/FIRST_PROJECT",
+  "permalink": "/TokenisationSDK/docs/getting-started/FIRST_PROJECT",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/EmotionLotion/TokenisationSDK/tree/main/website/../docs/getting-started/FIRST_PROJECT.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3,
+    "title": "First Project Tutorial"
+  },
+  "sidebar": "docs",
+  "previous": {
+    "title": "Quickstart",
+    "permalink": "/TokenisationSDK/docs/getting-started/QUICKSTART"
+  },
+  "next": {
+    "title": "Core Concepts",
+    "permalink": "/TokenisationSDK/docs/CONCEPTS"
+  }
+}
