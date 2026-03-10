@@ -76,8 +76,6 @@ export type {
   WebhookDelivery,
   LedgerPosition,
   LedgerEvent,
-  DldTitle,
-  DldEvent,
   AuditLogEntry,
   EventMessage,
   EventStatus,
@@ -153,6 +151,8 @@ export type {
   EventQueryOptions,
   PolicyEvaluationResult,
   PolicyContext,
+  ComplianceContext,
+  PolicyDecision,
   // Provider interfaces (KYC, Custody, etc.)
   IKYCProvider,
   KYCLevel,
@@ -466,6 +466,33 @@ export type {
   Milestone,
 } from './SDK.js';
 
+// Workflow Registry (generic — packs register named workflows)
+export {
+  WorkflowRegistry,
+} from './workflows/WorkflowRegistry.js';
+export type {
+  WorkflowDefinition,
+  WorkflowStepDefinition,
+  WorkflowExecutionContext,
+  WorkflowProgressCallback,
+  WorkflowProgressEvent,
+  WorkflowResult,
+  WorkflowStepResult,
+  WorkflowError,
+  WorkflowRunOptions,
+} from './workflows/WorkflowRegistry.js';
+
+// Pack Manifest & Registry
+export {
+  PackRegistry,
+  PackManifestSchema,
+} from './packs/PackManifest.js';
+export type {
+  PackManifest,
+  LoadedPack,
+  PackActivationContext,
+} from './packs/PackManifest.js';
+
 // Connectors
 export * from './connectors/index.js';
 
@@ -485,13 +512,12 @@ export * from './utils/crypto.js';
 // QR Code
 export * from './utils/qrcode.js';
 
-// Ahoy (TelematicsEventType used by @tokenisation/chains)
-export { TelematicsEventType } from './ahoy/plugins/TelematicsOracle.js';
-export type { TelematicsReading } from './ahoy/plugins/TelematicsOracle.js';
-
 // CCIPSettlementProvider (used by @tokenisation/chains)
 export { CCIPSettlementProvider } from './providers/settlement/CCIPSettlementProvider.js';
 export type { CCIPSettlementProviderConfig } from './providers/settlement/CCIPSettlementProvider.js';
+
+// Ahoy / Telematics (used by @tokenisation/chains)
+export { TelematicsEventType } from './ahoy/index.js';
 
 // ============================================
 // Factory: createTokenisationSDK (Event-Driven Wrapper)

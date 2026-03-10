@@ -1,3 +1,7 @@
+// Types (canonical DLD types — previously in @tokenisation/core)
+export { DldTitle } from './types.js';
+export { DldEvent as DldEventRecord } from './types.js';
+
 // Models
 export * from './models/RealEstateMetadata.js';
 
@@ -28,5 +32,19 @@ export {
 } from './modules/SecondaryMarketModule.js';
 export * from './modules/LegalModule.js';
 
+// Adapters
+export {
+  RealEstateAdapter,
+  realEstateAdapter,
+  type RealEstateInput,
+  type RealEstateMetadata,
+} from './adapters/RealEstateAdapter.js';
+
+// Policies
+export * from './policies/uae-real-estate-policy.js';
+
 // Providers
 export * from './providers/dld/index.js';
+
+// Components
+export * from './components/index.js';

@@ -272,12 +272,12 @@ export const RequirementMasks = {
     ClaimBitmask[ClaimType.ACCREDITED_INVESTOR] |
     ClaimBitmask[ClaimType.SANCTIONS_CLEAR],
 
-  /** UAE real estate - resident */
+  /** UAE resident investor */
   UAE_RESIDENT: ClaimBitmask[ClaimType.KYC_APPROVED] |
     ClaimBitmask[ClaimType.RESIDENCY] |
     ClaimBitmask[ClaimType.SANCTIONS_CLEAR],
 
-  /** UAE real estate - foreign accredited */
+  /** UAE foreign accredited investor */
   UAE_FOREIGN_ACCREDITED: ClaimBitmask[ClaimType.KYC_APPROVED] |
     ClaimBitmask[ClaimType.ACCREDITED_INVESTOR] |
     ClaimBitmask[ClaimType.SANCTIONS_CLEAR],

@@ -1,11 +1,14 @@
 /**
  * Tokenisation SDK — Umbrella Package
  *
- * Re-exports everything from the 4 layer packages:
+ * Re-exports everything from all layer packages:
  * - @tokenisation/core (foundation)
  * - @tokenisation/compliance (KYC/AML, identity)
  * - @tokenisation/chains (blockchain, contracts, oracles)
- * - @tokenisation/realestate (UAE real estate, DLD)
+ *
+ * Plus opt-in vertical packages:
+ * - @tokenisation/realestate (real estate)
+ * - @tokenisation/compute (GPU compute)
  *
  * Existing consumers continue importing from '@tokenisation/sdk' unchanged.
  *
@@ -54,7 +57,6 @@ export {
   evaluatePolicy,
   PolicyRegistry,
   createDefaultPolicyRegistry,
-  UAE_REAL_ESTATE_POLICY,
 } from '@tokenisation/compliance';
 
 export type {
@@ -717,6 +719,7 @@ export {
   type DLDProviderOwnershipType,
   MockDLDProvider,
   createMockDLDProvider,
+  UAE_REAL_ESTATE_POLICY,
 } from '@tokenisation/realestate';
 
 // ─── @tokenisation/compute ──────────────────────────────────────────────────

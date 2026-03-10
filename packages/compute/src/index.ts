@@ -23,3 +23,6 @@ export {
 
 // Providers
 export * from './providers/benchmark/index.js';
+
+// Connectors
+export * from './connectors/VastAIConnector.js';

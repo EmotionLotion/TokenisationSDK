@@ -1,0 +1,82 @@
+{
+  "name": "Carbon Credit Asset Policy",
+  "version": 1,
+  "assetType": "carbon_credit",
+  "description": "Compliance rules for tokenized carbon credits. Supports Verra, Gold Standard registries.",
+  "rules": [
+    {
+      "id": "kyc_required",
+      "type": "require",
+      "field": "investor.kycStatus",
+      "op": "eq",
+      "value": "approved",
+      "message": "KYC verification required for carbon credit purchases",
+      "code": "KYC_REQUIRED"
+    },
+    {
+      "id": "corporate_only",
+      "type": "require",
+      "field": "investor.type",
+      "op": "in",
+      "value": ["institutional", "qualified"],
+      "message": "Carbon credits are only available to corporate/institutional investors",
+      "code": "NOT_CORPORATE"
+    },
+    {
+      "id": "registry_verified",
+      "type": "require",
+      "field": "asset.registryStatus",
+      "op": "eq",
+      "value": "verified",
+      "message": "Carbon credit must be verified in external registry (Verra/Gold Standard)",
+      "code": "REGISTRY_NOT_VERIFIED"
+    },
+    {
+      "id": "not_retired",
+      "type": "require",
+      "field": "token.status",
+      "op": "neq",
+      "value": "retired",
+      "message": "Retired carbon credits cannot be transferred",
+      "code": "CREDIT_RETIRED"
+    },
+    {
+      "id": "vintage_check",
+      "type": "require",
+      "field": "asset.vintageYear",
+      "op": "gte",
+      "value": 2020,
+      "message": "Only credits with vintage 2020 or later are tradeable",
+      "code": "VINTAGE_TOO_OLD"
+    },
+    {
+      "id": "min_purchase",
+      "type": "limit",
+      "field": "transfer.amount",
+      "op": "gte",
+      "value": "1000000000000000000",
+      "message": "Minimum purchase is 1 tonne CO2e",
+      "code": "BELOW_MINIMUM"
+    }
+  ],
+  "actions": {
+    "onDeny": ["log_decision", "notify_compliance"],
+    "onAllow": ["log_decision", "sync_registry"]
+  },
+  "lifecycle": {
+    "onIssue": ["verify_registry", "record_vintage"],
+    "onTransfer": ["update_registry_holder"],
+    "onRedeem": ["retire_in_registry", "issue_certificate", "burn_token"]
+  },
+  "retirementRules": {
+    "burnOnRetirement": true,
+    "certificateRequired": true,
+    "registrySync": true
+  },
+  "metadata": {
+    "author": "AHOY Compliance",
+    "lastUpdated": "2024-01-01",
+    "supportedRegistries": ["verra", "gold_standard", "acr", "car"],
+    "tokenStandard": "ERC-1155"
+  }
+}

@@ -873,40 +873,8 @@ export class ComplianceService {
 export function createComplianceService(): ComplianceService {
   const service = new ComplianceService();
 
-  // Register default UAE real estate ruleset
-  service.registerRuleset({
-    id: 'uae-real-estate',
-    name: 'UAE Real Estate Compliance',
-    description: 'Standard compliance rules for UAE real estate tokens',
-    appliesToAssetTypes: ['OWNERSHIP'],
-    appliesToJurisdictions: ['AE'],
-    conditions: [
-      {
-        type: RuleConditionType.KYC_REQUIRED,
-        enabled: true,
-        params: {},
-        errorMessage: 'KYC verification required for UAE real estate',
-        severity: 'ERROR',
-      },
-      {
-        type: RuleConditionType.MAX_INVESTOR_COUNT,
-        enabled: true,
-        params: { maxCount: 500 },
-        errorMessage: 'Maximum investor limit reached',
-        severity: 'ERROR',
-      },
-      {
-        type: RuleConditionType.JURISDICTION_BLACKLIST,
-        enabled: true,
-        params: { jurisdictions: ['KP', 'IR', 'CU', 'SY'] },
-        errorMessage: 'Sanctioned jurisdiction',
-        severity: 'ERROR',
-      },
-    ],
-    priority: 10,
-    active: true,
-    metadata: {},
-  });
+  // Vertical-specific rulesets (e.g. UAE real estate) should be registered
+  // by their respective packs via service.registerRuleset()
 
   // Register default ticket ruleset
   service.registerRuleset({

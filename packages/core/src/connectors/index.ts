@@ -1,12 +1,9 @@
 /**
  * SDK Connectors
  *
- * External service integrations.
- * Document signing (DocuSign) and wallet pass connectors live in @tokenisation/chains.
+ * Generic external service integrations.
+ * Vertical-specific connectors live in their own packages:
+ * - PSS connectors → @tokenisation/pack-travel
+ * - VastAI connector → @tokenisation/compute
+ * - Document signing / wallet passes → @tokenisation/chains
  */
-
-// PSS connectors
-export * from './pss/index.js';
-
-// VastAI GPU Compute connector
-export * from './VastAIConnector.js';

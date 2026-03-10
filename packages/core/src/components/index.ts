@@ -29,10 +29,5 @@ export { LifecycleStatus } from './LifecycleStatus.js';
 export { KYCBadge } from './KYCBadge.js';
 export { AssetWizard } from './AssetWizard.js';
 
-// Vertical-Specific Components
-// Real Estate
-export { PropertyMap } from './verticals/real_estate/PropertyMap.js';
-export { NavHistoryChart } from './verticals/real_estate/NavHistoryChart.js';
-
 // Theme configuration
-export { defaultTheme, type TokenisationTheme } from './theme.js';
+export { defaultTheme, createStyles, type TokenisationTheme } from './theme.js';
