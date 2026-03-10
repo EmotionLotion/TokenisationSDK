@@ -30,6 +30,12 @@ The server starts on **http://localhost:3001**.
 
 Authentication is bypassed in dev mode — just pass the `X-Dev-Org-Id` header with every request.
 
+### Troubleshooting
+
+- **`better-sqlite3` or `argon2` build fails**: These are native modules. Run `cd server && npx node-gyp rebuild` or install build tools (`apt install build-essential python3` on Ubuntu, `xcode-select --install` on macOS).
+- **"no such column" errors**: Delete the stale database and restart: `rm -f server/data/ahoy.db*` then restart the server. The schema auto-recreates.
+- **Idempotency-Key errors on token/transfer routes**: In dev mode (`AUTH_DEV_MODE=true`), this header is optional. In production it's required for all mutating token operations to prevent double-processing.
+
 ---
 
 ## Real Estate E2E (15 minutes)
@@ -118,6 +124,7 @@ Save the returned `id` as `TOKEN_ID`.
 curl -s http://localhost:3001/api/v1/tokens/$TOKEN_ID/deploy \
   -H "Content-Type: application/json" \
   -H "X-Dev-Org-Id: dev-org-1" \
+  -H "Idempotency-Key: deploy-token-1" \
   -d '{
     "deployerAddress": "0x1111111111111111111111111111111111111111"
   }'

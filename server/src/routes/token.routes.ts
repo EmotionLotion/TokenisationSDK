@@ -89,7 +89,7 @@ tokenRouter.post(
   apiKeyMiddleware,
   requireScope('write'),
   // Idempotency handled by global middleware; require the header for safety
-  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
+  (req, res, next) => { if (!req.headers['idempotency-key'] && process.env.AUTH_DEV_MODE !== 'true') { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
@@ -178,7 +178,7 @@ tokenRouter.post(
   '/:id/deploy',
   apiKeyMiddleware,
   requireScope('admin'),
-  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
+  (req, res, next) => { if (!req.headers['idempotency-key'] && process.env.AUTH_DEV_MODE !== 'true') { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {
@@ -480,6 +480,26 @@ tokenRouter.get('/:tokenId/positions', apiKeyMiddleware, requireScope('read'), a
   }
 });
 
+// List all holder balances for a token
+tokenRouter.get('/:tokenId/balances', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.apiKey) { throw new ValidationError('API key required'); }
+    const positions = await tokenService.listLedgerPositions(req.apiKey.orgId, {
+      tokenId: req.params.tokenId,
+    });
+    res.json({
+      tokenId: req.params.tokenId,
+      holders: positions.map((p: any) => ({
+        walletAddress: p.walletAddress,
+        investorId: p.investorId,
+        balance: p.balance || '0',
+        frozenBalance: p.frozenBalance || '0',
+      })),
+      totalHolders: positions.length,
+    });
+  } catch (error) { next(error); }
+});
+
 // Get balance by wallet address (SDK compatibility: /balances/:address)
 tokenRouter.get('/:tokenId/balances/:walletAddress', apiKeyMiddleware, requireScope('read'), async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
@@ -561,7 +581,7 @@ tokenRouter.post(
   '/:tokenId/burn',
   apiKeyMiddleware,
   requireScope('admin'),
-  (req, res, next) => { if (!req.headers['idempotency-key']) { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
+  (req, res, next) => { if (!req.headers['idempotency-key'] && process.env.AUTH_DEV_MODE !== 'true') { return res.status(400).json({ error: 'Idempotency-Key header is required for this operation', code: 'IDEMPOTENCY_KEY_REQUIRED' }); } next(); },
   async (req: ApiKeyRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.apiKey) {

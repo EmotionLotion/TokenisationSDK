@@ -231,6 +231,32 @@ export async function closePool(): Promise<void> {
 export function initializeSqliteSchema(): void {
   if (DB_MODE !== 'sqlite' || !sqliteDb) return;
 
+  // Schema version — bump this when any table definition changes
+  const SCHEMA_VERSION = 2;
+
+  sqliteDb.exec(`CREATE TABLE IF NOT EXISTS _schema_version (version INTEGER NOT NULL)`);
+  const row = sqliteDb.prepare('SELECT version FROM _schema_version LIMIT 1').get() as any;
+
+  if (row && row.version >= SCHEMA_VERSION) {
+    logger.info(`SQLite schema is up to date (v${SCHEMA_VERSION})`);
+    return;
+  }
+
+  if (row) {
+    logger.warn(`SQLite schema outdated (v${row.version} → v${SCHEMA_VERSION}), recreating all tables...`);
+    // Get all user tables and drop them
+    const tables = sqliteDb.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_schema_version'"
+    ).all() as Array<{name: string}>;
+
+    // Disable foreign keys temporarily for clean drop
+    sqliteDb.pragma('foreign_keys = OFF');
+    for (const { name } of tables) {
+      sqliteDb.exec(`DROP TABLE IF EXISTS "${name}"`);
+    }
+    sqliteDb.pragma('foreign_keys = ON');
+  }
+
   logger.info('Initializing SQLite schema...');
 
   // ========================================================================
@@ -2249,6 +2275,10 @@ export function initializeSqliteSchema(): void {
   `);
 
   logger.info('SQLite schema initialized (all tables created)');
+
+  // Update schema version
+  sqliteDb.exec('DELETE FROM _schema_version');
+  sqliteDb.exec(`INSERT INTO _schema_version (version) VALUES (${SCHEMA_VERSION})`);
 }
 
 // Auto-initialize SQLite schema on load
