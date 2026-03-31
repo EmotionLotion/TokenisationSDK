@@ -294,38 +294,6 @@ async function loadVerticalRoutes() {
     logger.info('Loaded vertical: real-estate');
   }
 
-  // Airline
-  if (isVerticalEnabled('airline')) {
-    const { ticketRouter } = await import('./routes/ticket.routes.js');
-    const { flightOracleRouter } = await import('./routes/flight-oracle.routes.js');
-    const { boardingPassRouter } = await import('./routes/boarding-pass.routes.js');
-    app.use('/api/v1/tickets', ...protectedMiddleware, ticketRouter);
-    app.use('/api/v1/flights', ...protectedMiddleware, flightOracleRouter);
-    app.use('/api/v1', ...protectedMiddleware, boardingPassRouter);
-    logger.info('Loaded vertical: airline');
-  }
-
-  // Hotel
-  if (isVerticalEnabled('hotel')) {
-    const { hotelRouter } = await import('./routes/hotel.routes.js');
-    app.use('/api/v1/hotels', ...protectedMiddleware, hotelRouter);
-    logger.info('Loaded vertical: hotel');
-  }
-
-  // Car Rental
-  if (isVerticalEnabled('car-rental')) {
-    const { carRentalRouter } = await import('./routes/car-rental.routes.js');
-    app.use('/api/v1/car-rentals', ...protectedMiddleware, carRentalRouter);
-    logger.info('Loaded vertical: car-rental');
-  }
-
-  // Concert
-  if (isVerticalEnabled('concert')) {
-    const { concertRouter } = await import('./routes/concert.routes.js');
-    app.use('/api/v1/concerts', ...protectedMiddleware, concertRouter);
-    logger.info('Loaded vertical: concert');
-  }
-
   // GPU Compute
   if (isVerticalEnabled('gpu-compute')) {
     const { gpuComputeRouter } = await import('./routes/gpu-compute.routes.js');

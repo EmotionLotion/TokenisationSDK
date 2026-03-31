@@ -521,28 +521,6 @@ export {
   type DocuSignConfig,
   type DocuSignEnvironment,
 
-  // --- Connectors: Wallet Pass ---
-  type PassType,
-  type TransitType,
-  type BarcodeFormat,
-  type PassField,
-  type PassBarcode,
-  type PassLocation,
-  type PassBeacon,
-  type PassNFC,
-  type WalletPassData,
-  type AppleWalletConfig,
-  type GooglePayConfig,
-  type ApplePassResult,
-  type GooglePassResult,
-  type WalletPassProvider,
-  WalletPassError,
-  AppleWalletProvider,
-  GooglePayProvider,
-  type WalletPlatform,
-  createWalletPassProvider,
-  isWalletPlatformSupported,
-
   // --- Factories ---
   createChainlinkWiredSDK,
   type ChainlinkWiringConfig,
@@ -553,7 +531,6 @@ export {
   type DataFeedBridgeConfig,
   AutomationLifecycleManager,
   type AutomationLifecycleConfig,
-  FlightDataFunctionsBridge,
 } from '@tokenisation/chains';
 
 // ─── @tokenisation/realestate ─────────────────────────────────────────────────

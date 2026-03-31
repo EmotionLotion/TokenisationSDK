@@ -1,7 +1,7 @@
 /**
  * PackManifest — Declarative description of a vertical pack's capabilities
  *
- * Every vertical package (@tokenisation/pack-travel, @tokenisation/pack-realestate, etc.)
+ * Every vertical package (@tokenisation/realestate, @tokenisation/compute, etc.)
  * exports a manifest so the SDK can auto-discover what a pack provides.
  *
  * Inspired by Google Cloud client libraries: each service is self-describing

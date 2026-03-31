@@ -2,7 +2,7 @@
  * Core Contract ABIs
  *
  * Compliance and identity ABIs used across multiple verticals.
- * Extracted from AirlineTicketNFT.ts as they are not airline-specific.
+ * Core compliance and identity ABIs used across all token verticals.
  */
 
 export const COMPLIANCE_TOKEN_ABI = [

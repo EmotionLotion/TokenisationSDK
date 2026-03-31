@@ -13,14 +13,6 @@
 
 export type VerticalId =
   | 'real-estate'
-  | 'airline'
-  | 'hotel'
-  | 'car-rental'
-  | 'concert'
-  | 'prediction-market'
-  | 'travel-shield'
-  | 'proof-of-funds'
-  | 'depin'
   | 'gpu-compute';
 
 export interface VerticalConfig {
@@ -36,54 +28,6 @@ export const VERTICALS: Record<VerticalId, VerticalConfig> = {
     label: 'Real Estate',
     description: 'DLD integration, property management, and real estate tokenisation',
     routePrefixes: ['/api/v1/dld', '/api/v1/properties'],
-  },
-  'airline': {
-    id: 'airline',
-    label: 'Airline',
-    description: 'Ticket NFTs, boarding passes, and flight oracle integration',
-    routePrefixes: ['/api/v1/tickets', '/api/v1/flights', '/api/v1/boarding-passes'],
-  },
-  'hotel': {
-    id: 'hotel',
-    label: 'Hotel',
-    description: 'Hotel booking NFTs and reservation management',
-    routePrefixes: ['/api/v1/hotels'],
-  },
-  'car-rental': {
-    id: 'car-rental',
-    label: 'Car Rental',
-    description: 'Car rental NFTs and fleet management',
-    routePrefixes: ['/api/v1/car-rentals'],
-  },
-  'concert': {
-    id: 'concert',
-    label: 'Concert',
-    description: 'Concert ticket NFTs and event management',
-    routePrefixes: ['/api/v1/concerts'],
-  },
-  'prediction-market': {
-    id: 'prediction-market',
-    label: 'Prediction Market',
-    description: 'Prediction market contracts and settlement',
-    routePrefixes: ['/api/v1/markets'],
-  },
-  'travel-shield': {
-    id: 'travel-shield',
-    label: 'Travel Shield',
-    description: 'Parametric travel insurance policies',
-    routePrefixes: ['/api/v1/policies'],
-  },
-  'proof-of-funds': {
-    id: 'proof-of-funds',
-    label: 'Proof of Funds',
-    description: 'Verifiable proof-of-funds attestations',
-    routePrefixes: ['/api/v1/proofs'],
-  },
-  'depin': {
-    id: 'depin',
-    label: 'DePIN',
-    description: 'Decentralised physical infrastructure networks',
-    routePrefixes: ['/api/v1/depin'],
   },
   'gpu-compute': {
     id: 'gpu-compute',
@@ -124,9 +68,6 @@ export function isVerticalEnabled(id: VerticalId): boolean {
 
 // ============================================================================
 // SERVER PLUGIN INTERFACE
-//
-// Formalizes the pattern used in loadVerticalRoutes(). Third-party vertical
-// packages can implement this interface to register Express routes dynamically.
 // ============================================================================
 
 import type { Router, RequestHandler } from 'express';
@@ -136,19 +77,6 @@ import type { Router, RequestHandler } from 'express';
  *
  * Each vertical package can export a server plugin that registers
  * Express routes into the shared application.
- *
- * @example
- * ```typescript
- * // @tokenisation/pack-travel/src/server-plugin.ts
- * export const travelServerPlugin: ServerPlugin = {
- *   id: 'travel',
- *   version: '1.0.0',
- *   routes: [
- *     { path: '/api/v1/tickets', router: ticketRouter },
- *     { path: '/api/v1/flights', router: flightOracleRouter },
- *   ],
- * };
- * ```
  */
 export interface ServerPlugin {
   /** Unique plugin identifier (matches VerticalId or custom) */

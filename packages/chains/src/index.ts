@@ -39,7 +39,6 @@ export * from './zkp/index.js';
 
 // Connectors
 export * from './connectors/signing/index.js';
-export * from './connectors/walletpass/index.js';
 
 // Factories
 export * from './factories/ChainlinkSDKFactory.js';
@@ -47,7 +46,6 @@ export * from './factories/ChainlinkSDKFactory.js';
 // Bridges
 export * from './bridges/DataFeedBridge.js';
 export * from './bridges/AutomationLifecycleManager.js';
-export * from './bridges/FlightDataFunctionsBridge.js';
 
 // Prefer contracts/validation versions over chainlink for these schemas
 // (contracts versions normalize addresses to lowercase, validate generic chain IDs)

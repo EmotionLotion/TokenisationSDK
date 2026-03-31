@@ -6,7 +6,7 @@
  */
 
 import { ChainService } from '@tokenisation/core';
-import { COMPLIANCE_TOKEN_ABI, IDENTITY_REGISTRY_ABI } from './abis/AirlineTicketNFT.js';
+import { COMPLIANCE_TOKEN_ABI, IDENTITY_REGISTRY_ABI } from './abis/CoreContracts.js';
 import type { Address, Hash } from 'viem';
 import type { Result } from '@tokenisation/core';
 

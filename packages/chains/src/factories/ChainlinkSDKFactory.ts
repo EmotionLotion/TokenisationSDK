@@ -19,7 +19,6 @@ import { ChainlinkAcePlugin, type AcePluginConfig } from '../plugins/chainlink/C
 import { ProofOfReservePlugin, type ProofOfReservePluginConfig } from '../plugins/chainlink/ProofOfReservePlugin.js';
 import { OracleMonitorPlugin, type OracleMonitorConfig } from '../plugins/chainlink/OracleMonitorPlugin.js';
 import { DataFeedBridge, type DataFeedBridgeConfig } from '../bridges/DataFeedBridge.js';
-import { FlightDataFunctionsBridge } from '../bridges/FlightDataFunctionsBridge.js';
 import { AutomationLifecycleManager, type AutomationLifecycleConfig } from '../bridges/AutomationLifecycleManager.js';
 import { CCIPSettlementProvider } from '@tokenisation/core';
 import type { CrossPackEventBus } from '@tokenisation/core';
@@ -102,7 +101,6 @@ export interface ChainlinkWiredSDK {
 
   /** Bridges */
   dataFeedBridge?: DataFeedBridge;
-  flightDataBridge?: FlightDataFunctionsBridge;
   automationManager?: AutomationLifecycleManager;
 
   /** Raw plugin instances */
@@ -142,7 +140,6 @@ export function createChainlinkWiredSDK(config: ChainlinkWiringConfig): Chainlin
 
   // Bridges and providers
   let dataFeedBridge: DataFeedBridge | undefined;
-  let flightDataBridge: FlightDataFunctionsBridge | undefined;
   let automationManager: AutomationLifecycleManager | undefined;
   let settlementProvider: CCIPSettlementProvider | undefined;
 
@@ -161,7 +158,7 @@ export function createChainlinkWiredSDK(config: ChainlinkWiringConfig): Chainlin
     });
   }
 
-  // --- Functions Plugin + Flight Bridge ---
+  // --- Functions Plugin ---
   if (config.functions) {
     const functionsPlugin = new ChainlinkFunctionsPlugin({
       chainId: config.chainId,
@@ -171,10 +168,6 @@ export function createChainlinkWiredSDK(config: ChainlinkWiringConfig): Chainlin
       privateKey: config.privateKey,
     });
     plugins.functions = functionsPlugin;
-
-    flightDataBridge = new FlightDataFunctionsBridge(functionsPlugin, oracleService);
-    // Wire immediately (registration, not polling)
-    flightDataBridge.wire();
   }
 
   // --- CCIP Plugin + Settlement Provider ---
@@ -252,7 +245,6 @@ export function createChainlinkWiredSDK(config: ChainlinkWiringConfig): Chainlin
     complianceEngine,
     settlementProvider,
     dataFeedBridge,
-    flightDataBridge,
     automationManager,
     plugins,
 

@@ -56,11 +56,7 @@ const CHAINS: Record<string, ChainConfig> = {
  */
 const KNOWN_PACKS: Array<{ id: string; name: string; description: string; pkg: string }> = [
   { id: 'real-estate', name: 'Real Estate', description: 'Property tokenization with DLD, rental income, NAV', pkg: '@tokenisation/realestate' },
-  { id: 'travel', name: 'Travel & Hospitality', description: 'Airline tickets, hotel reservations, car rentals, concerts', pkg: '@tokenisation/pack-travel' },
   { id: 'compute', name: 'GPU Compute', description: 'Tokenized GPU infrastructure, benchmarking, utilization', pkg: '@tokenisation/compute' },
-  { id: 'securities', name: 'Securities', description: 'US Reg D/S fund shares, equity, debt instruments', pkg: '@tokenisation/pack-securities' },
-  { id: 'supply-chain', name: 'Supply Chain', description: 'Warehouse receipts, verification credentials, physical assets', pkg: '@tokenisation/pack-supply-chain' },
-  { id: 'loyalty', name: 'Loyalty & Ecosystem', description: 'Ahoy tokens, driver reputation, utility credits, IoT', pkg: '@tokenisation/pack-loyalty' },
 ];
 
 async function promptUser(): Promise<ProjectConfig> {

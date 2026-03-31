@@ -6,8 +6,7 @@
  *
  * Vertical-specific adapters live in their own packages:
  * - RealEstateAdapter → @tokenisation/realestate
- * - CarbonCreditAdapter → @tokenisation/pack-supply-chain
- * - LoyaltyAdapter → @tokenisation/pack-loyalty
+ * - ComputeAdapter → @tokenisation/compute
  *
  * Usage:
  * ```typescript
