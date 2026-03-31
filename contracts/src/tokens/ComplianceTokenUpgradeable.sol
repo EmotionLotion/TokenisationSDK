@@ -2,6 +2,7 @@
 pragma solidity ^0.8.22;
 
 import "../interfaces/IIdentityRegistry.sol";
+import "../utils/ClaimTopics.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
@@ -421,6 +422,12 @@ contract ComplianceTokenUpgradeable is Initializable, UUPSUpgradeable {
         require(to != address(0), "ComplianceToken: mint to zero");
         require(!_frozen[to], "ComplianceToken: recipient frozen");
 
+        // Enforce investor count limit
+        require(
+            rules.maxInvestorCount == 0 || _isInvestor[to] || investorCount < rules.maxInvestorCount,
+            "ComplianceToken: max investor count exceeded"
+        );
+
         // Compliance checks for minting
         if (rules.requireKyc) {
             uint256[] memory requiredClaims = new uint256[](1);
@@ -485,6 +492,7 @@ contract ComplianceTokenUpgradeable is Initializable, UUPSUpgradeable {
         returns (bool)
     {
         require(bytes(reason).length > 0, "ComplianceToken: reason required");
+        require(!_frozen[to], "ComplianceToken: recipient frozen");
 
         // Skip compliance checks
         require(_balances[from] >= amount, "ComplianceToken: insufficient balance");

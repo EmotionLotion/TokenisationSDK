@@ -181,8 +181,11 @@ contract ChainlinkPriceFeed is Ownable {
             int256 price,
             ,
             uint256 updatedAt,
-
+            uint80 answeredInRound
         ) = config.feed.latestRoundData();
+
+        // Validate round completeness
+        require(answeredInRound >= roundId, "ChainlinkPriceFeed: round not complete");
 
         // Validate price
         if (price <= 0) {

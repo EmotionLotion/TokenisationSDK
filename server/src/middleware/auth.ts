@@ -231,9 +231,19 @@ export interface ApiKeyRequest extends Request {
  * Get client IP from request, handling proxies
  */
 function getClientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
+  // SECURITY: Do NOT trust X-Forwarded-For for access control decisions.
+  // It can be spoofed by any client. Only use socket address for IP-based checks.
+  // If behind a trusted reverse proxy, configure TRUSTED_PROXY_IPS and validate the chain.
+  const trustedProxies = process.env.TRUSTED_PROXY_IPS?.split(',').map(ip => ip.trim()) || [];
+  if (trustedProxies.length > 0) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') {
+      // Only trust X-Forwarded-For if the direct connection is from a trusted proxy
+      const directIp = req.socket?.remoteAddress || '';
+      if (trustedProxies.includes(directIp)) {
+        return forwarded.split(',')[0].trim();
+      }
+    }
   }
   return req.socket?.remoteAddress || req.ip || 'unknown';
 }
@@ -250,11 +260,11 @@ function isDevIpAllowed(req: Request): boolean {
  * Check if org ID is allowed for dev mode
  */
 function isDevOrgAllowed(orgId: string): boolean {
-  // Allow any org ID that starts with 'dev-', 'test-', or 'demo-'
-  if (orgId.startsWith('dev-') || orgId.startsWith('test-') || orgId.startsWith('demo-')) {
-    return true;
-  }
-  return DEV_ALLOWED_ORGS.has(orgId);
+  // SECURITY: Only allow explicitly registered dev org IDs or well-known defaults.
+  // Prefix matching (dev-*, test-*, demo-*) is too permissive — an attacker could
+  // use any org ID with these prefixes to bypass auth if dev mode leaks.
+  const WELL_KNOWN_DEV_ORGS = new Set(['dev-org', 'test-org', 'demo-org']);
+  return WELL_KNOWN_DEV_ORGS.has(orgId) || DEV_ALLOWED_ORGS.has(orgId);
 }
 
 export function authMiddleware(

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IIdentityRegistry.sol";
+import "../utils/ClaimTopics.sol";
 
 /**
  * @title ComplianceMultiToken
@@ -109,6 +110,8 @@ contract ComplianceMultiToken {
     event Unpaused(address indexed by);
     event AgentAdded(address indexed agent);
     event AgentRemoved(address indexed agent);
+    event ComplianceOfficerAdded(address indexed officer);
+    event ComplianceOfficerRemoved(address indexed officer);
     event ForceTransfer(
         address indexed from,
         address indexed to,
@@ -464,11 +467,17 @@ contract ComplianceMultiToken {
         address to,
         uint256 tokenId,
         uint256 amount
-    ) external onlyAgent tokenExists(tokenId) {
+    ) external onlyAgent whenNotPaused tokenExists(tokenId) {
         require(to != address(0), "ComplianceMultiToken: mint to zero address");
         require(!_frozen[to], "ComplianceMultiToken: recipient frozen");
 
         TokenComplianceRules storage rules = tokenRules[tokenId];
+
+        // Enforce investor count limit
+        require(
+            rules.maxInvestorCount == 0 || _isInvestor[tokenId][to] || investorCount[tokenId] < rules.maxInvestorCount,
+            "ComplianceMultiToken: max investor count exceeded"
+        );
 
         // Compliance checks for minting
         if (rules.requireKyc) {
@@ -496,7 +505,7 @@ contract ComplianceMultiToken {
         address to,
         uint256[] memory ids,
         uint256[] memory amounts
-    ) external onlyAgent {
+    ) external onlyAgent whenNotPaused {
         require(to != address(0), "ComplianceMultiToken: mint to zero address");
         require(!_frozen[to], "ComplianceMultiToken: recipient frozen");
         require(ids.length == amounts.length, "ComplianceMultiToken: ids and amounts length mismatch");
@@ -508,6 +517,12 @@ contract ComplianceMultiToken {
             require(tokenTypes[tokenId].exists, "ComplianceMultiToken: token type does not exist");
 
             TokenComplianceRules storage rules = tokenRules[tokenId];
+
+            // Enforce investor count limit
+            require(
+                rules.maxInvestorCount == 0 || _isInvestor[tokenId][to] || investorCount[tokenId] < rules.maxInvestorCount,
+                "ComplianceMultiToken: max investor count exceeded"
+            );
 
             if (rules.requireKyc) {
                 uint256[] memory requiredClaims = new uint256[](1);
@@ -599,7 +614,7 @@ contract ComplianceMultiToken {
         uint256 tokenId,
         uint256 amount,
         string calldata reason
-    ) external onlyAgent tokenExists(tokenId) nonReentrant returns (bool) {
+    ) external onlyAgent whenNotPaused tokenExists(tokenId) nonReentrant returns (bool) {
         require(bytes(reason).length > 0, "ComplianceMultiToken: reason required");
         require(_balances[tokenId][from] >= amount, "ComplianceMultiToken: insufficient balance");
 
@@ -690,10 +705,12 @@ contract ComplianceMultiToken {
 
     function addComplianceOfficer(address officer) external onlyOwner {
         compliance[officer] = true;
+        emit ComplianceOfficerAdded(officer);
     }
 
     function removeComplianceOfficer(address officer) external onlyOwner {
         compliance[officer] = false;
+        emit ComplianceOfficerRemoved(officer);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {

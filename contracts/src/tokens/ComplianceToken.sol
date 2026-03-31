@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IIdentityRegistry.sol";
+import "../utils/ClaimTopics.sol";
 
 /**
  * @title ComplianceToken
@@ -76,6 +77,8 @@ contract ComplianceToken {
     event Unpaused(address indexed by);
     event AgentAdded(address indexed agent);
     event AgentRemoved(address indexed agent);
+    event ComplianceOfficerAdded(address indexed officer);
+    event ComplianceOfficerRemoved(address indexed officer);
     event RecoveryExecuted(address indexed from, address indexed to, uint256 amount);
     event ForceTransfer(address indexed from, address indexed to, uint256 amount, string reason);
     event ComplianceOverride(address indexed agent, address indexed from, address indexed to, uint256 amount, string reason);
@@ -295,6 +298,12 @@ contract ComplianceToken {
         require(to != address(0), "ComplianceToken: mint to zero");
         require(!_frozen[to], "ComplianceToken: recipient frozen");
 
+        // Enforce investor count limit
+        require(
+            rules.maxInvestorCount == 0 || _isInvestor[to] || investorCount < rules.maxInvestorCount,
+            "ComplianceToken: max investor count exceeded"
+        );
+
         // Compliance checks for minting
         if (rules.requireKyc) {
             uint256[] memory requiredClaims = new uint256[](1);
@@ -456,10 +465,12 @@ contract ComplianceToken {
 
     function addComplianceOfficer(address officer) external onlyOwner {
         compliance[officer] = true;
+        emit ComplianceOfficerAdded(officer);
     }
 
     function removeComplianceOfficer(address officer) external onlyOwner {
         compliance[officer] = false;
+        emit ComplianceOfficerRemoved(officer);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {

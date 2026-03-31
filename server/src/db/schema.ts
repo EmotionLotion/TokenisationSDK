@@ -895,10 +895,13 @@ export const transfers = pgTable('transfers', {
   orgIdx: index('idx_transfers_org').on(table.orgId),
   tokenIdx: index('idx_transfers_token').on(table.tokenId),
   statusIdx: index('idx_transfers_status').on(table.status),
+  orgStatusIdx: index('idx_transfers_org_status').on(table.orgId, table.status),
+  orgTokenStatusIdx: index('idx_transfers_org_token_status').on(table.orgId, table.tokenId, table.status),
   fromWalletIdx: index('idx_transfers_from_wallet').on(table.fromWallet),
   toWalletIdx: index('idx_transfers_to_wallet').on(table.toWallet),
   txHashIdx: index('idx_transfers_tx_hash').on(table.txHash),
   idempotencyUnique: uniqueIndex('idx_transfers_idempotency').on(table.orgId, table.idempotencyKey),
+  createdAtIdx: index('idx_transfers_created').on(table.createdAt),
 }));
 
 // Settlements - Finality tracking
@@ -1026,6 +1029,8 @@ export const ledgerPositions = pgTable('ledger_positions', {
   orgIdx: index('idx_ledger_positions_org').on(table.orgId),
   tokenIdx: index('idx_ledger_positions_token').on(table.tokenId),
   investorIdx: index('idx_ledger_positions_investor').on(table.investorId),
+  orgInvestorIdx: index('idx_ledger_positions_org_investor').on(table.orgId, table.investorId),
+  orgTokenIdx: index('idx_ledger_positions_org_token').on(table.orgId, table.tokenId),
   walletIdx: index('idx_ledger_positions_wallet').on(table.walletAddress),
 }));
 

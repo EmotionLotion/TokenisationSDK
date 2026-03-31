@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IIdentityRegistry.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title IdentityRegistry
@@ -145,6 +147,12 @@ contract IdentityRegistry is IIdentityRegistry {
     ) external override onlyVerifier(claimTopic) returns (bytes32 claimId) {
         require(_identities[userAddress].exists, "Identity not registered");
 
+        // Verify the issuer's signature over the claim data
+        bytes32 dataHash = keccak256(abi.encodePacked(userAddress, claimTopic, data));
+        bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(dataHash);
+        address recovered = ECDSA.recover(ethSignedHash, signature);
+        require(recovered == issuer, "IdentityRegistry: invalid issuer signature");
+
         claimId = keccak256(abi.encodePacked(userAddress, claimTopic, issuer, block.timestamp));
 
         _claims[claimId] = Claim({
@@ -174,6 +182,12 @@ contract IdentityRegistry is IIdentityRegistry {
     ) external onlyVerifier(claimTopic) returns (bytes32 claimId) {
         require(_identities[userAddress].exists, "Identity not registered");
         require(expiresAt > block.timestamp, "Invalid expiry");
+
+        // Verify the issuer's signature over the claim data
+        bytes32 dataHash = keccak256(abi.encodePacked(userAddress, claimTopic, data));
+        bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(dataHash);
+        address recovered = ECDSA.recover(ethSignedHash, signature);
+        require(recovered == issuer, "IdentityRegistry: invalid issuer signature");
 
         claimId = keccak256(abi.encodePacked(userAddress, claimTopic, issuer, block.timestamp));
 

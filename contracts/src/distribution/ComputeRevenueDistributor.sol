@@ -130,6 +130,9 @@ contract ComputeRevenueDistributor is Ownable, ReentrancyGuard {
         uint256 _maintenanceReserveBps,
         uint256 _insuranceBps
     ) Ownable(initialOwner) {
+        require(_treasury != address(0), "ComputeRevenue: treasury is zero address");
+        require(_maintenanceWallet != address(0), "ComputeRevenue: maintenance wallet is zero address");
+        require(_insuranceWallet != address(0), "ComputeRevenue: insurance wallet is zero address");
         require(_platformFeeBps + _maintenanceReserveBps + _insuranceBps <= 5000, "ComputeRevenue: fees > 50%");
 
         treasury = _treasury;
@@ -160,7 +163,7 @@ contract ComputeRevenueDistributor is Ownable, ReentrancyGuard {
         emit FeeStructureUpdated(_platformFeeBps, _maintenanceReserveBps, _insuranceBps);
     }
 
-    function setTreasury(address _treasury) external onlyOwner { treasury = _treasury; emit TreasuryUpdated(_treasury); }
+    function setTreasury(address _treasury) external onlyOwner { require(_treasury != address(0), "ComputeRevenue: zero address"); treasury = _treasury; emit TreasuryUpdated(_treasury); }
     function addOperator(address op) external onlyOwner { operators[op] = true; emit OperatorAdded(op); }
     function removeOperator(address op) external onlyOwner { operators[op] = false; emit OperatorRemoved(op); }
 

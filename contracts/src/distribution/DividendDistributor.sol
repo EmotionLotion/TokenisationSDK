@@ -325,6 +325,12 @@ contract DividendDistributor is Ownable, ReentrancyGuard {
         }
 
         amount = (div.totalAmount * holderBalance) / totalSupply;
+
+        // Prevent rounding dust from being locked: cap to remaining undistributed amount
+        uint256 remaining = div.totalAmount - div.claimedAmount;
+        if (amount > remaining) {
+            amount = remaining;
+        }
     }
 
     // ============================================================================
