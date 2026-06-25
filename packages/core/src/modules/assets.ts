@@ -19,6 +19,24 @@ import {
 } from './validation.js';
 
 // ============================================================================
+// Response helpers
+// ============================================================================
+
+/**
+ * The API wraps single-asset responses as `{ asset: Asset }` on some endpoints
+ * (create, get) but returns the bare `Asset` on others (update). Normalise both
+ * to a bare `Asset` so the module's `Promise<Asset>` contract matches at runtime.
+ * Errors are already thrown by the HTTP layer before this runs, so this never
+ * hides failures — it only unwraps a successful body. [F21]
+ */
+function unwrapAsset(body: Asset | { asset: Asset }): Asset {
+  if (body && typeof body === 'object' && 'asset' in body) {
+    return (body as { asset: Asset }).asset;
+  }
+  return body as Asset;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -86,8 +104,8 @@ export class AssetsModule {
    */
   async create(input: CreateAssetInput, idempotencyKey?: string): Promise<Asset> {
     const validated = validate(CreateAssetInputSchema, input);
-    const response = await this.http.post<Asset>('/api/v1/assets', validated, { idempotencyKey });
-    return response.data;
+    const response = await this.http.post<Asset | { asset: Asset }>('/api/v1/assets', validated, { idempotencyKey });
+    return unwrapAsset(response.data);
   }
 
   /**
@@ -95,8 +113,8 @@ export class AssetsModule {
    */
   async get(id: string): Promise<Asset> {
     const validatedId = validate(UUIDSchema, id);
-    const response = await this.http.get<Asset>(`/api/v1/assets/${validatedId}`);
-    return response.data;
+    const response = await this.http.get<Asset | { asset: Asset }>(`/api/v1/assets/${validatedId}`);
+    return unwrapAsset(response.data);
   }
 
   /**

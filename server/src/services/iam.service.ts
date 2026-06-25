@@ -2,6 +2,7 @@ import { db, schema } from '../config/database.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 import { AppError, NotFoundError, ValidationError, UnauthorizedError } from '../middleware/errorHandler.js';
+import { permissionGranted } from '../middleware/permission.js';
 import * as argon2 from 'argon2';
 
 const { orgs, users, roles, userRoles, apiKeys } = schema;
@@ -575,17 +576,8 @@ export async function checkPermission(userId: string, requiredPermission: string
 }
 
 export async function checkApiKeyScope(scopes: string[], requiredScope: string): Promise<boolean> {
-  for (const scope of scopes) {
-    if (scope === '*' || scope === 'admin' || scope === requiredScope) {
-      return true;
-    }
-
-    // Check if the required scope is covered by a broader scope
-    // e.g., 'write' covers 'write:assets'
-    if (requiredScope.startsWith(`${scope}:`)) {
-      return true;
-    }
-  }
-
-  return false;
+  // Delegate to the single permission matcher (T2/G3) so scope checks here and in
+  // the route guard (requireScope) share one semantics. This also adds wildcard
+  // support (e.g. 'read:*' covers 'read' / 'read:assets') the local loop lacked.
+  return permissionGranted(scopes, requiredScope);
 }

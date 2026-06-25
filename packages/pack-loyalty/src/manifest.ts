@@ -17,7 +17,9 @@ export const manifest: PackManifest = {
     'AHOY_TOKEN',
   ],
 
-  rightTypes: ['BEHAVIOR', 'MEMBERSHIP'],
+  // 'MEMBERSHIP' is an ACCESS profile, not a canonical RightType (T5 / D-10 / RA-3):
+  // loyalty points -> BEHAVIOR; passes/memberships -> ACCESS.
+  rightTypes: ['BEHAVIOR', 'ACCESS'],
 
   chains: [1, 137, 8453], // Ethereum, Polygon, Base
 

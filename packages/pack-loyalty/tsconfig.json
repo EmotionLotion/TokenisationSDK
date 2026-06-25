@@ -22,7 +22,11 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
+  // src/ui/*.tsx are React components requiring react + lucide-react, which are not
+  // dependencies of this logic-only package and are not re-exported from src/index.ts.
+  // They are excluded from the package build (matching the @tokenisation/pack-travel
+  // convention) so the published package stays framework-agnostic. F13.
+  "exclude": ["node_modules", "dist", "src/ui"],
   "references": [
     { "path": "../core" }
   ]

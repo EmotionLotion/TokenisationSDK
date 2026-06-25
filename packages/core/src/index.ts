@@ -339,7 +339,12 @@ export type {
 export * from './packs/index.js';
 
 // Pre-built UI Components (Stripe Elements style)
-export * from './components/index.js';
+// NOTE: React components are NOT exported from the root entry — they statically import
+// `react`, which would force every consumer (incl. backend/Node apps) to install React.
+// Import them from the subpath instead:  `@tokenisation/core/components`  (see package.json exports). [F22]
+// The theme helpers below are framework-agnostic (no React) and remain on the root for
+// backwards compatibility (used by @tokenisation/realestate components, etc.).
+export { defaultTheme, createStyles, type TokenisationTheme } from './components/theme.js';
 
 // Extension Modules (Cash Flow, Governance, Escrow)
 export * from './modules/index.js';
@@ -355,7 +360,10 @@ export * from './providers/index.js';
 
 // Production Infrastructure
 export * from './middleware/index.js';
-export * from './storage/index.js';
+// Framework-agnostic storage interface + in-memory adapter only. The Drizzle/pg-backed
+// Postgres adapter (`./storage/postgres`) statically imports `drizzle-orm`/`pg`, so it is
+// NOT in the root entry — import it from `@tokenisation/core/storage` instead. [F22]
+export * from './storage/DatabaseAdapter.js';
 export * from './secrets/index.js';
 export * from './queue/index.js';
 export * from './audit/index.js';

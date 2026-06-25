@@ -1,0 +1,583 @@
+{
+  "version": 1,
+  "description": "Institutional-grade programmable-rights harness. Ordering authority. Critical path: T0 -> (T1,T2) -> (T4,T5,T6) -> T9 -> future modules. Every task runs the 5-phase loop in verification_rules.md.",
+  "critical_path": [
+    "T0",
+    [
+      "T1",
+      "T2"
+    ],
+    [
+      "T4",
+      "T5",
+      "T6"
+    ],
+    "T9",
+    "future_modules"
+  ],
+  "phases": {
+    "loop": [
+      "context",
+      "plan",
+      "action",
+      "verification",
+      "memory"
+    ]
+  },
+  "gates": {
+    "blocked-until-foundation": "Requires T4, T5, T6 all 'done' AND T9 'done' before it may start. Enforces: no new modules before the module contract, right-type taxonomy, and unified redemption exist and are proven on loyalty."
+  },
+  "nodes": [
+    {
+      "id": "T0",
+      "title": "Create harness scaffold",
+      "phase": 0,
+      "severity": "P0",
+      "closes": [],
+      "deps": [],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T1",
+      "title": "Test the foundation (@tokenisation/core conformance suite)",
+      "phase": 1,
+      "severity": "P0",
+      "closes": [
+        "G11"
+      ],
+      "deps": [
+        "T0"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T2",
+      "title": "Fix RBAC: unify roles <-> scopes via one permission matcher + tests",
+      "phase": 1,
+      "severity": "P0",
+      "closes": [
+        "G3-partial"
+      ],
+      "deps": [
+        "T0"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T2a",
+      "title": "Provision API keys from role permissions (keys carry rich perms)",
+      "phase": 1,
+      "severity": "P1",
+      "closes": [
+        "G3"
+      ],
+      "deps": [
+        "T2"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T2b",
+      "title": "Apply resource-level requireScope(action,resource) across the 48 routers",
+      "phase": 1,
+      "severity": "P1",
+      "closes": [
+        "G3"
+      ],
+      "deps": [
+        "T2",
+        "T2a"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T3",
+      "title": "Unify error model + stop leaking stack traces; error-code catalog",
+      "phase": 1,
+      "severity": "P1",
+      "closes": [
+        "G2"
+      ],
+      "deps": [
+        "T1"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T11",
+      "title": "Idempotency contract across all mutations + docs",
+      "phase": 1,
+      "severity": "P1",
+      "closes": [
+        "G5"
+      ],
+      "deps": [
+        "T1"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T12",
+      "title": "Audit completeness test + tamper-evidence verification",
+      "phase": 1,
+      "severity": "P1",
+      "closes": [
+        "G4"
+      ],
+      "deps": [
+        "T1"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T4",
+      "title": "Define Programmable Right Module contract",
+      "phase": 2,
+      "severity": "P0",
+      "closes": [
+        "G12-contract"
+      ],
+      "deps": [
+        "T1",
+        "T2"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T5",
+      "title": "Right-type taxonomy ratified (MEMBERSHIP->ACCESS; USAGE/LICENSE ratified; two-level RightType+RightProfile)",
+      "phase": 2,
+      "severity": "P0",
+      "closes": [
+        "G13"
+      ],
+      "deps": [
+        "T1",
+        "T2"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T5a",
+      "title": "Land USAGE/LICENSE in RightType enum + RightProfile type (on first consuming module)",
+      "phase": 2,
+      "severity": "P1",
+      "closes": [
+        "G13"
+      ],
+      "deps": [
+        "T5"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T6",
+      "title": "Unify redemption/consumption primitive \u2014 DESIGN ratified (Right Action)",
+      "phase": 2,
+      "severity": "P0",
+      "closes": [
+        "G8-design"
+      ],
+      "deps": [
+        "T1",
+        "T2"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T6a",
+      "title": "Implement Right Action core: right_actions table + RightActionService + conformance tests",
+      "phase": 2,
+      "severity": "P0",
+      "closes": [
+        "G8"
+      ],
+      "deps": [
+        "T6"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T6b",
+      "title": "Right Action server API (POST /rights/actions + history + receipt) + back-compat shims",
+      "phase": 2,
+      "severity": "P1",
+      "closes": [
+        "G8"
+      ],
+      "deps": [
+        "T6a"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T6c",
+      "title": "Right Action SDK surface client.rights.* + types + tests",
+      "phase": 2,
+      "severity": "P1",
+      "closes": [
+        "G8"
+      ],
+      "deps": [
+        "T6a"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T7",
+      "title": "Unify policy model (off-chain + on-chain from one authoring model)",
+      "phase": 2,
+      "severity": "P1",
+      "closes": [
+        "G7"
+      ],
+      "deps": [
+        "T4"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T8",
+      "title": "Generic per-right-type versioned metadata schema registry",
+      "phase": 2,
+      "severity": "P1",
+      "closes": [
+        "G6"
+      ],
+      "deps": [
+        "T4",
+        "T5"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T9",
+      "title": "Bring loyalty up to the module contract (umbrella: T9a-T9e)",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G12-loyalty"
+      ],
+      "deps": [
+        "T4",
+        "T5",
+        "T6a"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T9a",
+      "title": "Loyalty Module Spec + implementation plan (docs/modules/loyalty.module.md)",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "T4",
+        "T5",
+        "T6a"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T9b",
+      "title": "Loyalty server persistence: redeem/consume/revoke via RightAction over the EXISTING loyalty ledger (D-13) + tests",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G8",
+        "G12-loyalty"
+      ],
+      "deps": [
+        "T9a"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T9c",
+      "title": "Loyalty server API /api/v1/loyalty/* (RBAC + idempotency + OpenAPI) + route tests",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G12-loyalty"
+      ],
+      "deps": [
+        "T9b"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T9d",
+      "title": "Loyalty SDK surface client.loyalty.* + tests",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G1",
+        "G12-loyalty"
+      ],
+      "deps": [
+        "T9c"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "T9e",
+      "title": "Loyalty docs recipe + examples/loyalty-minimal + minimal UI + acceptance checklist",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G9",
+        "G10",
+        "G12-loyalty"
+      ],
+      "deps": [
+        "T9b",
+        "T9c",
+        "T9d"
+      ],
+      "status": "done",
+      "gate": null
+    },
+    {
+      "id": "DX1",
+      "title": "Developer quickstart around the certified loyalty reference module (install/setup/API key + verified runnable example)",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G9-dx"
+      ],
+      "deps": [
+        "T9e"
+      ],
+      "status": "in_progress",
+      "gate": null
+    },
+    {
+      "id": "T10",
+      "title": "Real-estate conformance (package tests + assert contract)",
+      "phase": 3,
+      "severity": "P1",
+      "closes": [
+        "G11-re",
+        "G12-re"
+      ],
+      "deps": [
+        "T4",
+        "T5",
+        "T6"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T13",
+      "title": "Curate public SDK surface (stable vs internal, semver, fix assets.list F21b)",
+      "phase": 4,
+      "severity": "P1",
+      "closes": [
+        "G1"
+      ],
+      "deps": [
+        "T3"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T14",
+      "title": "Docs truth pass (F1/F18/F2/F19/F6, error catalog, authoring guide)",
+      "phase": 4,
+      "severity": "P1",
+      "closes": [
+        "G9"
+      ],
+      "deps": [
+        "T3",
+        "T4",
+        "T5"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "T15",
+      "title": "Stabilize UI + tests (React 18/19 split; operator dashboard; F11/F12/F15/F17)",
+      "phase": 4,
+      "severity": "P1",
+      "closes": [
+        "G10"
+      ],
+      "deps": [
+        "T1"
+      ],
+      "status": "in_progress",
+      "gate": null,
+      "note": "Loyalty operator dashboard sub-goal DONE + verifier PASS (ui/src/pages/LoyaltyConsole.tsx, native console page on real client.loyalty.* via lazy SDK import; nav/route added; LoyaltyConsole.test.tsx 1/1). REMAINING T15 scope (open): React 18/19 split, console vitest infra (crypto-browserify missing -> UI-INFRA-1), pre-existing console type debt (UI-INFRA-2), F11/F12/F15/F17."
+    },
+    {
+      "id": "T16",
+      "title": "Packaging/release (umbrella publishability, changeset check, F5)",
+      "phase": 4,
+      "severity": "P2",
+      "closes": [
+        "G14"
+      ],
+      "deps": [
+        "T13"
+      ],
+      "status": "pending",
+      "gate": null
+    },
+    {
+      "id": "M_compute_credits",
+      "title": "Module: compute credits (USAGE/CONSUMPTION) \u2014 umbrella M1a-M1e",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "T9"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation",
+      "note": "Foundation gate SATISFIED. Module Spec authored in M1a (docs/modules/compute.module.md, design-pass). Stays deferred: implementation (M1b-M1e) is blocked until T5a lands the USAGE enum value AND the spec is accepted."
+    },
+    {
+      "id": "M1a",
+      "title": "Compute Credits Module Spec (docs/modules/compute.module.md) + implementation plan",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "T9"
+      ],
+      "status": "in_progress",
+      "gate": null,
+      "note": "Design only, NO source. USAGE right type marked pending-T5a (ratified in T5/D-10; enum lands T5a). Spec-gate design-pass; full acceptance blocked until T5a. Authoring a spec is the D-9 prerequisite to opening the module; the foundation gate (T4+T5+T6+T9) is satisfied."
+    },
+    {
+      "id": "M1b",
+      "title": "Compute credits: server persistence + ComputeCreditService (account-balance ledger on RightAction)",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "M1a",
+        "T5a",
+        "T6a"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation",
+      "note": "Blocked until T5a (USAGE enum) + M1a accepted."
+    },
+    {
+      "id": "M1c",
+      "title": "Compute credits: server API /api/v1/compute/credits/* (requireScope('compute') + idempotency + OpenAPI)",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "M1b"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation"
+    },
+    {
+      "id": "M1d",
+      "title": "Compute credits: SDK surface client.compute.*",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "M1c"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation"
+    },
+    {
+      "id": "M1e",
+      "title": "Compute credits: docs recipe + examples/compute-credits-minimal + UI + acceptance checklist",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "M1b",
+        "M1c",
+        "M1d"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation"
+    },
+    {
+      "id": "M_dataset_licenses",
+      "title": "Module: dataset licenses (LICENSE)",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "T9"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation"
+    },
+    {
+      "id": "M_model_licenses",
+      "title": "Module: model / model-weight licenses (LICENSE)",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "T9"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation"
+    },
+    {
+      "id": "M_ai_agent_access",
+      "title": "Module: AI-agent access (delegated ACCESS)",
+      "phase": 5,
+      "severity": "P1",
+      "closes": [],
+      "deps": [
+        "T9"
+      ],
+      "status": "deferred",
+      "gate": "blocked-until-foundation"
+    }
+  ],
+  "active_task": "DX1",
+  "also_unblocked": [
+    "T6b",
+    "T6c",
+    "T3",
+    "T7",
+    "T8",
+    "T11",
+    "T12",
+    "T10",
+    "T2a",
+    "T2b",
+    "T5a"
+  ],
+  "notes": "T9 DONE (T9a-T9e all done) \u2014 loyalty is the certified reference module (harness/loyalty_reference_acceptance.md, verifier PASS). Closing T9 SATISFIES the blocked-until-foundation gate (T4+T5+T6+T9 done); the four M_* modules stay 'deferred' until each has an accepted Module Spec (USAGE/LICENSE modules also need T5a) \u2014 gate lifted, not auto-started. active_task -> T15 (UI/operator dashboard; absorbs T9e-FOLLOWUP-1 to wire LoyaltyOperatorPanel into a running dashboard). Open follow-ups: T9e-FOLLOWUP-1 (UI integration), T9d-FOLLOWUP-1 (loyalty programs/accounts list+get), T8 (versioned metadata registry), T10 (real-estate conformance + securities redemption migration onto the primitive + loyalty cross-table atomicity T9b-FOLLOWUP-1). HISTORICAL: T0,T1,T2,T4,T5,T6,T6a done; T9 was in_progress (T9a,T9b done). T9b DISCOVERY: server/src/services/loyalty.service.ts already existed (account-balance model) \u2014 integrated redeem/consume/revoke via RightAction over it (D-13), no parallel ledger; added findByIdempotencyKey to RightActionService. Next T9c (routes /api/v1/loyalty/*). PRIOR notes: T9 split into T9a(done: docs/modules/loyalty.module.md + harness/loyalty_reference_module_plan.md), T9b(server ledger+LoyaltyService on RightAction), T9c(routes), T9d(SDK), T9e(docs/example/UI+acceptance). Next: T9b. Future modules (M_*) gated: need T9 done + a completed Module Spec; USAGE/LICENSE modules also need T5a. Securities-redemption migration onto the primitive = T10 follow-up."
+}

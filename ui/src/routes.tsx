@@ -11,6 +11,7 @@ import { PolicyStudio } from './components/PolicyStudio';
 import { TransactionsPage } from './components/TransactionsPage';
 import { OraclesPage } from './components/OraclesPage';
 import { PayoutsPage } from './components/PayoutsPage';
+import { LoyaltyConsole } from './pages/LoyaltyConsole';
 
 // Ecosystem Product Services
 import { CometApp } from './pages/apps/CometApp';
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
             { path: 'transactions', element: <TransactionsPage /> },
             { path: 'oracles', element: <OraclesPage /> },
             { path: 'payouts', element: <PayoutsPage /> },
+            { path: 'loyalty', element: <LoyaltyConsole /> },
 
             // =============================================
             // ECOSYSTEM PRODUCT SERVICES

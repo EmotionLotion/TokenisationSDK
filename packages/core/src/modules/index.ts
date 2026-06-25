@@ -27,6 +27,7 @@ export * from './Vesting.js';
 export * from './Offerings.js';
 export * from './RegulatoryReports.js';
 export * from './Redemption.js';
+export * from './loyalty.js';
 
 // API Client Modules
 export { ProjectsModule } from './projects.js';

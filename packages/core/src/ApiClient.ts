@@ -44,6 +44,7 @@ import { TokensModule } from './modules/tokens.js';
 import { TransfersModule } from './modules/transfers.js';
 import { ComplianceModule } from './modules/compliance.js';
 import { AssetsModule } from './modules/assets.js';
+import { LoyaltyModule } from './modules/loyalty.js';
 import { EventsModule } from './modules/events.js';
 import { WebhooksModule } from './modules/webhooks.js';
 import { AuditModule } from './modules/audit.js';
@@ -98,6 +99,9 @@ export class ApiClient {
   /** Cash flow - distributions, dividends, payouts */
   public readonly cashflow: CashFlowModule;
 
+  /** Loyalty - reference programmable-rights module (points: earn/redeem/consume/revoke) */
+  public readonly loyalty: LoyaltyModule;
+
   // RE-specific module properties moved to @tokenisation/realestate:
   // dld, legal, secondaryMarket, investorTiers, exitWindows, properties, nav
 
@@ -140,6 +144,7 @@ export class ApiClient {
     this.governance = new GovernanceModule(this.http);
     this.escrow = new EscrowModule(this.http);
     this.cashflow = new CashFlowModule(this.http);
+    this.loyalty = new LoyaltyModule(this.http);
     // RE-specific modules initialized in @tokenisation/realestate ApiClient
   }
 

@@ -1,0 +1,19 @@
+{
+  "name": "loyalty-minimal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal external consumer running the full loyalty lifecycle (program -> account -> earn -> balance -> redeem -> consume) against a local Tokenisation API server using @tokenisation/core.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tokenisation/core": "file:../../packages/core"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

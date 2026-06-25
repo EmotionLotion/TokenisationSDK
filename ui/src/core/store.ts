@@ -24,7 +24,8 @@ import {
   RightType,
 } from '@tokenisation/sdk';
 // Import the plugin-layer API classes (the plugin ApiClient is distinct from the top-level Stripe-like ApiClient)
-import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@tokenisation/sdk/plugins';
+// UI-INFRA-2: '@tokenisation/sdk/plugins' subpath is declared but never built; symbols live in the main barrel.
+import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@tokenisation/sdk';
 import { config } from '../config';
 import type { Persona, ComplianceRules } from './types';
 

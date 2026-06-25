@@ -21,39 +21,51 @@ pnpm install && pnpm -r run build
 
 ## Quick Start
 
-Start the API server (SQLite, zero config):
+The fastest **verified** path is the **loyalty** vertical — the SDK's
+[certified reference module](docs/modules/loyalty.module.md). Full walkthrough:
+**[Developer Quickstart (Loyalty)](docs/getting-started/LOYALTY_QUICKSTART.md)**.
 
 ```bash
+# 1. Build, then run the local API server (SQLite, zero config) on :3001
+pnpm -r run build
 cp server/.env.example server/.env
 cd server && pnpm dev
+
+# 2. In a second terminal: seed a sandbox API key
+cd server && pnpm db:seed --org-only      # prints a one-time sk_test_... key
+export AHOY_API_KEY="sk_test_..."
+
+# 3. Run the end-to-end loyalty example (program → earn → redeem, idempotent)
+cd examples/loyalty-minimal && npm install && npx tsx src/index.ts
 ```
 
-Create a tokenized asset:
-
-```bash
-curl -X POST http://localhost:3001/api/v1/assets \
-  -H "Content-Type: application/json" \
-  -H "X-Dev-Org-Id: dev-org-1" \
-  -d '{"name": "Marina Heights Unit 2501", "rightType": "OWNERSHIP", "jurisdiction": {"countryCode": "AE"}}'
-```
-
-Or use the TypeScript SDK:
+The TypeScript SDK, inline:
 
 ```typescript
 import { createApiClient } from '@tokenisation/core';
 
-const client = createApiClient({ apiKey: 'sk_test_xxx', baseUrl: 'http://localhost:3001' });
+const client = createApiClient({ apiKey: process.env.AHOY_API_KEY!, baseUrl: 'http://localhost:3001' });
 
-const asset = await client.assets.create({
-  name: 'Marina Heights Unit 2501',
-  rightType: 'OWNERSHIP',
-  jurisdiction: { countryCode: 'AE' },
+const program = await client.loyalty.programs.create({
+  name: 'FlyPlus Rewards',
+  earnRules: [{ action: 'flight_booked', points: 500 }],
 });
+const account = await client.loyalty.accounts.create({ programId: program.id, investorId: 'holder-123' });
 
-const token = await client.tokens.create({
-  name: 'MHT', symbol: 'MHT', chainId: 8453, assetId: asset.id,
-});
+await client.loyalty.points.earn(account.id, { action: 'flight_booked' });
+
+// Mutations require a stable Idempotency-Key (3rd arg) → safe to retry, never double-spends.
+const result = await client.loyalty.points.redeem(
+  account.id,
+  { amount: 250, action: 'gift_card', redemptionRate: 100 },
+  'redeem-holder-123-001',
+);
+// result.balanceAfter === 250, result.redeemedValue === '2.50'
 ```
+
+> Other verticals (real estate, compute, …) ship as packs but are still being
+> brought to full conformance — see the
+> [aspirational real-estate walkthrough](docs/getting-started/QUICKSTART.md).
 
 ## Packages
 
@@ -76,9 +88,11 @@ Generic core + opt-in verticals. Install only what you need:
 
 ## Documentation
 
+- [Developer Quickstart (Loyalty — certified reference module)](docs/getting-started/LOYALTY_QUICKSTART.md)
+- [Loyalty Points Recipe](docs/recipes/LOYALTY_POINTS.md)
 - [Architecture Overview](docs/architecture/OVERVIEW.md)
 - [Installation Guide](docs/getting-started/INSTALLATION.md)
-- [Quick Start Guide](docs/getting-started/QUICKSTART.md)
+- [Quick Start Guide (real estate / securities — aspirational)](docs/getting-started/QUICKSTART.md)
 - [API Reference](docs/api/SDK_REFERENCE.md)
 - [Building a Real Estate App](docs/guides/BUILDING_REAL_ESTATE_APP.md)
 - [Compliance Guide](docs/guides/COMPLIANCE.md)

@@ -10,6 +10,8 @@
 import { rawQuery } from '../config/database.js';
 import { randomUUID } from 'crypto';
 import { logger } from '../middleware/logger.js';
+import { ValidationError } from '../middleware/errorHandler.js';
+import { createAction, findByIdempotencyKey, type RightActionReceipt } from './right-action.service.js';
 
 // ============================================================================
 // Types
@@ -515,4 +517,135 @@ export async function getProgramAnalytics(orgId: string, programId: string): Pro
     activeAccounts,
     activeRate: totalAccounts > 0 ? Math.round((activeAccounts / totalAccounts) * 10000) / 100 : 0,
   };
+}
+
+// ============================================================================
+// Right Action integration (T9b) — loyalty as the reference module on the
+// unified RightAction primitive. redeem/consume/revoke flow through
+// RightActionService (audited + idempotent) over the EXISTING loyalty_accounts
+// ledger. No parallel ledger; the in-memory pack engine is non-authoritative.
+// ============================================================================
+
+const LOYALTY_RIGHT_PROFILE = 'loyalty-points';
+
+export const LoyaltyRightErrorCode = {
+  IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  BELOW_MIN_REDEMPTION: 'BELOW_MIN_REDEMPTION',
+  ACCOUNT_NOT_FOUND: 'ACCOUNT_NOT_FOUND',
+} as const;
+
+export interface SpendViaRightInput {
+  accountId: string;
+  amount: number;
+  action: string;
+  reason?: string;
+  redemptionRate?: number;      // REDEEM only: value = amount / rate
+  minRedemptionAmount?: number; // REDEEM only
+}
+
+export interface SpendViaRightResult {
+  receipt: RightActionReceipt;
+  transactionId: string | null;
+  balanceBefore: number;
+  balanceAfter: number;
+  redeemedValue?: string;
+}
+
+async function spendViaRight(
+  orgId: string,
+  kind: 'REDEEM' | 'CONSUME',
+  input: SpendViaRightInput,
+  opts: { idempotencyKey?: string; actorId?: string },
+): Promise<SpendViaRightResult> {
+  await ensureTables();
+  if (!opts.idempotencyKey) {
+    throw new ValidationError(`${LoyaltyRightErrorCode.IDEMPOTENCY_KEY_REQUIRED}: ${kind} requires an Idempotency-Key`);
+  }
+  if (!Number.isInteger(input.amount) || input.amount <= 0) {
+    throw new ValidationError('amount must be a positive integer');
+  }
+
+  const account = await getAccount(orgId, input.accountId);
+  if (!account) throw new ValidationError(`${LoyaltyRightErrorCode.ACCOUNT_NOT_FOUND}: ${input.accountId}`);
+
+  // Idempotent replay: return the prior receipt without touching the ledger again.
+  const prior = await findByIdempotencyKey(orgId, opts.idempotencyKey);
+  if (prior) {
+    const md = prior.metadata ?? {};
+    return {
+      receipt: prior,
+      transactionId: (md.transactionId as string) ?? null,
+      balanceBefore: account.balance + input.amount,
+      balanceAfter: account.balance,
+      redeemedValue: md.redeemedValue as string | undefined,
+    };
+  }
+
+  if (kind === 'REDEEM' && input.minRedemptionAmount && input.amount < input.minRedemptionAmount) {
+    throw new ValidationError(`${LoyaltyRightErrorCode.BELOW_MIN_REDEMPTION}: minimum is ${input.minRedemptionAmount} points`);
+  }
+  const balanceBefore = account.balance;
+  if (balanceBefore < input.amount) {
+    throw new ValidationError(`${LoyaltyRightErrorCode.INSUFFICIENT_BALANCE}: have ${balanceBefore}, need ${input.amount}`);
+  }
+
+  const redeemedValue = kind === 'REDEEM' && input.redemptionRate
+    ? (input.amount / input.redemptionRate).toFixed(2)
+    : undefined;
+
+  // Decrement the existing ledger (records a loyalty_transactions 'spend' row), then
+  // record the audited, idempotent RightAction linking the transaction.
+  const txn = await spendPoints(orgId, { accountId: input.accountId, amount: input.amount, action: input.action, description: input.reason });
+  const receipt = await createAction(
+    orgId,
+    {
+      kind, rightProfileId: LOYALTY_RIGHT_PROFILE, subjectType: 'investor', subjectId: account.investorId,
+      quantity: String(input.amount), unit: 'points', reason: input.reason,
+      metadata: { programId: account.programId, transactionId: txn.id, redeemedValue },
+    },
+    { idempotencyKey: opts.idempotencyKey, actorId: opts.actorId },
+  );
+
+  return { receipt, transactionId: txn.id, balanceBefore, balanceAfter: txn.balanceAfter, redeemedValue };
+}
+
+/** Redeem points for value (RightAction REDEEM) over the existing ledger. */
+export function redeemPoints(orgId: string, input: SpendViaRightInput, opts: { idempotencyKey?: string; actorId?: string }): Promise<SpendViaRightResult> {
+  return spendViaRight(orgId, 'REDEEM', input, opts);
+}
+
+/** Consume points (RightAction CONSUME) over the existing ledger. */
+export function consumePoints(orgId: string, input: SpendViaRightInput, opts: { idempotencyKey?: string; actorId?: string }): Promise<SpendViaRightResult> {
+  return spendViaRight(orgId, 'CONSUME', input, opts);
+}
+
+/** Admin clawback: zero the account balance and record a RightAction REVOKE. */
+export async function revokePoints(
+  orgId: string,
+  input: { accountId: string; reason: string },
+  opts: { idempotencyKey?: string; actorId?: string },
+): Promise<{ receipt: RightActionReceipt; revoked: number }> {
+  await ensureTables();
+  if (!opts.idempotencyKey) {
+    throw new ValidationError(`${LoyaltyRightErrorCode.IDEMPOTENCY_KEY_REQUIRED}: REVOKE requires an Idempotency-Key`);
+  }
+  const account = await getAccount(orgId, input.accountId);
+  if (!account) throw new ValidationError(`${LoyaltyRightErrorCode.ACCOUNT_NOT_FOUND}: ${input.accountId}`);
+
+  const prior = await findByIdempotencyKey(orgId, opts.idempotencyKey);
+  const revoked = account.balance;
+  if (!prior && revoked > 0) {
+    const now = new Date().toISOString();
+    await rawQuery(
+      `UPDATE loyalty_accounts SET balance = 0, last_activity_at = $1 WHERE id = $2 AND org_id = $3`,
+      [now, input.accountId, orgId],
+    );
+  }
+  const receipt = await createAction(
+    orgId,
+    { kind: 'REVOKE', rightProfileId: LOYALTY_RIGHT_PROFILE, subjectType: 'investor', subjectId: account.investorId, reason: input.reason, metadata: { programId: account.programId, revoked } },
+    { idempotencyKey: opts.idempotencyKey, actorId: opts.actorId },
+  );
+  return { receipt, revoked };
 }

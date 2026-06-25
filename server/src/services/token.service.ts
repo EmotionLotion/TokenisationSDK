@@ -109,6 +109,7 @@ export async function createToken(input: CreateTokenInput) {
   const [token] = await db.insert(tokens).values({
     orgId: input.orgId,
     projectId: input.projectId,
+    assetId: input.assetId,
     name: input.name,
     symbol: input.symbol.toUpperCase(),
     decimals,

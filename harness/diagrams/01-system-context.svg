@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 660" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#374151"/></marker>
+    <style>
+      .t{font-size:13px;fill:#111827} .sub{font-size:10.5px} .h{font-size:13px;font-weight:700}
+      .ttl{font-size:18px;font-weight:700;fill:#0f172a} .lbl{font-size:10.5px;fill:#374151}
+      .bnd{font-size:11px;font-weight:700;fill:#475569}
+      .e{stroke:#374151;stroke-width:1.4;fill:none;marker-end:url(#arrow)}
+      .async{stroke-dasharray:5 4}
+      rect.box{rx:8;ry:8;stroke-width:1.4}
+      .consumer{fill:#dbeafe;stroke:#1e40af} .sdk{fill:#bbf7d0;stroke:#166534;stroke-width:2.4}
+      .ext{fill:#e5e7eb;stroke:#6b7280} .sec{fill:#fee2e2;stroke:#b91c1c;stroke-width:2}
+    </style>
+  </defs>
+
+  <text x="24" y="34" class="ttl">View 1 — System Context (C4 L1) · TokenisationSDK</text>
+
+  <!-- consumers -->
+  <text x="24" y="64" class="bnd">CONSUMERS (caller's app trust)</text>
+  <rect class="box consumer" x="60"  y="74" width="250" height="54"/>
+  <text x="185" y="98" text-anchor="middle" class="h">Issuer back-office</text>
+  <text x="185" y="114" text-anchor="middle" class="t sub">console UI + server ops</text>
+  <rect class="box consumer" x="375" y="74" width="250" height="54"/>
+  <text x="500" y="98" text-anchor="middle" class="h">External dev apps</text>
+  <text x="500" y="114" text-anchor="middle" class="t sub">@tokenisation/core integrations</text>
+  <rect class="box consumer" x="690" y="74" width="250" height="54"/>
+  <text x="815" y="98" text-anchor="middle" class="h">Wallet apps</text>
+  <text x="815" y="114" text-anchor="middle" class="t sub">sdk-react / react-native</text>
+
+  <!-- trust boundary + SDK -->
+  <rect x="250" y="190" width="500" height="120" rx="10" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <text x="262" y="208" class="bnd">SDK trust boundary — org-scoped (API-key / OAuth2 / SIWE)</text>
+  <rect class="box sdk" x="280" y="220" width="440" height="76"/>
+  <text x="500" y="248" text-anchor="middle" class="ttl" font-size="16">TokenisationSDK</text>
+  <text x="500" y="268" text-anchor="middle" class="t">@tokenisation/core + @tokenisation/server</text>
+  <text x="500" y="285" text-anchor="middle" class="t sub">issue · transfer · redeem · enforce compliance · audit</text>
+
+  <!-- external boundary -->
+  <rect x="30" y="370" width="940" height="262" rx="10" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <text x="42" y="390" class="bnd">EXTERNAL SYSTEMS — network boundary</text>
+
+  <rect class="box ext" x="50"  y="404" width="216" height="58"/>
+  <text x="158" y="428" text-anchor="middle" class="h">EVM RPC</text><text x="158" y="444" text-anchor="middle" class="t sub">Base · Ethereum · Polygon</text>
+  <rect class="box ext" x="282" y="404" width="216" height="58"/>
+  <text x="390" y="428" text-anchor="middle" class="h">Chainlink</text><text x="390" y="444" text-anchor="middle" class="t sub">CCIP · Functions · feeds · keepers</text>
+  <rect class="box sec" x="514" y="404" width="216" height="58"/>
+  <text x="622" y="428" text-anchor="middle" class="h">Custody / KMS</text><text x="622" y="444" text-anchor="middle" class="t sub">AWS KMS · Fireblocks · BitGo</text>
+  <rect class="box ext" x="746" y="404" width="204" height="58"/>
+  <text x="848" y="428" text-anchor="middle" class="h">KYC / AML</text><text x="848" y="444" text-anchor="middle" class="t sub">SumSub · Onfido · Jumio</text>
+
+  <rect class="box ext" x="50"  y="494" width="216" height="58"/>
+  <text x="158" y="518" text-anchor="middle" class="h">Document storage</text><text x="158" y="534" text-anchor="middle" class="t sub">S3 / MinIO · IPFS (Pinata)</text>
+  <rect class="box sec" x="282" y="494" width="216" height="58"/>
+  <text x="390" y="518" text-anchor="middle" class="h">Payments / on-ramp</text><text x="390" y="534" text-anchor="middle" class="t sub">Stripe · Circle USDC</text>
+  <rect class="box ext" x="514" y="494" width="216" height="58"/>
+  <text x="622" y="518" text-anchor="middle" class="h">Persistence</text><text x="622" y="534" text-anchor="middle" class="t sub">Postgres · Redis · SQLite(dev)</text>
+  <rect class="box ext" x="746" y="494" width="204" height="58"/>
+  <text x="848" y="518" text-anchor="middle" class="h">Observability</text><text x="848" y="534" text-anchor="middle" class="t sub">OpenTelemetry (OTLP)</text>
+
+  <!-- consumer -> SDK edges -->
+  <path class="e" d="M185,128 L420,218"/><text x="250" y="168" class="lbl">REST + sk_ key</text>
+  <path class="e" d="M500,128 L500,218"/>
+  <path class="e" d="M815,128 L580,218"/><text x="690" y="168" class="lbl">SIWE + REST</text>
+
+  <!-- SDK -> external edges (solid=sync, dashed=async) -->
+  <path class="e" d="M360,296 L200,404"/><text x="250" y="356" class="lbl">signed tx (async)</text>
+  <path class="e async" d="M430,296 L400,404"/>
+  <path class="e" d="M560,296 L610,404"/><text x="600" y="356" class="lbl">sign req</text>
+  <path class="e async" d="M640,296 L830,404"/><text x="745" y="352" class="lbl">KYC status</text>
+  <path class="e" d="M340,296 L180,494"/>
+  <path class="e async" d="M470,296 L380,494"/>
+  <path class="e" d="M600,296 L615,494"/><text x="640" y="470" class="lbl">read/write</text>
+  <path class="e async" d="M690,296 L835,494"/>
+
+  <!-- legend -->
+  <rect x="690" y="150" width="278" height="56" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="700" y="168" class="bnd">Legend</text>
+  <rect x="700" y="176" width="16" height="10" class="box sdk"/><text x="722" y="185" class="lbl">SDK-owned</text>
+  <rect x="800" y="176" width="16" height="10" class="box sec"/><text x="822" y="185" class="lbl">security-sensitive</text>
+  <line x1="700" y1="198" x2="730" y2="198" class="e"/><text x="736" y="201" class="lbl">sync</text>
+  <line x1="800" y1="198" x2="830" y2="198" class="e async"/><text x="836" y="201" class="lbl">async</text>
+</svg>

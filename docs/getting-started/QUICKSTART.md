@@ -5,6 +5,14 @@ title: Quickstart
 
 # 5-Minute Quickstart
 
+:::note Looking for the verified path?
+This real-estate / securities walkthrough exercises the broad API surface, but
+those verticals are still being brought to full conformance. For the **certified,
+runnable** path, start with the
+**[Developer Quickstart (Loyalty)](./LOYALTY_QUICKSTART.md)** — the SDK's
+reference module, proven end-to-end against a local server.
+:::
+
 This guide takes you from zero to a working tokenised asset in under five minutes. You will install the SDK, create an organisation, onboard an investor, create an asset, deploy a token, and execute a transfer.
 
 ## Step 1: Install the SDK

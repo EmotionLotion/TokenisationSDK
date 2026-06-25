@@ -14,7 +14,10 @@ import {
 
 /** UI-friendly Asset type that includes all runtime fields */
 type Asset = SDKAsset & { id: string; name: string; state: any; [key: string]: any };
-import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@tokenisation/sdk/plugins';
+// UI-INFRA-2: the '@tokenisation/sdk/plugins' subpath is declared in the package
+// exports map but never built (the sdk build emits only the bundled root), so it
+// fails to resolve. These symbols are re-exported from the main barrel — use it.
+import { ApiClient as PluginApiClient, ApiStoragePlugin, ApiEventStore } from '@tokenisation/sdk';
 import { config } from './config';
 
 // Ahoy ecosystem types

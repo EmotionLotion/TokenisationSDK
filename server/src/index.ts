@@ -65,6 +65,7 @@ import { kycWebhookRouter } from './routes/kyc-webhook.routes.js';
 import { schedulerRouter } from './routes/scheduler.routes.js';
 import { navRouter } from './routes/nav.routes.js';
 import { redemptionRouter } from './routes/redemption.routes.js';
+import { loyaltyRouter } from './routes/loyalty.routes.js';
 import { accreditationRouter } from './routes/accreditation.routes.js';
 import { sseRouter } from './routes/sse.routes.js';
 import { themeRouter } from './routes/theme.routes.js';
@@ -242,6 +243,9 @@ app.use('/api/v1/assets', apiKeyMiddleware, tenantContextMiddleware, navRouter);
 
 // Redemption Workflow
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, redemptionRouter);
+
+// Loyalty (reference module — RightAction-backed)
+app.use('/api/v1/loyalty', apiKeyMiddleware, tenantContextMiddleware, loyaltyRouter);
 
 // Accreditation
 app.use('/api/v1', apiKeyMiddleware, tenantContextMiddleware, accreditationRouter);

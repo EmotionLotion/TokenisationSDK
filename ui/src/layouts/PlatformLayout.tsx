@@ -4,7 +4,7 @@ import {
     ArrowLeftRight, Radio, Wallet, Code2, UserCheck, ChevronDown,
     Bug,
     Rocket, FileText, BookOpen, BarChart3, Key, Webhook, Terminal,
-    Layers, ExternalLink,
+    Layers, ExternalLink, Coins,
 } from 'lucide-react';
 import { AhoyLogo } from '../components/AhoyLogo';
 import { SdkInsightPanel } from '../components/SdkInsightPanel';
@@ -21,6 +21,7 @@ const MAIN_NAV = [
     { path: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
     { path: '/oracles', icon: Radio, label: 'Oracles' },
     { path: '/payouts', icon: Wallet, label: 'Payouts' },
+    { path: '/loyalty', icon: Coins, label: 'Loyalty' },
 ];
 
 const DEVELOP_NAV = [
